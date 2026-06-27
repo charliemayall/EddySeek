@@ -1,0 +1,9 @@
+"""
+Typings for Klipper toolhead.py
+https://github.com/Klipper3d/klipper/blob/master/klippy/toolhead.py
+"""
+
+class ToolHead:
+    def get_position(self) -> list[float]: ...
+    def wait_moves(self) -> None: ...
+    def dwell(self, seconds: float) -> None: ...

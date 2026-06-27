@@ -1,0 +1,36 @@
+"""
+Typings for Klipper klippy.py
+https://github.com/Klipper3d/klipper/blob/master/klippy/klippy.py
+"""
+
+from collections.abc import Callable
+from typing import Any, Literal, TypeVar, overload
+
+from klippy.extras.configfile import PrinterConfig
+from klippy.gcode import GCodeDispatch
+from klippy.toolhead import ToolHead
+
+T = TypeVar("T")
+
+class Printer:
+    config_error: type[Exception]
+    command_error: type[Exception]
+    start_args: dict[str, Any]
+
+    def get_start_args(self) -> dict[str, Any]: ...
+    def add_object(self, name: str, obj: object) -> None: ...
+    @overload
+    def lookup_object(self, name: Literal["gcode"]) -> GCodeDispatch: ...
+    @overload
+    def lookup_object(self, name: Literal["configfile"]) -> PrinterConfig: ...
+    @overload
+    def lookup_object(self, name: Literal["toolhead"]) -> ToolHead: ...
+    @overload
+    def lookup_object(self, name: str, default: T) -> object | T: ...
+    @overload
+    def lookup_object(self, name: str) -> object: ...
+    def lookup_objects(self, module: str | None = None) -> list[tuple[str, object]]: ...
+    def register_event_handler(
+        self, event: str, callback: Callable[..., Any]
+    ) -> None: ...
+    def set_rollover_info(self, name: str, info: str, log: bool = True) -> None: ...
