@@ -1,0 +1,56 @@
+name: Help / troubleshooting
+description: Install, configuration, or usage question
+title: "[Help]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For install steps, G-code reference, and common fixes see the [User Guide](https://github.com/charliemayall/EddySeek/blob/main/docs/USER_GUIDE.md).
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What do you need help with?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Topic
+      options:
+        - Install / Moonraker update-manager
+        - `[eddy_seek]` configuration
+        - LDC1612 / sensor wiring
+        - Toolchanger / macro setup
+        - G-code commands
+        - Offsets / calibration results
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried so far?
+      description: Commands run, docs read, config changes.
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config
+      description: `[eddy_seek]` section and tool-load macros if applicable.
+      render: ini
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Klippy log excerpt
+      render: shell
+    validations:
+      required: false

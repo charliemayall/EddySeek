@@ -1,0 +1,88 @@
+name: Bug report
+description: Something is broken or behaves incorrectly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Check the [User Guide](https://github.com/charliemayall/EddySeek/blob/main/docs/USER_GUIDE.md) troubleshooting section first if you have not already.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What did you expect, and what actually happened?
+      placeholder: EDDY_SEEK_START finds the peak but never finishes / wrong offset saved / etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: G-code commands, tool changes, and starting position if relevant.
+      placeholder: |
+        1. Park T1 above sensor
+        2. EDDY_SEEK_START
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: eddyseek-version
+    attributes:
+      label: EddySeek version
+      description: Git commit, tag, or `git describe` output from your install path.
+      placeholder: main @ abc1234
+    validations:
+      required: true
+
+  - type: dropdown
+    id: firmware
+    attributes:
+      label: Firmware
+      options:
+        - Klipper
+        - Kalico
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: firmware-version
+    attributes:
+      label: Klipper / Kalico version
+      placeholder: v0.12.0-123-gabcdef
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config
+      description: Your `[eddy_seek]` section and any related macros. Redact Wi‑Fi, API keys, and serial paths if you prefer.
+      render: ini
+      placeholder: |
+        [eddy_seek]
+        sensor: ldc1612 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Klippy log excerpt
+      description: Paste the error or the lines around when the problem occurs.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware
+      description: Printer, toolchanger, and how the LDC1612 is wired/mounted.
+      placeholder: Voron 2.4, Stealthchanger, LDC1612 on dedicated I2C bus, sensor fixed to bed frame
+    validations:
+      required: false
