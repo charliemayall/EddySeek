@@ -5,6 +5,15 @@
 EddySeek reads an LDC1612 coil, exposes live frequency data to Moonraker,
 runs XY search routines, and measures per-tool XY offsets relative to a reference nozzle.
 
+## Demo
+
+![Centroid search demo](docs/media/demo_centroid.webp)
+
+Full quality: [`docs/media/demo_centroid.mp4`](docs/media/demo_centroid.mp4)
+
+> **Note:** The video shows a stationary screw with a sensor being aligned over it for demonstration.
+> On the printer, the **nozzle** moves and the **sensor stays fixed** on the bed or frame.
+
 ## Quick start
 
 ```bash
@@ -54,7 +63,7 @@ uv run ruff check .
 uv run pytest
 ```
 
-Overview of process, see [Calibration Process](docs/CALIBRATION_PROCESS.md).
+> Any overview of the states and processes covered by this codebase may be of use, see [Calibration Process](docs/CALIBRATION_PROCESS.md).
 
 ## License
 
