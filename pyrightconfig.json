@@ -1,0 +1,13 @@
+{
+  "include": ["src", "tests"],
+  "stubPath": "typings",
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": ["src"],
+  "pythonVersion": "3.10",
+  "reportMissingTypeStubs": "information",
+  "executionEnvironments": [
+    { "root": "src", "extraPaths": ["typings"]},
+    { "root": "tests", "extraPaths": ["src", "typings"] }
+  ]
+}

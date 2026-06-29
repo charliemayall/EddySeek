@@ -1,0 +1,34 @@
+[project]
+name = "EddySeek"
+version = "0.1.0"
+description = "Klipper extra for toolchanger nozzle alignment via LDC1612 eddy current sensor"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "src"
+module-name = "_eddy_seek"
+
+[tool.pyright]
+pythonVersion = "3.10"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.411",
+    "pytest>=9.1.1",
+    "ruff>=0.15.20",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+exclude = ["typings"]

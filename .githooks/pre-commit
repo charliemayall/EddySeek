@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.py$' || true)
+[ -z "$files" ] && exit 0
+
+echo "$files" | xargs uv run ruff format
+echo "$files" | xargs git add

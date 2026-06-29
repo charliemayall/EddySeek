@@ -1,0 +1,83 @@
+name: Bug report
+description: Something is broken or behaves incorrectly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Check the [User Guide](https://github.com/charliemayall/EddySeek/blob/main/docs/USER_GUIDE.md) troubleshooting section first if you have not already.
+
+  - type: textarea
+    id: board-sensor
+    attributes:
+      label: 1. What board and sensor were you using?
+      description: MCU board, host, and LDC1612 sensor (e.g. BTT Octopus + BTT Eddy coil on I2C).
+      placeholder: BTT Octopus v1.1, Raspberry Pi 4, BTT Eddy coil, Cartographer
+    validations:
+      required: true
+
+  - type: input
+    id: klippy-log
+    attributes:
+      label: 2. Can you attach your Klippy.log file?
+      description: Drag and drop `klippy.log` into this issue, or paste a link if it is hosted elsewhere.
+      placeholder: Attached below / see comment with log excerpt
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: 3. Please paste your [eddy_seek] config section.
+      description: Include related toolchanger macros if relevant. Please include motion system configuration if your issue is motion related.
+      render: ini
+      placeholder: |
+        [eddy_seek]
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What did you expect, and what actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: G-code commands, tool changes, and starting position if relevant.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: firmware
+    attributes:
+      label: Firmware
+      options:
+        - Klipper
+        - Kalico
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: firmware-version
+    attributes:
+      label: Klipper / Kalico version
+      placeholder: v0.12.0-123-gabcdef
+    validations:
+      required: false
+
+  - type: input
+    id: eddyseek-version
+    attributes:
+      label: EddySeek version
+      description: Run `git describe --tags` in the install path.
+      placeholder: e.g. v0.1.0-beta-1-gafceede
+    validations:
+      required: false

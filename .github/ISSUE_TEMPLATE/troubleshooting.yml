@@ -1,0 +1,56 @@
+name: Help / troubleshooting
+description: Install, configuration, or usage question
+title: "[Help]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For install steps, G-code reference, and common fixes see the [User Guide](https://github.com/charliemayall/EddySeek/blob/main/docs/USER_GUIDE.md).
+
+  - type: textarea
+    id: board-sensor
+    attributes:
+      label: 1. What board and sensor were you using?
+      placeholder: BTT Octopus v1.1, Raspberry Pi 4, LDC1612 eddy probe on sensor_x
+    validations:
+      required: true
+
+  - type: input
+    id: klippy-log
+    attributes:
+      label: 2. Can you attach your Klippy.log file?
+      description: Drag and drop `klippy.log` into this issue, or paste a link if it is hosted elsewhere.
+      placeholder: Attached below / see comment with log excerpt
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: 3. Please paste your [eddy_seek] config section.
+      render: ini
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What do you need help with?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Topic
+      options:
+        - Install / Moonraker update-manager
+        - `[eddy_seek]` configuration
+        - LDC1612 / sensor wiring
+        - Toolchanger / macro setup
+        - G-code commands
+        - Offsets / calibration results
+        - Other
+    validations:
+      required: true

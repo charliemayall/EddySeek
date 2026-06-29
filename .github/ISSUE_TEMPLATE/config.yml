@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: User Guide & troubleshooting
+    url: https://github.com/charliemayall/EddySeek/blob/main/docs/USER_GUIDE.md
+    about: Install, configuration, G-code reference, and common fixes
+  - name: Calibration process
+    url: https://github.com/charliemayall/EddySeek/blob/main/docs/CALIBRATION_PROCESS.md
+    about: How alignment states and search strategies work
