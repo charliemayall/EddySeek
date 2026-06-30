@@ -36,6 +36,7 @@ type: git_repo
 path: ~/EddySeek
 origin: https://github.com/charliemayall/EddySeek.git
 primary_branch: main
+channel: stable
 managed_services: klipper
 is_system_service: False
 ```
