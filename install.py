@@ -11,6 +11,7 @@ Symlink EddySeek into Klipper's extras directory (optionally, user specified tar
 
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 from enum import Enum
@@ -55,15 +56,21 @@ def main() -> None:
         sys.exit(1)
 
     dest.mkdir(parents=True, exist_ok=True)
-    for src in [src_dir / "eddy_seek.py", *(src_dir / "_eddy_seek").glob("*.py")]:
-        link = dest / src.relative_to(src_dir)
-        link.parent.mkdir(parents=True, exist_ok=True)
-        link.unlink(missing_ok=True)
-        link.symlink_to(src.resolve())
+
+    entry = dest / "eddy_seek.py"
+    entry.unlink(missing_ok=True)
+    entry.symlink_to((src_dir / "eddy_seek.py").resolve())
+
+    pkg = dest / "_eddy_seek"
+    if pkg.is_symlink() or pkg.is_file():
+        pkg.unlink()
+    elif pkg.is_dir():
+        shutil.rmtree(pkg)
+    pkg.symlink_to((src_dir / "_eddy_seek").resolve())
 
     cprint("\u2728 EddySeek: installed \u2728".center(60), COLORS.GREEN)
     print(f"{_c('-- ', COLORS.GRAY)}{dest / 'eddy_seek.py'}")
-    print(f"{_c('-- ', COLORS.GRAY)}{dest / '_eddy_seek/*.py'}")
+    print(f"{_c('-- ', COLORS.GRAY)}{dest / '_eddy_seek/'}")
     print(
         f"""\n{_c("Next steps:", COLORS.GREEN)}\n
     1. Add [eddy_seek] to printer.cfg
