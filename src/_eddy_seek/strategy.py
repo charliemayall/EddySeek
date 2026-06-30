@@ -16,6 +16,8 @@ from abc import ABC, abstractmethod
 import logging
 from typing import TYPE_CHECKING
 
+from .common import Axis, Position
+
 if TYPE_CHECKING:
     from .session import SeekSession
 
@@ -33,23 +35,19 @@ class SeekStrategy(ABC):
         # optional
         pass
 
-    def search(self, ctx: SeekSession, gcmd) -> tuple[float, float, int]:
+    def search(self, ctx: SeekSession, gcmd) -> tuple[Position, int]:
         cfg = ctx.config
-        best_x = 0.0
-        best_y = 0.0
+        best = Position(0.0, 0.0)
         passes_run = 0
 
         for pass_num in range(1, cfg.max_passes + 1):
             passes_run = pass_num
-            new_x, new_y = self._step(ctx, pass_num, best_x, best_y)
-            x_moved = abs(new_x - best_x)
-            y_moved = abs(new_y - best_y)
-            gcmd.respond_info(
-                self._pass_message(pass_num, new_x, new_y, x_moved, y_moved, ctx)
-            )
-            best_x, best_y = new_x, new_y
+            new = self._step(ctx, pass_num, best)
+            moved = Position(abs(new.x - best.x), abs(new.y - best.y))
+            gcmd.respond_info(self._pass_message(pass_num, new, moved, ctx))
+            best = new
 
-            if x_moved < cfg.tolerance and y_moved < cfg.tolerance:
+            if moved.x < cfg.tolerance and moved.y < cfg.tolerance:
                 gcmd.respond_info(f"EDDY_SEEK: converged after {pass_num} pass(es).")
                 break
         else:
@@ -58,25 +56,17 @@ class SeekStrategy(ABC):
                 f"without full convergence - using best result."
             )
 
-        return best_x, best_y, passes_run
+        return best, passes_run
 
     @abstractmethod
-    def _step(
-        self,
-        ctx: SeekSession,
-        pass_num: int,
-        best_x: float,
-        best_y: float,
-    ) -> tuple[float, float]: ...
+    def _step(self, ctx: SeekSession, pass_num: int, best: Position) -> Position: ...
 
     @abstractmethod
     def _pass_message(
         self,
         pass_num: int,
-        new_x: float,
-        new_y: float,
-        x_moved: float,
-        y_moved: float,
+        new: Position,
+        moved: Position,
         ctx: SeekSession,
     ) -> str: ...
 
@@ -86,41 +76,33 @@ class TernaryStrategy(SeekStrategy):
     def name(self) -> str:
         return "ternary"
 
-    def _step(
-        self,
-        ctx: SeekSession,
-        pass_num: int,
-        best_x: float,
-        best_y: float,
-    ) -> tuple[float, float]:
+    def _step(self, ctx: SeekSession, pass_num: int, best: Position) -> Position:
         cfg = ctx.config
         new_x = self._ternary_search_1d(
-            ctx, axis="x", center=best_x, half_range=cfg.max_jog_x, fixed=best_y
+            ctx, axis=Axis.x, center=best.x, half_range=cfg.max_jog_x, fixed=best.y
         )
         new_y = self._ternary_search_1d(
-            ctx, axis="y", center=best_y, half_range=cfg.max_jog_y, fixed=new_x
+            ctx, axis=Axis.y, center=best.y, half_range=cfg.max_jog_y, fixed=new_x
         )
-        return new_x, new_y
+        return Position(new_x, new_y)
 
     def _pass_message(
         self,
         pass_num: int,
-        new_x: float,
-        new_y: float,
-        x_moved: float,
-        y_moved: float,
+        new: Position,
+        moved: Position,
         ctx: SeekSession,
     ) -> str:
         return (
             f"EDDY_SEEK pass {pass_num}: "
-            f"X offset {new_x:+.4f} mm (moved {x_moved:.4f})  "
-            f"Y offset {new_y:+.4f} mm (moved {y_moved:.4f})"
+            f"X offset {new.x:+.4f} mm (moved {moved.x:.4f})  "
+            f"Y offset {new.y:+.4f} mm (moved {moved.y:.4f})"
         )
 
     def _ternary_search_1d(
         self,
         ctx: SeekSession,
-        axis: str,
+        axis: Axis,
         center: float,
         half_range: float,
         fixed: float,
@@ -140,12 +122,12 @@ class TernaryStrategy(SeekStrategy):
             m1 = lo + span / 3.0
             m2 = hi - span / 3.0
 
-            if axis == "x":
-                f1 = ctx.measure_at(m1, fixed)
-                f2 = ctx.measure_at(m2, fixed)
+            if axis is Axis.x:
+                f1 = ctx.measure_at(Position(m1, fixed))
+                f2 = ctx.measure_at(Position(m2, fixed))
             else:
-                f1 = ctx.measure_at(fixed, m1)
-                f2 = ctx.measure_at(fixed, m2)
+                f1 = ctx.measure_at(Position(fixed, m1))
+                f2 = ctx.measure_at(Position(fixed, m2))
 
             if self._is_better(ctx, f1, f2):
                 hi = m2
@@ -171,19 +153,12 @@ class CentroidStrategy(SeekStrategy):
             f"EDDY_SEEK: centroid grid_step=({cfg.grid_step_x},{cfg.grid_step_y}) mm"
         )
 
-    def _step(
-        self,
-        ctx: SeekSession,
-        pass_num: int,
-        best_x: float,
-        best_y: float,
-    ) -> tuple[float, float]:
+    def _step(self, ctx: SeekSession, pass_num: int, best: Position) -> Position:
         cfg = ctx.config
         shrink = 0.5 ** (pass_num - 1)
         return self._centroid_pass(
             ctx,
-            best_x,
-            best_y,
+            best,
             cfg.grid_step_x * shrink,
             cfg.grid_step_y * shrink,
         )
@@ -191,10 +166,8 @@ class CentroidStrategy(SeekStrategy):
     def _pass_message(
         self,
         pass_num: int,
-        new_x: float,
-        new_y: float,
-        x_moved: float,
-        y_moved: float,
+        new: Position,
+        moved: Position,
         ctx: SeekSession,
     ) -> str:
         cfg = ctx.config
@@ -203,30 +176,31 @@ class CentroidStrategy(SeekStrategy):
         step_y = cfg.grid_step_y * shrink
         return (
             f"EDDY_SEEK pass {pass_num}: "
-            f"centroid ({new_x:+.4f}, {new_y:+.4f}) mm  "
-            f"(moved {x_moved:.4f}, {y_moved:.4f})  "
+            f"centroid ({new.x:+.4f}, {new.y:+.4f}) mm  "
+            f"(moved {moved.x:.4f}, {moved.y:.4f})  "
             f"grid_step=({step_x:.4f}, {step_y:.4f})"
         )
 
     def _centroid_pass(
         self,
         ctx: SeekSession,
-        center_x: float,
-        center_y: float,
+        center: Position,
         step_x: float,
         step_y: float,
-    ) -> tuple[float, float]:
+    ) -> Position:
         cfg = ctx.config
-        probes: list[tuple[float, float, float]] = []
+        probes: list[tuple[Position, float]] = []
 
         for dy_mul in (-1, 0, 1):
             for dx_mul in (-1, 0, 1):
-                x = max(-cfg.max_jog_x, min(cfg.max_jog_x, center_x + dx_mul * step_x))
-                y = max(-cfg.max_jog_y, min(cfg.max_jog_y, center_y + dy_mul * step_y))
-                freq = ctx.measure_at(x, y)
-                probes.append((x, y, freq))
+                position = Position(
+                    max(-cfg.max_jog_x, min(cfg.max_jog_x, center.x + dx_mul * step_x)),
+                    max(-cfg.max_jog_y, min(cfg.max_jog_y, center.y + dy_mul * step_y)),
+                )
+                freq = ctx.measure_at(position)
+                probes.append((position, freq))
 
-        freqs = [p[2] for p in probes]
+        freqs = [freq for _, freq in probes]
         f_min = min(freqs)
         f_max = max(freqs)
         weights = [self._frequency_weight(ctx, f, f_min, f_max) for f in freqs]
@@ -235,16 +209,21 @@ class CentroidStrategy(SeekStrategy):
             logger.warning(
                 "eddy_seek: flat frequency response on centroid grid - "
                 "keeping centre (%.4f, %.4f)",
-                center_x,
-                center_y,
+                center.x,
+                center.y,
             )
-            return center_x, center_y
+            return center
 
-        centroid_x = sum(p[0] * w for p, w in zip(probes, weights)) / total_w
-        centroid_y = sum(p[1] * w for p, w in zip(probes, weights)) / total_w
-        centroid_x = max(-cfg.max_jog_x, min(cfg.max_jog_x, centroid_x))
-        centroid_y = max(-cfg.max_jog_y, min(cfg.max_jog_y, centroid_y))
-        return centroid_x, centroid_y
+        centroid_x = (
+            sum(position.x * w for (position, _), w in zip(probes, weights)) / total_w
+        )
+        centroid_y = (
+            sum(position.y * w for (position, _), w in zip(probes, weights)) / total_w
+        )
+        return Position(
+            max(-cfg.max_jog_x, min(cfg.max_jog_x, centroid_x)),
+            max(-cfg.max_jog_y, min(cfg.max_jog_y, centroid_y)),
+        )
 
     def _frequency_weight(
         self, ctx: SeekSession, freq: float, f_min: float, f_max: float

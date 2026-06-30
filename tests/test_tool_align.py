@@ -7,13 +7,9 @@
 """
 
 from _eddy_seek.config import SeekConfig
-from _eddy_seek.printer_handler import Tool, ToolAlignConfig
-from _eddy_seek.tool_align import (
-    apply_tool_offset,
-    resolve_tool0_start,
-    tool0_center_xy,
-)
-from _eddy_seek.session import Position
+from _eddy_seek.common import Position
+from _eddy_seek.tools import Tool, ToolAlignConfig, apply_tool_offset
+from _eddy_seek.tool_align import move_to_seek_start_pos, tool0_center_xy
 
 
 from pytest import raises
@@ -42,6 +38,9 @@ class _FakeTools:
         self.tool_count = len(tools)
         self.tools = tools
 
+    def get_tool(self, tool_number: int) -> Tool:
+        return self.tools[tool_number]
+
 
 def test_tool0_center_xy_offset_applies():
     center = tool0_center_xy(10.0, 20.0, Position(1.5, -0.5))
@@ -54,21 +53,37 @@ def test_apply_tool_offset_sets_gcode_offset():
         [
             Tool(
                 tool_number=0,
-                offset_x=0.0,
-                offset_y=0.0,
+                offset=Position(0.0, 0.0),
+                manual_offset=Position(0.0, 0.0),
                 is_calibrated=True,
             ),
             Tool(
                 tool_number=1,
-                offset_x=1.5,
-                offset_y=-0.5,
+                offset=Position(1.5, -0.5),
+                manual_offset=Position(0.0, 0.0),
                 is_calibrated=True,
             ),
         ]
     )
-    tool = apply_tool_offset(tools, printer, 1)  # type: ignore[arg-type]
-    assert tool["offset_x"] == 1.5
+    tool = apply_tool_offset(tools, printer, 1)
+    assert tool.offset.x == 1.5
     assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=1.500000 Y=-0.500000"]
+
+
+def test_apply_tool_offset_includes_manual_adjust():
+    printer = _FakePrinter()
+    tools = _FakeTools(
+        [
+            Tool(
+                tool_number=0,
+                offset=Position(1.0, 2.0),
+                manual_offset=Position(0.1, -0.2),
+                is_calibrated=True,
+            ),
+        ]
+    )
+    apply_tool_offset(tools, printer, 0)
+    assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=1.100000 Y=1.800000"]
 
 
 def test_apply_tool_offset_rejects_uncalibrated():
@@ -77,14 +92,14 @@ def test_apply_tool_offset_rejects_uncalibrated():
         [
             Tool(
                 tool_number=0,
-                offset_x=0.0,
-                offset_y=0.0,
+                offset=Position(0.0, 0.0),
+                manual_offset=Position(0.0, 0.0),
                 is_calibrated=False,
             ),
         ]
     )
     with raises(ValueError, match="not calibrated"):
-        apply_tool_offset(tools, printer, 0)  # type: ignore[arg-type]
+        apply_tool_offset(tools, printer, 0)
 
 
 class _RecordingToolhead:
@@ -115,50 +130,38 @@ class _MovePrinter:
         raise KeyError(name)
 
 
-class _Host:
-    def __init__(self, printer: _MovePrinter) -> None:
-        self.printer = printer
-
-
 class _FakeGcmd:
     def respond_info(self, msg: str) -> None:
         pass
 
 
 class _SensorTools:
-    def __init__(self, sensor_xy: tuple[float, float] | None) -> None:
-        self._sensor_xy = sensor_xy
+    def __init__(self, sensor_position: Position) -> None:
+        self._sensor_position = sensor_position
 
-    def sensor_position(self) -> tuple[float, float] | None:
-        return self._sensor_xy
+    def sensor_position(self) -> Position:
+        return self._sensor_position
 
 
-def test_resolve_tool0_start_moves_to_sensor_position():
+class _FakeSeekHost:
+    def __init__(
+        self, printer: _MovePrinter, seek_config: SeekConfig | None = None
+    ) -> None:
+        self.printer = printer
+        self.seek_config = seek_config or SeekConfig()
+
+
+def test_move_to_seek_start_pos_moves_to_sensor_position():
     toolhead = _RecordingToolhead(start=(1.0, 2.0))
-    host = _Host(_MovePrinter(toolhead))
-    start = resolve_tool0_start(
+    host = _FakeSeekHost(_MovePrinter(toolhead))  # type: ignore[arg-type]
+    start = move_to_seek_start_pos(
         host,  # type: ignore[arg-type]
-        SeekConfig(),
-        _SensorTools((10.0, 20.0)),  # type: ignore[arg-type]
+        _SensorTools(Position(10.0, 20.0)),  # type: ignore[arg-type]
         _FakeGcmd(),
         label="EDDY_SEEK_TOOLS",
     )
     assert start == (10.0, 20.0)
     assert toolhead.moves == [[10.0, 20.0]]
-
-
-def test_resolve_tool0_start_without_sensor_position_uses_current_xy():
-    toolhead = _RecordingToolhead(start=(3.0, 4.0))
-    host = _Host(_MovePrinter(toolhead))
-    start = resolve_tool0_start(
-        host,  # type: ignore[arg-type]
-        SeekConfig(),
-        _SensorTools(None),  # type: ignore[arg-type]
-        _FakeGcmd(),
-        label="EDDY_SEEK_TOOLS",
-    )
-    assert start == (3.0, 4.0)
-    assert toolhead.moves == []
 
 
 class _ConfigfileMain:
@@ -191,19 +194,23 @@ class _ToolConfig:
     def get(self, key: str, default: str = "") -> str:
         return self._opts.get(key, default)
 
-    def getfloat(self, key: str, default=None, **kwargs):
-        return self._opts.get(key, default)
+    def getfloat(self, key: str, default: float | None = None, **kwargs):
+        if key in self._opts:
+            return self._opts[key]
+        if default is not None:
+            return default
+        raise self.error(f"Option '{key}' is required")
 
     def error(self, msg: str) -> ValueError:
         return ValueError(msg)
 
 
-def test_sensor_position_both_or_neither():
-    none_set = ToolAlignConfig(_ToolConfig())  # type: ignore[arg-type]
-    assert none_set.sensor_position() is None
+def test_sensor_position_is_required():
+    with raises(ValueError, match="sensor_x"):
+        ToolAlignConfig(_ToolConfig())  # type: ignore[arg-type]
 
-    both_set = ToolAlignConfig(_ToolConfig(sensor_x=10.0, sensor_y=20.0))  # type: ignore[arg-type]
-    assert both_set.sensor_position() == (10.0, 20.0)
-
-    with raises(ValueError, match="both sensor_x and sensor_y"):
+    with raises(ValueError, match="sensor_y"):
         ToolAlignConfig(_ToolConfig(sensor_x=10.0))  # type: ignore[arg-type]
+
+    cfg = ToolAlignConfig(_ToolConfig(sensor_x=10.0, sensor_y=20.0))  # type: ignore[arg-type]
+    assert cfg.sensor_position() == Position(10.0, 20.0)

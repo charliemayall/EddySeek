@@ -18,6 +18,7 @@ module-name = "_eddy_seek"
 
 [tool.pyright]
 pythonVersion = "3.10"
+stubPath = "typings"
 
 [dependency-groups]
 dev = [

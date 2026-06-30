@@ -10,20 +10,24 @@ import math
 
 from pytest import raises
 
+from _eddy_seek.common import Position
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.session import SeekSession, _sample_stdev
 from _eddy_seek.strategy import CentroidStrategy, TernaryStrategy, strategy_for
 
 
+class CommandError(Exception):
+    """Matches ``klippy.gcode.CommandError`` for test doubles."""
+
+
 class _FakeGcmd:
+    error = CommandError
+
     def __init__(self, params: dict[str, str] | None = None) -> None:
         self._params = {k.upper(): v for k, v in (params or {}).items()}
 
     def get_command_parameters(self) -> dict[str, str]:
         return self._params
-
-    def error(self, msg: str) -> ValueError:
-        return ValueError(msg)
 
     def respond_info(self, msg: str) -> None:
         pass
@@ -31,6 +35,26 @@ class _FakeGcmd:
 
 def _test_cfg(**overrides) -> SeekConfig:
     return SeekConfig(**overrides)
+
+
+class _RecordingSearchSession:
+    def __init__(self) -> None:
+        self.config = _test_cfg(max_iter=1, max_passes=1)
+        self.positions: list[Position] = []
+
+    def measure_at(self, offset: Position) -> float:
+        self.positions.append(offset)
+        return -((offset.x - 1.0) ** 2 + (offset.y + 1.0) ** 2)
+
+
+def test_strategy_search_uses_positions():
+    session = _RecordingSearchSession()
+    best, passes_run = TernaryStrategy().search(session, _FakeGcmd())  # type: ignore[arg-type]
+
+    assert isinstance(best, Position)
+    assert passes_run == 1
+    assert session.positions
+    assert all(isinstance(position, Position) for position in session.positions)
 
 
 def test_strategy_weights_and_runtime_set():
@@ -53,9 +77,9 @@ def test_strategy_weights_and_runtime_set():
     changed = cfg.apply_runtime_set(_FakeGcmd({"STRATEGY": "centroid"}))
     assert changed == ["strategy=centroid"]
     assert cfg.strategy == "centroid"
-    with raises(ValueError):
+    with raises(CommandError):
         cfg.apply_runtime_set(_FakeGcmd({"STRATEGY": "bogus"}))
-    with raises(ValueError, match="unknown parameter 'GRD_STEP_X'"):
+    with raises(CommandError, match="unknown parameter 'GRD_STEP_X'"):
         cfg.apply_runtime_set(_FakeGcmd({"GRD_STEP_X": "2.5"}))
 
     assert strategy_for("ternary").name == "ternary"

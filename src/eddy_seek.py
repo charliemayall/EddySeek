@@ -49,24 +49,20 @@ if TYPE_CHECKING:
 
 try:
     from .ldc1612 import LDC1612
+    from ._eddy_seek.common import Position
     from ._eddy_seek.config import load_seek_config
-    from ._eddy_seek.printer_handler import ToolAlignConfig
+    from ._eddy_seek.tools import ToolAlignConfig, apply_tool_offset
     from ._eddy_seek.session import (
-        Position,
         SeekHost,
         SeekSession,
         report_accuracy_stats,
     )
-    from ._eddy_seek.tool_align import (
-        align_all_tools,
-        align_tool_number,
-        apply_tool_offset,
-    )
+    from ._eddy_seek.tool_align import align_all_tools, align_tool_number
 except ImportError:
+    from _eddy_seek.common import Position  # type: ignore[no-redef]
     from _eddy_seek.config import load_seek_config  # type: ignore[no-redef]
-    from _eddy_seek.printer_handler import ToolAlignConfig  # type: ignore[no-redef]
+    from _eddy_seek.tools import ToolAlignConfig, apply_tool_offset  # type: ignore[no-redef]
     from _eddy_seek.session import (  # type: ignore[no-redef]
-        Position,
         SeekHost,
         SeekSession,
         report_accuracy_stats,
@@ -74,14 +70,13 @@ except ImportError:
     from _eddy_seek.tool_align import (  # type: ignore[no-redef]
         align_all_tools,
         align_tool_number,
-        apply_tool_offset,
     )
 
 logger = logging.getLogger(__name__)
 
 
 class EddySeek(SeekHost):
-    def __init__(self, config) -> None:
+    def __init__(self, config: ConfigWrapper) -> None:
         self.printer = config.get_printer()
         self.seek_config = load_seek_config(config)
         self._tools = ToolAlignConfig(config)
@@ -92,7 +87,6 @@ class EddySeek(SeekHost):
         self._total_samples: int = 0
         self._last_freq: float = 0.0
         self._tool0_center: Position | None = None
-        self._save_session_trace: bool = config.getboolean("save_session_trace", False)
         self._sensor = self._load_ldc1612(config)
         gcode = self.printer.lookup_object("gcode")
         gcode.register_command(
@@ -148,10 +142,6 @@ class EddySeek(SeekHost):
     def capture_count(self) -> int:
         return self._capture_count
 
-    @property
-    def save_session_trace(self) -> bool:
-        return self._save_session_trace
-
     def peek_capture_samples(self) -> list[float]:
         return list(self._capture_buf)
 
@@ -162,9 +152,8 @@ class EddySeek(SeekHost):
                 "tool_count": self._tools.tool_count,
                 "tool_prefix": self._tools.tool_prefix,
                 "load_tool_macro_prefix": self._tools.load_tool_macro,
-                "tools": [dict(tool) for tool in self._tools.tools],
+                "tools": [tool.to_dict() for tool in self._tools.tools],
             },
-            "save_session_trace": self._save_session_trace,
             "sensor_name": self._sensor.name,
         }
 
@@ -220,10 +209,14 @@ class EddySeek(SeekHost):
             else 0.0
         )
         tools = {
-            self._tools.section_name(tool["tool_number"]): {
-                "offset_x": round(tool["offset_x"], 4),
-                "offset_y": round(tool["offset_y"], 4),
-                "is_calibrated": tool["is_calibrated"],
+            self._tools.section_name(tool.tool_number): {
+                "offset_x": round(tool.offset.x, 4),
+                "offset_y": round(tool.offset.y, 4),
+                "manual_adjust_x": round(tool.manual_offset.x, 4),
+                "manual_adjust_y": round(tool.manual_offset.y, 4),
+                "effective_offset_x": round(tool.effective_offset.x, 4),
+                "effective_offset_y": round(tool.effective_offset.y, 4),
+                "is_calibrated": tool.is_calibrated,
             }
             for tool in self._tools.tools
         }
@@ -268,7 +261,7 @@ class EddySeek(SeekHost):
         gcmd.respond_info("EDDY_SEEK_SET: " + ", ".join(changes))
 
     def cmd_EDDY_SEEK_START(self, gcmd) -> None:
-        SeekSession(self, self.seek_config).run(gcmd)
+        SeekSession(self).run(gcmd)
 
     def cmd_EDDY_SEEK_TOOL(self, gcmd) -> None:
         tool_number = gcmd.get_int("TOOL", 0, minval=0)
@@ -277,7 +270,6 @@ class EddySeek(SeekHost):
         try:
             tool, tool0_center, error = align_tool_number(
                 self,
-                self.seek_config,
                 self._tools,
                 gcmd,
                 tool_number,
@@ -302,7 +294,7 @@ class EddySeek(SeekHost):
 
     def cmd_EDDY_SEEK_TOOLS(self, gcmd) -> None:
         tool_count = gcmd.get_int("TOOLS", self._tools.tool_count, minval=1)
-        result = align_all_tools(self, self.seek_config, self._tools, gcmd, tool_count)
+        result = align_all_tools(self, self._tools, gcmd, tool_count)
         if result.tool0_center is not None:
             self._tool0_center = result.tool0_center
         if result.status == "ok":
@@ -317,9 +309,10 @@ class EddySeek(SeekHost):
             tool = apply_tool_offset(self._tools, self.printer, tool_number)
         except ValueError as exc:
             raise gcmd.error(f"EDDY_SEEK_APPLY_OFFSET: {exc}") from exc
+        eff = tool.effective_offset
         gcmd.respond_info(
             f"EDDY_SEEK_APPLY_OFFSET: tool {tool_number} "
-            f"X={tool['offset_x']:+.4f} mm  Y={tool['offset_y']:+.4f} mm"
+            f"X={eff.x:+.4f} mm  Y={eff.y:+.4f} mm"
         )
 
     def cmd_EDDY_SEEK_ACCURACY(self, gcmd) -> None:
@@ -341,7 +334,7 @@ class EddySeek(SeekHost):
                     )
 
                 gcmd.respond_info(f"EDDY_SEEK_ACCURACY: repeat {repeat}/{repeats}")
-                session = SeekSession(self, self.seek_config)
+                session = SeekSession(self)
                 result = session.run(gcmd)
 
                 if result.status != "ok" or result.offset is None:
@@ -371,5 +364,5 @@ class EddySeek(SeekHost):
             )
 
 
-def load_config(config):
+def load_config(config: ConfigWrapper):
     return EddySeek(config)

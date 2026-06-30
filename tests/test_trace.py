@@ -9,8 +9,8 @@
 import json
 
 from _eddy_seek.config import SeekConfig
+from _eddy_seek.common import Position
 from _eddy_seek.session import (
-    Position,
     SeekSession,
     SeekSessionResult,
     _write_seek_trace,
@@ -18,13 +18,10 @@ from _eddy_seek.session import (
 
 
 class _TraceSensor:
-    save_session_trace = True
+    seek_config = SeekConfig(save_session_trace=True)
 
     def session_trace_config(self) -> dict:
-        return {
-            "seek": SeekConfig().to_dict(),
-            "save_session_trace": True,
-        }
+        return {"seek": self.seek_config.to_dict()}
 
 
 def test_write_seek_trace(tmp_path, monkeypatch):
@@ -55,13 +52,14 @@ def test_write_seek_trace(tmp_path, monkeypatch):
     assert payload["metadata"]["session_id"] == "test-session"
     assert payload["metadata"]["config"]["seek"]["window_size"] == 20
     assert payload["metadata"]["config"]["seek"]["strategy"] == "ternary"
+    assert payload["metadata"]["config"]["seek"]["save_session_trace"] is True
     assert payload["probes"][0]["samples_hz"] == [12340.0, 12350.0, 12346.0]
     assert _write_seek_trace(_TraceSensor(), result, probes) == str(path)
 
 
 def test_seek_session_collects_probes_when_enabled():
     class _Sensor:
-        save_session_trace = True
+        seek_config = SeekConfig(save_session_trace=True)
         _buf = [100.0, 101.0, 102.0]
 
         def session_trace_config(self) -> dict:

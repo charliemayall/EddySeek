@@ -60,8 +60,9 @@ flowchart TD
     START([EDDY_SEEK_TOOLS]) --> SAVE[Save G-code state]
     SAVE --> LOOP{For each tool 0…N-1}
 
-    LOOP -->|tool 0| T0_START[Record start XY]
-    T0_START --> T0_SEEK[Run XY seek at current position]
+    LOOP -->|tool 0| T0_MOVE[Move to sensor_x/sensor_y]
+    T0_MOVE --> T0_START[Record start XY]
+    T0_START --> T0_SEEK[Run XY seek from sensor position]
     T0_SEEK --> T0_OK{Seek OK?}
     T0_OK -->|no| FAIL([Report error, restore state])
     T0_OK -->|yes| T0_CENTER["tool0_center = start + offset<br/>offset_x/y = 0"]

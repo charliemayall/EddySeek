@@ -48,7 +48,7 @@ EDDY_SEEK_QUERY
 EDDY_SEEK_START
 ```
 
-For toolchanger workflows, see the full guide.
+For toolchanger workflows, see the full guide. Per-tool sections (`T0`, `T1`, …) support optional `manual_adjust_x` / `manual_adjust_y` tweaks (mm) added on top of measured offsets when applying alignment.
 
 ## Documentation
 

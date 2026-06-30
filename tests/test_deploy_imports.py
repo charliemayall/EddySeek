@@ -31,12 +31,11 @@ def _purge_eddy_seek_modules() -> None:
 @pytest.fixture
 def klippy_extras(tmp_path):
     extras = tmp_path / "klippy" / "extras"
-    (extras / "_eddy_seek").mkdir(parents=True)
+    extras.mkdir(parents=True)
 
     (extras / "ldc1612.py").write_text(LDC1612_STUB)
     (extras / "eddy_seek.py").symlink_to(ROOT / "src" / "eddy_seek.py")
-    for f in (ROOT / "src" / "_eddy_seek").glob("*.py"):
-        (extras / "_eddy_seek" / f.name).symlink_to(f)
+    (extras / "_eddy_seek").symlink_to(ROOT / "src" / "_eddy_seek")
 
     sys.path.insert(0, str(tmp_path / "klippy"))
     yield extras
@@ -58,9 +57,12 @@ def test_install_script(tmp_path):
     assert (install_dir / "eddy_seek.py").resolve() == (
         ROOT / "src" / "eddy_seek.py"
     ).resolve()
-    for name in ("config.py", "tool_align.py", "session.py"):
-        link = install_dir / "_eddy_seek" / name
-        assert link.resolve() == (ROOT / "src" / "_eddy_seek" / name).resolve()
+    assert (install_dir / "_eddy_seek").resolve() == (
+        ROOT / "src" / "_eddy_seek"
+    ).resolve()
+    assert (install_dir / "_eddy_seek" / "config.py").resolve() == (
+        ROOT / "src" / "_eddy_seek" / "config.py"
+    ).resolve()
 
     (install_dir / "ldc1612.py").write_text(LDC1612_STUB)
     sys.path.insert(0, str(tmp_path / "klippy"))

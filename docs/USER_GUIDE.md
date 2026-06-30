@@ -19,6 +19,8 @@ and can measure per-tool offsets relative to a reference nozzle.
 
 Symlink the modules into Klipper's extras directory (default). Symlinks let
 Moonraker update-manager apply `git pull` updates without re-running install.
+The whole `_eddy_seek` package is linked as one directory, so new modules show
+up after pull without another install run.
 
 ```bash
 ./install.sh
@@ -61,7 +63,7 @@ The first time you run the alignment commands, be ready to stop your printer.
 
 ### Alignments start from 2 places:
 
-**Tool 0** - from `sensor_x`,`sensor_y` (if set), otherwise from current position
+**Tool 0** - from the configured `sensor_x`,`sensor_y`
 
 **Other tools** - from tool 0's centre
 
@@ -112,30 +114,30 @@ live in `[eddy_seek]`, e.g. `frequency`, `max_sensor_hz`, `reg_drive_current`.
 
 ### `[eddy_seek]` section
 
-| Option                   | Default         | Description                                                                          |
-| ------------------------ | --------------- | ------------------------------------------------------------------------------------ |
-| `sensor_type`            | _(required)_    | `ldc1612`                                                                            |
-| `i2c_address`            | `42`            | LDC1612 I2C address (`0x2a`)                                                         |
-| `i2c_mcu`                | _(required)_    | MCU name, e.g. `mcu`                                                                 |
-| `i2c_bus`                | _(required)_    | I2C bus on that MCU, e.g. `i2c1`                                                     |
-| `tool_count`             | `1`             | Number of tools on the changer                                                       |
-| `tool_prefix`            | `T`             | Prefix for saved offset sections (`T0`, `T1`, …)                                     |
-| `load_tool_macro_prefix` | `T`             | Prefix for the G-code that loads a tool (`T0` → macro `T0`)                          |
-| `sensor_x`               | _(unset)_       | Optional machine X of the sensor coil; tool 0 moves here before seeking              |
-| `sensor_y`               | _(unset)_       | Optional machine Y of the sensor coil; set **both** `sensor_x`/`sensor_y` or neither |
-| `window_size`            | `20`            | Rolling mean window for live frequency stats                                         |
-| `max_jog_x`              | `5.0`           | Max X search radius from start (mm)                                                  |
-| `max_jog_y`              | `5.0`           | Max Y search radius from start (mm)                                                  |
-| `tolerance`              | `0.1`           | Stop a pass when X and Y movement are both below this (mm)                           |
-| `dwell_time`             | `0.5`           | Seconds to wait at each probe point for samples                                      |
-| `jog_speed`              | `600`           | Feedrate for search jogs (mm/min)                                                    |
-| `search_for`             | `max`           | `max` or `min` - which frequency extreme marks the nozzle centre                     |
-| `strategy`               | `ternary`       | `ternary` or `centroid`                                                              |
-| `grid_step_x`            | `max_jog_x / 2` | Centroid grid spacing in X (mm)                                                      |
-| `grid_step_y`            | `max_jog_y / 2` | Centroid grid spacing in Y (mm)                                                      |
-| `max_iter`               | `10`            | Ternary iterations per axis per pass                                                 |
-| `max_passes`             | `6`             | Alternating X/Y search passes before giving up                                       |
-| `save_session_trace`     | `False`         | Write probe data to `/tmp/seek_trace.json` after each seek (debug)                   |
+| Option                   | Default         | Description                                                        |
+| ------------------------ | --------------- | ------------------------------------------------------------------ |
+| `sensor_type`            | _(required)_    | `ldc1612`                                                          |
+| `i2c_address`            | `42`            | LDC1612 I2C address (`0x2a`)                                       |
+| `i2c_mcu`                | _(required)_    | MCU name, e.g. `mcu`                                               |
+| `i2c_bus`                | _(required)_    | I2C bus on that MCU, e.g. `i2c1`                                   |
+| `tool_count`             | `1`             | Number of tools on the changer                                     |
+| `tool_prefix`            | `T`             | Prefix for saved offset sections (`T0`, `T1`, …)                   |
+| `load_tool_macro_prefix` | `T`             | Prefix for the G-code that loads a tool (`T0` → macro `T0`)        |
+| `sensor_x`               | _(required)_    | Machine X of the sensor coil; tool 0 moves here before seeking     |
+| `sensor_y`               | _(required)_    | Machine Y of the sensor coil; tool 0 moves here before seeking     |
+| `window_size`            | `20`            | Rolling mean window for live frequency stats                       |
+| `max_jog_x`              | `5.0`           | Max X search radius from start (mm)                                |
+| `max_jog_y`              | `5.0`           | Max Y search radius from start (mm)                                |
+| `tolerance`              | `0.1`           | Stop a pass when X and Y movement are both below this (mm)         |
+| `dwell_time`             | `0.5`           | Seconds to wait at each probe point for samples                    |
+| `jog_speed`              | `600`           | Feedrate for search jogs (mm/min)                                  |
+| `search_for`             | `max`           | `max` or `min` - which frequency extreme marks the nozzle centre   |
+| `strategy`               | `ternary`       | `ternary` or `centroid`                                            |
+| `grid_step_x`            | `max_jog_x / 2` | Centroid grid spacing in X (mm)                                    |
+| `grid_step_y`            | `max_jog_y / 2` | Centroid grid spacing in Y (mm)                                    |
+| `max_iter`               | `10`            | Ternary iterations per axis per pass                               |
+| `max_passes`             | `6`             | Alternating X/Y search passes before giving up                     |
+| `save_session_trace`     | `False`         | Write probe data to `/tmp/seek_trace.json` after each seek (debug) |
 
 Example for a four-tool changer:
 
@@ -148,6 +150,8 @@ i2c_bus: i2c1
 tool_count: 4
 tool_prefix: T
 load_tool_macro_prefix: T
+sensor_x: 20.0
+sensor_y: 20.0
 
 window_size: 20
 max_jog_x: 5.0
@@ -162,10 +166,7 @@ grid_step_y: 2.5
 max_iter: 10
 max_passes: 6
 
-; Optional:
 save_session_trace: True
-sensor_x: 150.0
-sensor_y: 150.0
 ```
 
 ### Per-tool offset sections
@@ -206,7 +207,7 @@ EDDY_SEEK: last=12345678.0 Hz  window_mean=12345678.0 Hz
 
 If `total` stays at `0`, check the following:
 
-- `eddy_seek.py` and `_eddy_seek/*.py` are installed (or symlinked)
+- `eddy_seek.py` and `_eddy_seek/` are installed (or symlinked)
 - `sensor_type`, `i2c_mcu`, and `i2c_bus` are set correctly in `[eddy_seek]`
 - The probe is wired and the driver initialized
 - Check `klippy.log` for `eddy_seek: initialised` and subscription messages
@@ -240,11 +241,11 @@ from tool 0.
 
 > **Tool 0 must be aligned before other tools.**
 
-> **Auto-positioning (optional):** set `sensor_x`/`sensor_y` to the sensor coil's
-> machine XY position and tool 0 jogs there automatically before seeking.
+> **Auto-positioning:** set `sensor_x`/`sensor_y` to the sensor coil's
+> machine XY position. Tool 0 jogs there automatically before seeking.
 > The seek refines within `max_jog`, so the coordinates only need to be within a few mm of
 > the true centre. **Z is not changed** - park at probe height (e.g. in your
-> tool-load macro) first. Leave both unset to seek from the current position.
+> tool-load macro) first.
 
 #### One tool at a time
 

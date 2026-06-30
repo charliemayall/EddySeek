@@ -11,9 +11,11 @@ Per-tool seek session: sensor sampling, jogging, and convergence.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
+
 
 if TYPE_CHECKING:
+    from klippy.gcode import GCodeCommand
     from klippy.klippy import Printer
 import json
 import os
@@ -21,6 +23,7 @@ import tempfile
 import uuid
 import time
 import math
+from .common import Position
 from .config import SeekConfig
 from .strategy import strategy_for
 import logging
@@ -28,21 +31,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class Position(NamedTuple):
-    x: float
-    y: float
-
-
 class SeekHost(Protocol):
     printer: Printer
+    seek_config: SeekConfig
 
     def reset_capture(self) -> None: ...
     def get_capture_mean(self, min_samples: int = 5) -> float | None: ...
     def peek_capture_samples(self) -> list[float]: ...
     @property
     def capture_count(self) -> int: ...
-    @property
-    def save_session_trace(self) -> bool: ...
     def session_trace_config(self) -> dict[str, Any]: ...
 
 
@@ -58,19 +55,19 @@ class SeekSessionResult:
 
 
 class SeekSession:
-    _GCODE_STATE_MOVE = "eddy_seek_move"
-    """Locate the eddy-sensor centre by searching for  frequency minima / maxima."""
+    """Locate the eddy-sensor centre by searching for frequency minima / maxima."""
 
-    def __init__(self, host: SeekHost, config: SeekConfig) -> None:
+    _GCODE_STATE_MOVE = "eddy_seek_move"
+
+    def __init__(self, host: SeekHost) -> None:
         self._host = host
-        self._config = config
+        self._config = host.seek_config
         self._printer = host.printer
         self._gcode = self._printer.lookup_object("gcode")
-
         self.session_id = str(uuid.uuid4())
         self.start_time = time.time()
         self._offset = Position(0.0, 0.0)
-        self._save_trace = getattr(host, "save_session_trace", False)
+        self._save_trace = host.seek_config.save_session_trace
         self._probes: list[dict[str, Any]] = []
 
     @property
@@ -92,22 +89,21 @@ class SeekSession:
         self._gcode.run_script_from_command(
             f"SAVE_GCODE_STATE NAME={self._GCODE_STATE_MOVE}"
         )
-        best_x = 0.0
-        best_y = 0.0
+        best = Position(0.0, 0.0)
         passes_run = 0
         error_message = None
 
         try:
-            best_x, best_y, passes_run = strategy.search(self, gcmd)
+            best, passes_run = strategy.search(self, gcmd)
 
-            self._move_to(best_x, best_y)
+            self._move_to(best)
             gcmd.respond_info(
                 f"EDDY_SEEK: done - nozzle offset from start: "
-                f"X={best_x:+.4f} mm  Y={best_y:+.4f} mm  "
+                f"X={best.x:+.4f} mm  Y={best.y:+.4f} mm  "
                 f"(passes={passes_run})"
             )
             status: Literal["ok", "failed"] = "ok"
-            offset = Position(best_x, best_y)
+            offset = best
 
         except Exception as exc:
             error_message = str(exc)
@@ -116,7 +112,7 @@ class SeekSession:
             status = "failed"
             offset = None
             try:
-                self._move_to(0.0, 0.0)
+                self._move_to(Position(0.0, 0.0))
             except Exception:
                 pass
         finally:
@@ -138,9 +134,9 @@ class SeekSession:
                 gcmd.respond_info(f"EDDY_SEEK: session trace saved to {path}")
         return result
 
-    def measure_at(self, x_offset: float, y_offset: float) -> float:
+    def measure_at(self, offset: Position) -> float:
         toolhead = self._printer.lookup_object("toolhead")
-        self._move_to(x_offset, y_offset)
+        self._move_to(offset)
         toolhead.wait_moves()
 
         self._host.reset_capture()
@@ -151,24 +147,24 @@ class SeekSession:
         if mean is None:
             raise RuntimeError(
                 f"eddy_seek: no samples at offset "
-                f"({x_offset:.3f}, {y_offset:.3f}) mm after "
+                f"({offset.x:.3f}, {offset.y:.3f}) mm after "
                 f"{self._config.dwell_time:.2f} s dwell. "
                 "Check sensor connection, dwell_time, and i2c settings."
             )
         if self._save_trace:
             self._probes.append(
                 {
-                    "x": x_offset,
-                    "y": y_offset,
+                    "x": offset.x,
+                    "y": offset.y,
                     "mean_hz": mean,
                     "samples_hz": self._host.peek_capture_samples(),
                 }
             )
         return mean
 
-    def _move_to(self, x_offset: float, y_offset: float) -> None:
-        delta_x = x_offset - self._offset.x
-        delta_y = y_offset - self._offset.y
+    def _move_to(self, offset: Position) -> None:
+        delta_x = offset.x - self._offset.x
+        delta_y = offset.y - self._offset.y
 
         if abs(delta_x) < 1e-6 and abs(delta_y) < 1e-6:
             return
@@ -179,7 +175,7 @@ class SeekSession:
             [pos[0] + delta_x, pos[1] + delta_y],
             self._config.jog_speed / 60.0,
         )
-        self._offset = Position(x_offset, y_offset)
+        self._offset = offset
 
 
 _TRACE_FILENAME = "seek_trace.json"
@@ -224,7 +220,7 @@ def _sample_stdev(values: list[float], mean: float) -> float:
     return math.sqrt(variance)
 
 
-def report_accuracy_stats(gcmd, offsets: list[Position]) -> None:
+def report_accuracy_stats(gcmd: GCodeCommand, offsets: list[Position]) -> None:
     n = len(offsets)
     xs = [p.x for p in offsets]
     ys = [p.y for p in offsets]
@@ -243,9 +239,10 @@ def report_accuracy_stats(gcmd, offsets: list[Position]) -> None:
             max_pair = max(max_pair, math.hypot(xs[i] - xs[j], ys[i] - ys[j]))
 
     gcmd.respond_info("EDDY_SEEK_ACCURACY: --- repeatability report ---")
-    for i, (x, y) in enumerate(offsets, start=1):
+    for i, offset in enumerate(offsets, start=1):
         gcmd.respond_info(
-            f"EDDY_SEEK_ACCURACY:   #{i}  X={x:+.4f} mm  Y={y:+.4f} mm  "
+            f"EDDY_SEEK_ACCURACY:   #{i}  X={offset.x:+.4f} mm  "
+            f"Y={offset.y:+.4f} mm  "
             f"radial={radial[i - 1]:.4f} mm"
         )
     gcmd.respond_info(

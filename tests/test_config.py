@@ -26,6 +26,8 @@ def test_validate_var():
     assert cfg._var_ok("grid_step_y", 2.5) is True
     assert cfg._var_ok("max_iter", 10) is True
     assert cfg._var_ok("max_passes", 6) is True
+    assert cfg._var_ok("save_session_trace", True) is True
+    assert cfg._var_ok("save_session_trace", "false") is True
     assert cfg._var_ok("search_for", "bogus") is False
     assert cfg._var_ok("strategy", "bogus") is False
     assert cfg._var_ok("grid_step_x", -1.0) is False
@@ -46,6 +48,11 @@ class _FakeConfig:
 
     def getfloat(self, key: str, default: float, **kwargs) -> float:
         return float(self._options.get(key, default))
+
+    def getboolean(self, key: str, default: bool = False, **kwargs) -> bool:
+        if key not in self._options:
+            return default
+        return self._options[key].lower() in ("true", "1", "yes", "on")
 
     def error(self, msg: str) -> ValueError:
         return ValueError(msg)
