@@ -339,10 +339,15 @@ class EddySeek(SeekHost):
                 self._tool0_center = tool0_center
             if tool is not None:
                 self._tools.update_tool(tool)
-                self._tools.save_tool(tool)
-                gcmd.respond_info(
-                    "EDDY_SEEK_TOOL: offset staged - run SAVE_CONFIG to persist"
-                )
+                if tool_number == 0:
+                    gcmd.respond_info(
+                        "Tool 0 center found, you can now align other tools"
+                    )
+                else:
+                    self._tools.save_tool(tool)
+                    gcmd.respond_info(
+                        "EDDY_SEEK_TOOL: offset staged - run SAVE_CONFIG to persist"
+                    )
         finally:
             gcode.run_script_from_command(
                 "RESTORE_GCODE_STATE NAME=EDDY_SEEK_TOOL MOVE=1"
