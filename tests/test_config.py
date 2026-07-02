@@ -27,6 +27,7 @@ def test_validate_var():
     assert cfg._var_ok("max_iter", 10) is True
     assert cfg._var_ok("max_passes", 6) is True
     assert cfg._var_ok("save_session_trace", True) is True
+    assert cfg._var_ok("save_plots", True) is True
     assert cfg._var_ok("save_session_trace", "false") is True
     assert cfg._var_ok("search_for", "bogus") is False
     assert cfg._var_ok("strategy", "bogus") is False
@@ -66,3 +67,13 @@ def test_load_seek_config_rejects_invalid_strategy():
 def test_load_seek_config_rejects_invalid_search_for():
     with raises(ValueError, match="search_for"):
         load_seek_config(_FakeConfig(search_for="bogus"))
+
+
+def test_load_seek_config_save_sweep_plots_legacy_alias():
+    cfg = load_seek_config(_FakeConfig(save_sweep_plots="true"))
+    assert cfg.save_plots is True
+
+
+def test_load_seek_config_save_plots_wins_over_legacy():
+    cfg = load_seek_config(_FakeConfig(save_plots="false", save_sweep_plots="true"))
+    assert cfg.save_plots is False

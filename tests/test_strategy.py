@@ -13,7 +13,11 @@ from pytest import raises
 from _eddy_seek.common import Position
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.session import SeekSession, _sample_stdev
-from _eddy_seek.strategy import CentroidStrategy, TernaryStrategy, strategy_for
+from _eddy_seek.strategy import TernaryStrategy, strategy_for
+from _eddy_seek.strategy.centroid import (
+    frequency_weight,
+    weighted_centroid,
+)
 
 
 class CommandError(Exception):
@@ -37,6 +41,11 @@ def _test_cfg(**overrides) -> SeekConfig:
     return SeekConfig(**overrides)
 
 
+class _FakeReporter:
+    def info(self, msg: str) -> None:
+        pass
+
+
 class _RecordingSearchSession:
     def __init__(self) -> None:
         self.config = _test_cfg(max_iter=1, max_passes=1)
@@ -49,7 +58,7 @@ class _RecordingSearchSession:
 
 def test_strategy_search_uses_positions():
     session = _RecordingSearchSession()
-    best, passes_run = TernaryStrategy().search(session, _FakeGcmd())  # type: ignore[arg-type]
+    best, passes_run = TernaryStrategy().search(session, _FakeReporter())  # type: ignore[arg-type]
 
     assert isinstance(best, Position)
     assert passes_run == 1
@@ -60,17 +69,15 @@ def test_strategy_search_uses_positions():
 def test_strategy_weights_and_runtime_set():
     cfg = _test_cfg()
     session = SeekSession.__new__(SeekSession)
-    session._config = cfg
+    session.config = cfg
 
-    centroid = CentroidStrategy()
-    assert centroid._frequency_weight(session, 100.0, 50.0, 100.0) == 50.0
-    assert centroid._frequency_weight(session, 50.0, 50.0, 100.0) == 0.0
-    session._config = _test_cfg(search_for="min")
-    assert centroid._frequency_weight(session, 50.0, 50.0, 100.0) == 50.0
+    assert frequency_weight(100.0, 50.0, 100.0, "max") == 50.0
+    assert frequency_weight(50.0, 50.0, 100.0, "max") == 0.0
+    assert frequency_weight(50.0, 50.0, 100.0, "min") == 50.0
 
     ternary = TernaryStrategy()
-    assert ternary._is_better(session, 90.0, 80.0) is False
-    assert ternary._is_better(session, 70.0, 80.0) is True
+    assert ternary._is_better(session, 90.0, 80.0) is True
+    assert ternary._is_better(session, 70.0, 80.0) is False
     assert _sample_stdev([1.0, 3.0], 2.0) == math.sqrt(2.0)
 
     cfg = _test_cfg()
@@ -84,5 +91,18 @@ def test_strategy_weights_and_runtime_set():
 
     assert strategy_for("ternary").name == "ternary"
     assert strategy_for("centroid").name == "centroid"
+    assert strategy_for("sweep_centroid").name == "sweep_centroid"
     with raises(ValueError):
         strategy_for("bogus")
+
+
+def test_weighted_centroid_finds_peak():
+    probes = [
+        (Position(-1.0, 0.0), 100.0),
+        (Position(0.0, 0.0), 200.0),
+        (Position(1.0, 0.0), 100.0),
+    ]
+    result = weighted_centroid(probes, "max")
+    assert result is not None
+    assert abs(result.x) < 0.01
+    assert abs(result.y) < 0.01

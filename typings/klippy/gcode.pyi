@@ -47,6 +47,8 @@ class GCodeCommand:
 
 class GCodeDispatch:
     error: Type[CommandError]
+    def respond_raw(self, msg: str) -> None: ...
+    def respond_info(self, msg: str, log: bool = True) -> None: ...
     def register_command(
         self,
         cmd: str,

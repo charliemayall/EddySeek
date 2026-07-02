@@ -44,17 +44,17 @@ def test_write_seek_trace(tmp_path, monkeypatch):
         }
     ]
 
-    _write_seek_trace(_TraceSensor(), result, probes)
+    _write_seek_trace(_TraceSensor(), result, probes, [])
 
     path = tmp_path / "seek_trace.json"
     assert path.is_file()
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["metadata"]["session_id"] == "test-session"
     assert payload["metadata"]["config"]["seek"]["window_size"] == 20
-    assert payload["metadata"]["config"]["seek"]["strategy"] == "ternary"
+    assert payload["metadata"]["config"]["seek"]["strategy"] == "sweep_centroid"
     assert payload["metadata"]["config"]["seek"]["save_session_trace"] is True
     assert payload["probes"][0]["samples_hz"] == [12340.0, 12350.0, 12346.0]
-    assert _write_seek_trace(_TraceSensor(), result, probes) == str(path)
+    assert _write_seek_trace(_TraceSensor(), result, probes, []) == str(path)
 
 
 def test_seek_session_collects_probes_when_enabled():
@@ -73,9 +73,10 @@ def test_seek_session_collects_probes_when_enabled():
 
     session = SeekSession.__new__(SeekSession)
     session._host = _Sensor()
-    session._config = SeekConfig()
+    session.config = SeekConfig()
     session._save_trace = True
     session._probes = []
+    session._plot_traces = []
 
     session._probes.append(
         {

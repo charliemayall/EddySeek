@@ -17,12 +17,10 @@ and can measure per-tool offsets relative to a reference nozzle.
 
 ## Install
 
-Symlink the modules into Klipper's extras directory (default). Symlinks let
-Moonraker update-manager apply `git pull` updates without re-running install.
-The whole `_eddy_seek` package is linked as one directory, so new modules show
-up after pull without another install run.
-
 ```bash
+cd ~
+git clone https://github.com/charliemayall/EddySeek.git
+cd EddySeek
 ./install.sh
 ```
 
@@ -33,7 +31,7 @@ You can specify Klipper's extras path if it is not the default.
 ```
 
 **Moonraker update-manager** — add to `moonraker.conf`, run `./install.sh` once,
-then updates pull the repo and restart Klipper:
+then updates pull the repo, re-run install, and restart Klipper:
 
 ```ini
 [update_manager eddy_seek]
@@ -41,45 +39,13 @@ type: git_repo
 path: ~/EddySeek
 origin: https://github.com/charliemayall/EddySeek.git
 primary_branch: main
+channel: stable
 managed_services: klipper
 is_system_service: False
+post_update_script: install.sh
 ```
 
-Add configuration to `printer.cfg` (see below), then restart Klipper:
-
-```
-FIRMWARE_RESTART
-```
-
----
-
-## Stop
-
-There are a few things you need to know going forwards:
-
-### Watch your printer
-
-The first time you run the alignment commands, be ready to stop your printer.
-
-### Alignments start from 2 places:
-
-**Tool 0** - from the configured `sensor_x`,`sensor_y`
-
-**Other tools** - from tool 0's centre
-
-### Tool 0 must be aligned after every restart
-
-You must run Tool 0 after every restart, if you wish to align other tools.
-
-You do not need to calibrate Tool 0 to use previously calibrated tools.
-
-### Z position
-
-Sensors such as the BigTreeTech Eddy recommend a specific spacing between the sensor and the build plate.
-
-You should position your sensor so the nozzle will be this distance above the sensor when it is being aligned.
-
-The calibration process will not change your Z position, you should be at the desired Z position before you run the alignment commands.
+Add configuration to `printer.cfg` (see below), then restart Klipper with `FIRMWARE_RESTART`.
 
 ---
 
@@ -103,10 +69,24 @@ sensor_type: ldc1612
 i2c_address: 42
 i2c_mcu: mcu
 i2c_bus: i2c1
+sensor_x: 150.0   # machine XY of coil — rough is fine
+sensor_y: 150.0
 ```
 
 Optional LDC1612 tuning keys (same as Klipper's `[ldc1612]` section) can also
 live in `[eddy_seek]`, e.g. `frequency`, `max_sensor_hz`, `reg_drive_current`.
+
+## Minimal Calibration Workflow
+
+1. Install and add `[eddy_seek]` to `printer.cfg` — include I2C settings and `sensor_x` / `sensor_y` (rough coordinates are fine; the seek refines within `max_jog`).
+2. `FIRMWARE_RESTART`
+3. `EDDY_SEEK_QUERY` — confirm samples increment.
+4. Load tool 0 and park it at probe height above the sensor (EddySeek does not move Z).
+5. `EDDY_SEEK_TOOLS` (or `EDDY_SEEK_TOOL TOOL=0`, then repeat for each tool).
+6. `SAVE_CONFIG`
+7. `EDDY_SEEK_APPLY_OFFSET TOOL=n` — apply the offset in toolchanger macros or your slicer.
+
+After a Klipper restart, run tool 0 again before `EDDY_SEEK_TOOL TOOL=n` for other tools — or use `EDDY_SEEK_TOOLS`, which runs tool 0 first.
 
 ---
 
@@ -114,30 +94,39 @@ live in `[eddy_seek]`, e.g. `frequency`, `max_sensor_hz`, `reg_drive_current`.
 
 ### `[eddy_seek]` section
 
-| Option                   | Default         | Description                                                         |
-| ------------------------ | --------------- | ------------------------------------------------------------------- |
-| `sensor_type`            | _(required)_    | `ldc1612`                                                           |
-| `i2c_address`            | `42`            | LDC1612 I2C address (`0x2a`)                                        |
-| `i2c_mcu`                | _(required)_    | MCU name, e.g. `mcu`                                                |
-| `i2c_bus`                | _(required)_    | I2C bus on that MCU, e.g. `i2c1`                                    |
-| `tool_count`             | `1`             | Number of tools on the changer                                      |
-| `tool_prefix`            | `T`             | Prefix for saved offset sections (`T0`, `T1`, …)                    |
-| `load_tool_macro_prefix` | `T`             | Prefix for the G-code that loads a tool (`T` → macro `T0`, `T1`, …) |
-| `sensor_x`               | _(required)_    | Machine X of the sensor coil; tool 0 moves here before seeking      |
-| `sensor_y`               | _(required)_    | Machine Y of the sensor coil; tool 0 moves here before seeking      |
-| `window_size`            | `20`            | Rolling mean window for live frequency stats                        |
-| `max_jog_x`              | `5.0`           | Max X search radius from start (mm)                                 |
-| `max_jog_y`              | `5.0`           | Max Y search radius from start (mm)                                 |
-| `tolerance`              | `0.1`           | Stop a pass when X and Y movement are both below this (mm)          |
-| `dwell_time`             | `0.5`           | Seconds to wait at each probe point for samples                     |
-| `jog_speed`              | `600`           | Feedrate for search jogs (mm/min)                                   |
-| `search_for`             | `max`           | `max` or `min` - which frequency extreme marks the nozzle centre    |
-| `strategy`               | `ternary`       | `ternary` or `centroid`                                             |
-| `grid_step_x`            | `max_jog_x / 2` | Centroid grid spacing in X (mm)                                     |
-| `grid_step_y`            | `max_jog_y / 2` | Centroid grid spacing in Y (mm)                                     |
-| `max_iter`               | `10`            | Ternary iterations per axis per pass                                |
-| `max_passes`             | `6`             | Alternating X/Y search passes before giving up                      |
-| `save_session_trace`     | `False`         | Write probe data to `/tmp/seek_trace.json` after each seek (debug)  |
+| Option                   | Default                                   | Description                                                                 |
+| ------------------------ | ----------------------------------------- | --------------------------------------------------------------------------- |
+| `sensor_type`            | _(required)_                              | `ldc1612`                                                                   |
+| `i2c_address`            | `42`                                      | LDC1612 I2C address (`0x2a`)                                                |
+| `i2c_mcu`                | _(required)_                              | MCU name, e.g. `mcu`                                                        |
+| `i2c_bus`                | _(required)_                              | I2C bus on that MCU, e.g. `i2c1`                                            |
+| `tool_count`             | `1`                                       | Number of tools on the changer                                              |
+| `tool_prefix`            | `T`                                       | Prefix for saved offset sections (`T0`, `T1`, …)                            |
+| `load_tool_macro_prefix` | `T`                                       | Prefix for the G-code that loads a tool (`T` → macro `T0`, `T1`, …)         |
+| `sensor_x`               | _(required)_                              | Machine X of the sensor coil; tool 0 moves here before seeking              |
+| `sensor_y`               | _(required)_                              | Machine Y of the sensor coil; tool 0 moves here before seeking              |
+| `window_size`            | `20`                                      | Rolling mean window for live frequency stats                                |
+| `max_jog_x`              | `5.0`                                     | Max X search radius from start (mm)                                         |
+| `max_jog_y`              | `5.0`                                     | Max Y search radius from start (mm)                                         |
+| `tolerance`              | `0.1`                                     | Stop a pass when X and Y movement are both below this (mm)                  |
+| `dwell_time`             | `0.5`                                     | Seconds to wait at each probe point for samples                             |
+| `jog_speed`              | `600`                                     | Feedrate for search jogs (mm/min)                                           |
+| `search_for`             | `max`                                     | `max` or `min` - which frequency extreme marks the nozzle centre            |
+| `strategy`               | `sweep_centroid`                          | `sweep_centroid` (default), `ternary`, or `centroid`                        |
+| `grid_step_x`            | `max_jog_x / 2`                           | Centroid grid spacing in X (mm)                                             |
+| `grid_step_y`            | `max_jog_y / 2`                           | Centroid grid spacing in Y (mm)                                             |
+| `max_iter`               | `10`                                      | Ternary iterations per axis per pass                                        |
+| `max_passes`             | `6`                                       | Alternating X/Y search passes before giving up                              |
+| `save_session_trace`     | `False`                                   | Write probe data to `/tmp/seek_trace.json` after each seek (debug)          |
+| `save_plots`             | `False`                                   | Write HTML debug plots to `result_folder` (requires plotly extra)           |
+| `result_folder`          | `~/printer_data/config/eddy_seek_results` | Output directory for debug plots                                            |
+| `sweep_coarse_speed`     | `20.0`                                    | Sweep coarse pass feedrate (mm/s); sweep_centroid only                      |
+| `sweep_fine_speed`       | `10.0`                                    | Sweep fine pass feedrate (mm/s)                                             |
+| `sweep_overscan`         | `1.0`                                     | Extra travel beyond jog range (mm)                                          |
+| `sweep_cross_offset`     | `0.3`                                     | Perpendicular stagger between parallel sweeps (mm)                          |
+| `sweep_cross_passes`     | `3`                                       | Number of staggered sweep lines per axis, 3 is recommended for best results |
+| `fine_shrink`            | `0.4`                                     | Fine pass range multiplier (× max_jog)                                      |
+| `min_sweep_samples`      | `20`                                      | Minimum profile points before centroid fit                                  |
 
 Example for a four-tool changer:
 
@@ -161,7 +150,7 @@ tolerance: 0.1
 dwell_time: 0.5
 jog_speed: 600
 search_for: max
-strategy: ternary
+strategy: sweep_centroid
 grid_step_x: 2.5
 grid_step_y: 2.5
 max_iter: 10
@@ -178,15 +167,21 @@ After alignment, offsets are staged in the config autosave under sections named
 [T0]
 offset_x: 0.000000
 offset_y: 0.000000
+manual_adjust_x: 0.000000
+manual_adjust_y: 0.000000
 is_calibrated: True
 
 [T1]
 offset_x: 1.234000
 offset_y: -0.456000
+manual_adjust_x: 0.000000
+manual_adjust_y: 0.000000
 is_calibrated: True
 ```
 
 Run `SAVE_CONFIG` in the console to persist staged values to `printer.cfg`.
+
+You can manually adjust the offset by adding to the `manual_adjust_x` and `manual_adjust_y` fields. This will **add / subtract** to the offset, not replace it.
 
 ---
 
@@ -209,7 +204,7 @@ If `total` stays at `0`, check the following:
 
 - `eddy_seek.py` and `_eddy_seek/` are installed (or symlinked)
 - `sensor_type`, `i2c_mcu`, and `i2c_bus` are set correctly in `[eddy_seek]`
-- The probe is wired and the driver initialized
+- The probe is wired and the driver initialised
 - Check `klippy.log` for `eddy_seek: initialised` and subscription messages
 
 ---
@@ -218,89 +213,59 @@ If `total` stays at `0`, check the following:
 
 ### Single-nozzle XY seek (`EDDY_SEEK_START`)
 
-Use this to find the sensor centre at the current XY position - for calibration,
+Use this to find the sensor centre at the current XY position - for debugging,
 repeatability checks, or manual offset measurement.
-
-1. Home and move the **reference nozzle** above the eddy sensor at probing height.
-2. Optionally clear the capture buffer: `EDDY_SEEK_RESET`
-3. Run: `EDDY_SEEK_START`
-4. The toolhead jogs and samples until converged or `max_passes` is reached.
-5. Read the reported offset from the start position, e.g.:
-
-```
- EDDY_SEEK: done - nozzle offset from start: X=+1.2340 mm  Y=-0.4560 mm  (passes=2)
-```
-
-The toolhead returns to the starting XY when the command finishes.
 
 ### Toolchanger alignment (`EDDY_SEEK_TOOL` / `EDDY_SEEK_TOOLS`)
 
-**Tool 0** establishes the reference centre on the sensor. **Subsequent tools** are
-loaded, moved to that centre, then seeked; the resulting offset is the XY difference
-from tool 0.
+**Tool 0** establishes the reference centre on the sensor. **Subsequent tools** are moved to that centre, then seeked. The resulting offset is the XY difference Tool n --> Tool 0.
 
 > **Tool 0 must be aligned before other tools.**
 
 > **Auto-positioning:** set `sensor_x`/`sensor_y` to the sensor coil's
 > machine XY position. Tool 0 jogs there automatically before seeking.
-> The seek refines within `max_jog`, so the coordinates only need to be within a few mm of
-> the true centre. **Z is not changed** - park at probe height (e.g. in your
-> tool-load macro) first.
+> The seek refines within `max_jog`, so the coordinates only need to be within a few mm of the true centre.
+> **Z is not changed** - park at probe height before running the alignment commands.
 
-#### One tool at a time
+#### One tool at a time (`EDDY_SEEK_TOOL TOOL=n`)
 
-```
-; Park tool 0 above the sensor, then:
-EDDY_SEEK_TOOL TOOL=0
+- Load tool 0, then `EDDY_SEEK_TOOL TOOL=0`
+- Load tool 1, then `EDDY_SEEK_TOOL TOOL=1` (repeat for each tool)
 
-; Tool 1+ — EddySeek runs the load macro and moves to tool 0's centre:
-EDDY_SEEK_TOOL TOOL=1
-```
+`EDDY_SEEK_TOOL` does not run load macros — load each tool yourself before calling it.
 
-After each successful run, run `SAVE_CONFIG` to persist offsets.
+Run `SAVE_CONFIG` to persist offsets for each tool you calibrated.
 
-> **Session note:** Tool 0's sensor-centre XY is kept in memory for
-> `EDDY_SEEK_TOOL` only until Klipper restarts. Align tool 0 again before
-> other tools if you `FIRMWARE_RESTART` between runs. `EDDY_SEEK_TOOLS` runs
-> the full sequence in one command and avoids that gap.
-
-#### All tools in sequence
-
-Park **tool 0** above the sensor, then:
+#### All tools (`EDDY_SEEK_TOOLS`)
 
 ```
+; Load Tool 0, then run
 EDDY_SEEK_TOOLS
-; or override count:
-EDDY_SEEK_TOOLS TOOLS=4
+
+SAVE_CONFIG
 ```
 
-EddySeek loads each tool via `{load_tool_macro_prefix}{n}` (default `T0`, `T1`, …),
-aligns it, and stages offsets. Finish with `SAVE_CONFIG`.
+For tools 1 --> N, EddySeek runs `{load_tool_macro_prefix}{n}` (default `T1`, `T2`, …)
+before aligning. XY gcode offset is cleared before each seek (including after load
+macros) and restored when alignment finishes.
 
-**Typical first-time sequence**
-
-1. Install and configure `[eddy_seek]` with I2C settings.
-2. `FIRMWARE_RESTART`
-3. `EDDY_SEEK_QUERY` - confirm samples increment.
-4. Load tool 0, jog above sensor at probe height.
-5. `EDDY_SEEK_TOOLS` (or `EDDY_SEEK_TOOL TOOL=0` then repeat for each tool).
-6. `SAVE_CONFIG`
-7. Wire saved `T{n}` offsets into your toolchanger / motion system as needed.
+Tool 0 must already be loaded before you run this command.
 
 ---
 
 ## G-code commands
 
-| Command                         | Description                                           |
-| ------------------------------- | ----------------------------------------------------- |
-| `EDDY_SEEK_QUERY`               | Print current frequency statistics                    |
-| `EDDY_SEEK_RESET`               | Clear capture buffer before a measurement             |
-| `EDDY_SEEK_SET`                 | Override seek settings until restart (see below)      |
-| `EDDY_SEEK_START`               | Run XY search from current position                   |
-| `EDDY_SEEK_ACCURACY`            | Repeat alignment and report repeatability             |
-| `EDDY_SEEK_TOOL TOOL=n`         | Align one tool (0-based)                              |
-| `EDDY_SEEK_TOOLS`               | Align all tools against tool 0                        |
-| `EDDY_SEEK_APPLY_OFFSET TOOL=n` | Apply saved XY offset for a tool via SET_GCODE_OFFSET |
+| Command                         | Description                                             |
+| ------------------------------- | ------------------------------------------------------- |
+| `EDDY_SEEK_QUERY`               | Print current frequency statistics                      |
+| `EDDY_SEEK_RESET`               | Clear capture buffer before a measurement               |
+| `EDDY_SEEK_SET`                 | Override seek settings until restart (see below)        |
+| `EDDY_SEEK_START`               | Run XY search from current position                     |
+| `EDDY_SEEK_ACCURACY`            | Repeat alignment and report repeatability               |
+| `EDDY_SEEK_TOOL TOOL=n`         | Align one tool (0-based); caller loads the tool first   |
+| `EDDY_SEEK_TOOLS`               | Align all tools; runs load macros for tools 1…N         |
+| `EDDY_SEEK_TOOLS TOOLS=n`       | Align tools 0…n−1 only (optional; default is all tools) |
+| `EDDY_SEEK_APPLY_OFFSET TOOL=n` | Apply saved XY offset for a tool via SET_GCODE_OFFSET   |
 
 ### `EDDY_SEEK_SET`
 
@@ -308,12 +273,14 @@ Temporarily change search parameters without editing `printer.cfg`. Parameters
 match the `[eddy_seek]` seek keys (G-code names are uppercase):
 
 `WINDOW_SIZE`, `MAX_JOG_X`, `MAX_JOG_Y`, `TOLERANCE`, `DWELL_TIME`, `JOG_SPEED`,
-`SEARCH_FOR`, `STRATEGY`, `GRID_STEP_X`, `GRID_STEP_Y`, `MAX_ITER`, `MAX_PASSES`
+`SEARCH_FOR`, `STRATEGY`, `GRID_STEP_X`, `GRID_STEP_Y`, `MAX_ITER`, `MAX_PASSES`,
+`SAVE_SESSION_TRACE`, `SAVE_PLOTS`, `SWEEP_COARSE_SPEED`, `SWEEP_FINE_SPEED`,
+`SWEEP_OVERSCAN`, `SWEEP_CROSS_OFFSET`, `SWEEP_CROSS_PASSES`, `FINE_SHRINK`,
+`MIN_SWEEP_SAMPLES`
 
 ```
 EDDY_SEEK_SET STRATEGY=centroid
 EDDY_SEEK_SET TOLERANCE=0.05 MAX_PASSES=8
-EDDY_SEEK_SET
 ```
 
 Run `EDDY_SEEK_SET` without parameters to print current values.
@@ -338,7 +305,7 @@ scatter, and max pairwise distance. Useful for tuning `dwell_time`, `tolerance`,
 ### Ternary (`strategy: ternary`)
 
 Each pass runs a 1-D ternary search on X, then Y, within `max_jog_x` / `max_jog_y`.
-Good default when the frequency peak is smooth and single-valued.
+Use when the frequency peak is smooth and single-valued; try `sweep_centroid` first.
 
 ### Centroid (`strategy: centroid`)
 
@@ -347,8 +314,45 @@ close each frequency is to the target extreme (`search_for`), and moves to the
 weighted centroid. Grid step halves each pass. Useful when the response is broader
 or slightly asymmetric.
 
+### Sweep centroid (`strategy: sweep_centroid`)
+
+Continuous axis sweeps using Klipper rapid-scan motion (similar to bed mesh
+`METHOD=rapid_scan`). Pass 1 runs coarse bidirectional sweeps over the full
+jog range; later passes run finer sweeps. Samples from both axes are merged and
+a frequency-weighted 2D centroid is computed (same weighting as grid centroid).
+Parallel sweeps at staggered cross-axis offsets improve sampling density.
+`dwell_time` is ignored when using sweep_centroid.
+
+Set `save_plots: True` to write one interactive HTML debug plot per session (requires
+plotly; see [Debug plots](#debug-plots) below).
+
 Set `search_for` to `max` if the nozzle centre gives the **highest** frequency, or
 `min` if it gives the **lowest** (depends on coil geometry and target material).
+
+---
+
+## Debug plots
+
+When `save_plots: True`, each seek session writes one HTML plot directly under
+`result_folder` (default `~/printer_data/config/eddy_seek_results`):
+
+```
+{result_folder}/HH_MM_DD_MM_YY_{id}.html
+```
+
+Open in a browser to inspect probe positions, frequency
+samples, and per-pass results. (Not in the mainsail / fluidd web interface)
+
+Install plotly on the Klipper host (Moonraker venv example):
+
+```bash
+~/klippy-env/bin/pip3 install plotly==5.24.1
+```
+
+When a plot is saved, the console prints
+`EDDY_SEEK: debug plot saved to <path>`.
+
+**You must download the plot file and open it in a browser to view it. (Mainsail will just display the source code)**
 
 ---
 
@@ -357,27 +361,28 @@ Set `search_for` to `max` if the nozzle centre gives the **highest** frequency, 
 The `eddy_seek` printer object is available via `printer.objects.query` and
 `printer.objects.subscribe`.
 
-| Field           | Description                                             |
-| --------------- | ------------------------------------------------------- |
-| `last_freq`     | Most recent sample (Hz)                                 |
-| `window_mean`   | Rolling mean of last `window_size` samples (Hz)         |
-| `capture_mean`  | Mean since last `EDDY_SEEK_RESET` (Hz)                  |
-| `capture_count` | Samples in current capture session                      |
-| `total_samples` | Total samples since Klipper started                     |
-| `tools`         | Map of `T{n}` → `offset_x`, `offset_y`, `is_calibrated` |
+| Field           | Description                                                                                                                               |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `last_freq`     | Most recent sample (Hz)                                                                                                                   |
+| `window_mean`   | Rolling mean of last `window_size` samples (Hz)                                                                                           |
+| `capture_mean`  | Mean since last `EDDY_SEEK_RESET` (Hz)                                                                                                    |
+| `capture_count` | Samples in current capture session                                                                                                        |
+| `total_samples` | Total samples since Klipper started                                                                                                       |
+| `tools`         | Map of `T{n}` → `offset_x`, `offset_y`, `manual_adjust_x`, `manual_adjust_y`, `effective_offset_x`, `effective_offset_y`, `is_calibrated` |
 
 ---
 
 ## Troubleshooting
 
-| Symptom                                     | Things to check                                                                      |
-| ------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `total` stays 0 on `EDDY_SEEK_QUERY`        | I2C wiring, `i2c_mcu` / `i2c_bus`, `klippy.log` init errors                          |
-| `no samples at offset` during seek          | Increase `dwell_time`; verify sensor stream; check coil height                       |
-| Search does not converge                    | Increase `max_passes` or `max_jog_x/y`; try `centroid`; check `search_for` direction |
-| `tool 0 must be aligned before other tools` | Run `EDDY_SEEK_TOOL TOOL=0` or start `EDDY_SEEK_TOOLS` from tool 0                   |
-| Tool load fails                             | `load_tool_macro_prefix` must match your macros (`T0`, `LOAD_TOOL_0`, etc.)          |
-| Offsets not in `printer.cfg`                | Run `SAVE_CONFIG` after alignment commands succeed                                   |
+| Symptom                                     | Things to check                                                                                |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `total` stays 0 on `EDDY_SEEK_QUERY`        | I2C wiring, `i2c_mcu` / `i2c_bus`, `klippy.log` init errors                                    |
+| `no samples at offset` during seek          | Increase `dwell_time`; verify sensor stream; check coil height                                 |
+| Search does not converge                    | Increase `max_passes` or `max_jog_x/y`; try `centroid` or `sweep_centroid`; check `search_for` |
+| Sweep centroid: too few samples             | Lower `sweep_fine_speed`; check LDC1612 stream                                                 |
+| `tool 0 must be aligned before other tools` | Run `EDDY_SEEK_TOOL TOOL=0` or start `EDDY_SEEK_TOOLS` from tool 0                             |
+| Tool load fails                             | `load_tool_macro_prefix` must match your macros (`T0`, `LOAD_TOOL_0`, etc.)                    |
+| Offsets not in `printer.cfg`                | Run `SAVE_CONFIG` after alignment commands succeed                                             |
 
 ---
 

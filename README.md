@@ -6,7 +6,7 @@ EddySeek reads an LDC1612 coil, runs XY search routines, and measures per-tool X
 
 > 🙏 **Help wanted:** Do you own a toolchanger and / or cartographer / beacon? Please try EddySeek and help me expand the range of setups it has been tested on.
 
-> ⚠️ **Early release (0.1.0).** Functional and tested in development, but not yet
+> ⚠️ **Early release.** Not yet
 > proven across many machines. Validate alignment results on your own hardware
 > before relying on them, and keep an eye on the toolhead during the first runs.
 
@@ -39,9 +39,10 @@ primary_branch: main
 channel: stable
 managed_services: klipper
 is_system_service: False
+post_update_script: install.sh
 ```
 
-Add `[eddy_seek]` to `printer.cfg`, restart Klipper, then:
+Add `[eddy_seek]` to `printer.cfg` (I2C settings plus `sensor_x` / `sensor_y` — see the [User Guide](docs/USER_GUIDE.md)), `FIRMWARE_RESTART`, then:
 
 ```gcode
 EDDY_SEEK_QUERY

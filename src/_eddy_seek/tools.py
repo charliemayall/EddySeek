@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import dataclasses
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from .common import Position
 
@@ -38,17 +38,14 @@ class Tool:
 
     @property
     def effective_offset(self) -> Position:
-        return Position(
-            x=self.offset.x + self.manual_offset.x,
-            y=self.offset.y + self.manual_offset.y,
-        )
+        return self.offset + self.manual_offset
 
     @staticmethod
     def create_default(tool_number: int) -> Tool:
         return Tool(
             tool_number=tool_number,
-            offset=Position(0.0, 0.0),
-            manual_offset=Position(0.0, 0.0),
+            offset=Position.zero(),
+            manual_offset=Position.zero(),
             is_calibrated=False,
         )
 
@@ -79,12 +76,9 @@ class Tool:
             is_calibrated=section.getboolean("is_calibrated", False),
         )
 
-    def set_offset(self, x: Optional[float] = None, y: Optional[float] = None) -> None:
-        if x is None:
-            x = self.offset.x
-        if y is None:
-            y = self.offset.y
-        self.offset = Position(x, y)
+    def set_offset(self, offset: Position | None = None) -> None:
+        if offset is not None:
+            self.offset = offset
 
     def save(self, config: PrinterConfig, prefix: str) -> None:
         """Write this tool's fields into a config section."""
@@ -101,11 +95,13 @@ class Tool:
     def to_dict(self) -> dict[str, float | int | bool]:
         return dataclasses.asdict(self)
 
-    def mark_calibrated(self, x: float = 0.0, y: float = 0.0) -> Tool:
+    def mark_calibrated(self, offset: Position | None = None) -> Tool:
         """Return a copy marked calibrated with the given seek offset."""
+        if offset is None:
+            offset = Position.zero()
         return Tool(
             tool_number=self.tool_number,
-            offset=Position(x, y),
+            offset=offset,
             manual_offset=self.manual_offset,
             is_calibrated=True,
         )
@@ -124,6 +120,15 @@ class ToolAlignConfig:
             self._load_tool_or_default(main_config, tool_number)
             for tool_number in range(self.tool_count)
         ]
+        logger.debug(
+            "eddy_seek: tools config tool_count=%d sensor=(%.4f, %.4f) "
+            "prefix=%r load_macro=%r",
+            self.tool_count,
+            self.sensor_x,
+            self.sensor_y,
+            self.tool_prefix,
+            self.load_tool_macro,
+        )
 
     def sensor_position(self) -> Position:
         """Configured tool-0 start XY (sensor coil location)."""
@@ -143,8 +148,10 @@ class ToolAlignConfig:
         return f"{self.load_tool_macro}{tool_number}"
 
     def run_load_macro(self, tool_number: int) -> None:
+        macro = self.format_load_macro(tool_number)
+        logger.debug("eddy_seek: running load macro %r", macro)
         gcode = self._printer.lookup_object("gcode")
-        gcode.run_script_from_command(self.format_load_macro(tool_number))
+        gcode.run_script_from_command(macro)
 
     def update_tool(self, tool: Tool) -> None:
         self.tools[tool.tool_number] = tool
@@ -154,6 +161,13 @@ class ToolAlignConfig:
             self.save_tool(tool)
 
     def save_tool(self, tool: Tool) -> None:
+        logger.debug(
+            "eddy_seek: staging tool %d offset=(%.6f, %.6f) calibrated=%s",
+            tool.tool_number,
+            tool.offset.x,
+            tool.offset.y,
+            tool.is_calibrated,
+        )
         configfile = self._configfile()
         configfile.remove_section(self.section_name(tool.tool_number))
         tool.save(configfile, self.tool_prefix)
@@ -180,6 +194,12 @@ def apply_tool_offset(
     if not tool.is_calibrated:
         raise ValueError(f"tool {tool_number} is not calibrated")
     eff = tool.effective_offset
+    logger.debug(
+        "eddy_seek: applying tool %d effective offset (%.6f, %.6f)",
+        tool_number,
+        eff.x,
+        eff.y,
+    )
     gcode = printer.lookup_object("gcode")
     gcode.run_script_from_command(f"SET_GCODE_OFFSET X={eff.x:.6f} Y={eff.y:.6f}")
     return tool

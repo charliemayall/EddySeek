@@ -37,6 +37,25 @@ def cprint(text, color: COLORS):
     print(_c(text, color))
 
 
+def purge_pycache(*roots: Path) -> int:
+    """Remove stale bytecode caches under ``roots`` (returns dirs removed)."""
+    removed = 0
+    seen: set[Path] = set()
+    for root in roots:
+        if not root.exists():
+            continue
+        for cache in root.resolve().rglob("__pycache__"):
+            if not cache.is_dir():
+                continue
+            key = cache.resolve()
+            if key in seen:
+                continue
+            shutil.rmtree(cache)
+            seen.add(key)
+            removed += 1
+    return removed
+
+
 def main() -> None:
     dest = (
         Path(sys.argv[1]).expanduser().resolve()
@@ -68,13 +87,19 @@ def main() -> None:
         shutil.rmtree(pkg)
     pkg.symlink_to((src_dir / "_eddy_seek").resolve())
 
+    caches = purge_pycache(src_dir, dest)
+    if caches:
+        print(f"{_c('-- ', COLORS.GRAY)}cleared {caches} __pycache__ dir(s)")
+
     cprint("\u2728 EddySeek: installed \u2728".center(60), COLORS.GREEN)
     print(f"{_c('-- ', COLORS.GRAY)}{dest / 'eddy_seek.py'}")
     print(f"{_c('-- ', COLORS.GRAY)}{dest / '_eddy_seek/'}")
     print(
         f"""\n{_c("Next steps:", COLORS.GREEN)}\n
-    1. Add [eddy_seek] to printer.cfg
+    1. Add [eddy_seek] to printer.cfg (set sensor_x/sensor_y for your coil)
     2. Restart Klipper: FIRMWARE_RESTART
+
+    After git pull, re-run ./install.sh then restart Klipper.
     """
     )
 

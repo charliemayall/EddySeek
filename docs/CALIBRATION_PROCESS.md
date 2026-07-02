@@ -36,7 +36,7 @@ flowchart TD
     D --> E{Alignment mode}
     E -->|All tools| F[EDDY_SEEK_TOOLS]
     E -->|One at a time| G[EDDY_SEEK_TOOL TOOL=0]
-    G --> H[EDDY_SEEK_TOOL TOOL=n — load macro + move to centre]
+    G --> H[Load tool n, then EDDY_SEEK_TOOL TOOL=n]
     H --> MORE{More tools?}
     MORE -->|yes| H
     MORE -->|no| J[Offsets staged in T0, T1, … sections]
@@ -53,7 +53,8 @@ the resulting offset is the XY difference from tool 0.
 
 ## Multi-tool alignment sequence
 
-`EDDY_SEEK_TOOLS` (and repeated `EDDY_SEEK_TOOL` calls) follow this logic:
+`EDDY_SEEK_TOOLS` follows this logic (`EDDY_SEEK_TOOL` is the same seek steps but
+does not run load macros — load each tool before calling it):
 
 ```mermaid
 flowchart TD
@@ -165,6 +166,24 @@ flowchart TD
   WEIGHT --> CENT["Move to weighted centroid"]
   CENT --> CLAMP["Clamp within max_jog_x/y"]
 ```
+
+### Sweep centroid strategy (`strategy: sweep_centroid`)
+
+Continuous **rapid_scan**-style axis sweeps (like bed mesh `METHOD=rapid_scan`):
+LDC1612 samples are correlated to XY via print-time stepper lookups, and the
+peak is found with a frequency-weighted 2D centroid over in-range samples.
+
+```mermaid
+flowchart TD
+  COARSE["Pass 1 coarse: bidirectional X/Y sweeps<br/>±max_jog, staggered cross offsets"] --> FINE
+  FINE["Pass 2+ fine: narrower sweeps<br/>range × fine_shrink"] --> CENT["2D weighted centroid"]
+  CENT --> CHECK{"converged?"}
+  CHECK -->|no| FINE
+  CHECK -->|yes| DONE([Best offset])
+```
+
+XY gcode offset is cleared for the seek session so alignment moves use machine
+coordinates. `dwell_time` is not used for sweep_centroid.
 
 ---
 

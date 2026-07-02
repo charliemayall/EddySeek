@@ -8,11 +8,20 @@
 
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.common import Position
-from _eddy_seek.tools import Tool, ToolAlignConfig, apply_tool_offset
-from _eddy_seek.tool_align import move_to_seek_start_pos, tool0_center_xy
+from _eddy_seek.tools import (
+    Tool,
+    ToolAlignConfig,
+    apply_tool_offset,
+)
+from _eddy_seek.tool_align import (
+    align_tool_number,
+    move_to_seek_start_pos,
+)
+from _eddy_seek.session import SeekSessionResult
 
 
 from pytest import raises
+from unittest.mock import patch
 
 
 class _FakeGcode:
@@ -42,8 +51,8 @@ class _FakeTools:
         return self.tools[tool_number]
 
 
-def test_tool0_center_xy_offset_applies():
-    center = tool0_center_xy(10.0, 20.0, Position(1.5, -0.5))
+def test_position_offset_applies():
+    center = Position(10.0, 20.0) + Position(1.5, -0.5)
     assert center == Position(11.5, 19.5)
 
 
@@ -123,10 +132,13 @@ class _RecordingToolhead:
 class _MovePrinter:
     def __init__(self, toolhead: _RecordingToolhead) -> None:
         self._toolhead = toolhead
+        self.gcode = _FakeGcode()
 
     def lookup_object(self, name: str):
         if name == "toolhead":
             return self._toolhead
+        if name == "gcode":
+            return self.gcode
         raise KeyError(name)
 
 
@@ -160,7 +172,7 @@ def test_move_to_seek_start_pos_moves_to_sensor_position():
         _FakeGcmd(),
         label="EDDY_SEEK_TOOLS",
     )
-    assert start == (10.0, 20.0)
+    assert start == Position(10.0, 20.0)
     assert toolhead.moves == [[10.0, 20.0]]
 
 
@@ -214,3 +226,75 @@ def test_sensor_position_is_required():
 
     cfg = ToolAlignConfig(_ToolConfig(sensor_x=10.0, sensor_y=20.0))  # type: ignore[arg-type]
     assert cfg.sensor_position() == Position(10.0, 20.0)
+
+
+class _LoadMacroTools:
+    tool_count = 4
+    load_calls: list[int] = []
+
+    def format_load_macro(self, tool_number: int) -> str:
+        return f"T{tool_number}"
+
+    def run_load_macro(self, tool_number: int) -> None:
+        self.load_calls.append(tool_number)
+
+    def get_tool(self, tool_number: int) -> Tool:
+        return Tool.create_default(tool_number)
+
+
+class _OffsetClearPrinter(_FakePrinter):
+    def __init__(self) -> None:
+        super().__init__()
+        self._toolhead = _RecordingToolhead(start=(0.0, 0.0))
+
+    def lookup_object(self, name: str):
+        if name == "toolhead":
+            return self._toolhead
+        return super().lookup_object(name)
+
+
+def test_align_tool_number_load_macro_only_when_requested():
+    tools = _LoadMacroTools()
+    host = _FakeSeekHost(_MovePrinter(_RecordingToolhead(start=(0.0, 0.0))))  # type: ignore[arg-type]
+    center = Position(10.0, 20.0)
+    ok = SeekSessionResult("s", 0.0, 1.0, "ok", Position(0.1, -0.2), 1, None)
+
+    with patch("_eddy_seek.tool_align.align_tool_at", return_value=ok):
+        align_tool_number(
+            host,  # type: ignore[arg-type]
+            tools,  # type: ignore[arg-type]
+            _FakeGcmd(),
+            1,
+            center,
+            load_tool=False,
+        )
+        assert tools.load_calls == []
+
+        align_tool_number(
+            host,  # type: ignore[arg-type]
+            tools,  # type: ignore[arg-type]
+            _FakeGcmd(),
+            1,
+            center,
+            load_tool=True,
+        )
+        assert tools.load_calls == [1]
+
+
+def test_align_tool_number_clears_gcode_offset_after_load():
+    tools = _LoadMacroTools()
+    printer = _OffsetClearPrinter()
+    host = _FakeSeekHost(printer)  # type: ignore[arg-type]
+    center = Position(10.0, 20.0)
+    ok = SeekSessionResult("s", 0.0, 1.0, "ok", Position(0.1, -0.2), 1, None)
+
+    with patch("_eddy_seek.tool_align.align_tool_at", return_value=ok):
+        align_tool_number(
+            host,  # type: ignore[arg-type]
+            tools,  # type: ignore[arg-type]
+            _FakeGcmd(),
+            1,
+            center,
+            load_tool=True,
+        )
+    assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=0.000000 Y=0.000000"]

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any, Literal, TypeVar, overload
 
 from klippy.extras.configfile import PrinterConfig
+from klippy.extras.gcode_move import GCodeMove
 from klippy.gcode import GCodeDispatch
 from klippy.toolhead import ToolHead
 
@@ -29,6 +30,8 @@ class Printer:
     def lookup_object(self, name: Literal["configfile"]) -> PrinterConfig: ...
     @overload
     def lookup_object(self, name: Literal["toolhead"]) -> ToolHead: ...
+    @overload
+    def lookup_object(self, name: Literal["gcode_move"]) -> GCodeMove: ...
     @overload
     def lookup_object(self, name: str, default: T) -> object | T: ...
     @overload

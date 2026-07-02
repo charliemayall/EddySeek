@@ -20,6 +20,7 @@ Field ``metadata`` drives validation, ``EDDY_SEEK_SET`` parsing, and (mostly)
 from __future__ import annotations
 
 from dataclasses import Field, asdict, dataclass, field, fields
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 import logging
 
@@ -52,9 +53,12 @@ class SeekConfig:
         default="max",
         metadata={"gcode": "SEARCH_FOR", "enum": ("min", "max")},
     )
-    strategy: Literal["ternary", "centroid"] = field(
-        default="ternary",
-        metadata={"gcode": "STRATEGY", "enum": ("ternary", "centroid")},
+    strategy: Literal["ternary", "centroid", "sweep_centroid"] = field(
+        default="sweep_centroid",
+        metadata={
+            "gcode": "STRATEGY",
+            "enum": ("ternary", "centroid", "sweep_centroid"),
+        },
     )
     grid_step_x: float = field(
         default=2.5, metadata={"gcode": "GRID_STEP_X", "positive": True}
@@ -67,8 +71,35 @@ class SeekConfig:
     save_session_trace: bool = field(
         default=False, metadata={"gcode": "SAVE_SESSION_TRACE", "bool": True}
     )
+    save_plots: bool = field(
+        default=False, metadata={"gcode": "SAVE_PLOTS", "bool": True}
+    )
+    result_folder: str = field(default="~/printer_data/config/eddy_seek_results")
+
+    sweep_coarse_speed: float = field(
+        default=20.0, metadata={"gcode": "SWEEP_COARSE_SPEED", "positive": True}
+    )
+    sweep_fine_speed: float = field(
+        default=10.0, metadata={"gcode": "SWEEP_FINE_SPEED", "positive": True}
+    )
+    sweep_overscan: float = field(
+        default=1.0, metadata={"gcode": "SWEEP_OVERSCAN", "positive": True}
+    )
+    sweep_cross_offset: float = field(
+        default=0.3, metadata={"gcode": "SWEEP_CROSS_OFFSET", "positive": True}
+    )
+    sweep_cross_passes: int = field(
+        default=3, metadata={"gcode": "SWEEP_CROSS_PASSES", "min": 1}
+    )
+    fine_shrink: float = field(
+        default=0.4, metadata={"gcode": "FINE_SHRINK", "positive": True}
+    )
+    min_sweep_samples: int = field(
+        default=20, metadata={"gcode": "MIN_SWEEP_SAMPLES", "min": 3}
+    )
 
     def __post_init__(self) -> None:
+        self.result_folder = str(Path(self.result_folder).expanduser().resolve())
         _validate(self)
 
     def format_seek_config(self) -> str:
@@ -119,6 +150,8 @@ class SeekConfig:
             _validate(self)
         except ValueError as exc:
             raise gcmd.error(f"EDDY_SEEK_SET: {exc}") from exc
+        if changes:
+            logger.debug("eddy_seek: runtime config updated: %s", ", ".join(changes))
         return changes
 
 
@@ -196,6 +229,17 @@ def _validate(cfg: SeekConfig) -> None:
             )
 
 
+def _config_option_set(config: Any, key: str) -> bool:
+    options = getattr(config, "_options", None)
+    if options is not None:
+        return key in options
+    fileconfig = getattr(config, "fileconfig", None)
+    section = getattr(config, "section", None)
+    if fileconfig is not None and section is not None:
+        return fileconfig.has_option(section, key)
+    return False
+
+
 def load_seek_config(config: ConfigWrapper) -> SeekConfig:
     """Parse alignment options from an ``[eddy_seek]`` config section."""
     d = SeekConfig()
@@ -218,6 +262,12 @@ def load_seek_config(config: ConfigWrapper) -> SeekConfig:
                 values[name] = config.getfloat(name, default)
             else:
                 values[name] = config.get(name, default)
-        return SeekConfig(**values)
+        if config.getboolean("save_sweep_plots", False) and not _config_option_set(
+            config, "save_plots"
+        ):
+            values["save_plots"] = True  # legacy key; save_plots wins if both set
+        cfg = SeekConfig(**values)
+        logger.debug("eddy_seek: loaded config %s", cfg.format_seek_config())
+        return cfg
     except ValueError as exc:
         raise config.error(f"eddy_seek: {exc}") from exc
