@@ -15,6 +15,7 @@ from _eddy_seek.config import SeekConfig
 from _eddy_seek.session import SeekSession, _sample_stdev
 from _eddy_seek.strategy import TernaryStrategy, strategy_for
 from _eddy_seek.strategy.centroid import (
+    axis_weighted_centroid,
     frequency_weight,
     weighted_centroid,
 )
@@ -106,3 +107,29 @@ def test_weighted_centroid_finds_peak():
     assert result is not None
     assert abs(result.x) < 0.01
     assert abs(result.y) < 0.01
+
+
+def test_merged_centroid_couples_axes():
+    """Y sweeps at a wrong X slice pull a merged 2-D centroid off the true peak."""
+    probes = [
+        (Position(-0.5, 0.0), 100.0),
+        (Position(0.0, 0.0), 200.0),
+        (Position(0.5, 0.0), 100.0),
+        (Position(0.06, -0.5), 180.0),
+        (Position(0.06, 0.0), 190.0),
+        (Position(0.06, 0.5), 180.0),
+    ]
+    result = weighted_centroid(probes, "max")
+    assert result is not None
+    assert result.x > 0.02
+
+
+def test_axis_weighted_centroid_decouples_axes():
+    x_profile = [(-0.5, 100.0), (0.0, 200.0), (0.5, 100.0)]
+    y_profile = [(-0.5, 100.0), (0.0, 200.0), (0.5, 100.0)]
+    result_x = axis_weighted_centroid(x_profile, "max")
+    result_y = axis_weighted_centroid(y_profile, "max")
+    assert result_x is not None
+    assert result_y is not None
+    assert abs(result_x) < 0.01
+    assert abs(result_y) < 0.01

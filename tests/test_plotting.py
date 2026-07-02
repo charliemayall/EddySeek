@@ -17,7 +17,11 @@ import pytest
 from _eddy_seek.common import Axis, Phase, Position
 from _eddy_seek.continuous_motion import MotionSample
 from _eddy_seek.plotting import PlotWriter, TernaryStep, plot_filename
-from _eddy_seek.plotting.ternary import TernaryPassRecord, write_ternary_session_plot
+from _eddy_seek.plotting._plotly import square_xy_plot_layout
+from _eddy_seek.plotting.sweep_centroid import (
+    SweepCentroidPassRecord,
+    write_sweep_centroid_session_plot,
+)
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.strategy.centroid import CentroidStrategy
 
@@ -191,6 +195,41 @@ def test_plot_writer_writes_sweep_centroid_session_html():
         assert os.path.isfile(path)
         assert path.endswith("14_30_02_07_26_abcd1234.html")
         assert writer.sweep_centroid_pass_count == 2
+
+
+def test_sweep_centroid_plot_has_square_layout():
+    try:
+        __import__("plotly")
+    except ImportError:
+        return
+
+    samples = [
+        MotionSample(Position(0.0, 0.0), 10000.0, 0.0),
+    ]
+    fig = write_sweep_centroid_session_plot(
+        passes=[
+            SweepCentroidPassRecord(
+                pass_num=1,
+                phase=Phase.COARSE,
+                center=Position.zero(),
+                result=Position(0.0, 0.0),
+                moved=Position.zero(),
+                samples=samples,
+                box=(-1.0, 1.0, -1.0, 1.0),
+            )
+        ],
+        search_for="max",
+    )
+    assert fig is not None
+    layout = square_xy_plot_layout(title_lines=1)
+    assert fig.layout.autosize is False
+    assert fig.layout.width == layout["width"]
+    assert fig.layout.height == layout["height"]
+    assert fig.layout.yaxis.scaleanchor == "x"
+    assert fig.layout.yaxis.scaleratio == 1
+    plot_w = fig.layout.width - layout["margin"]["l"] - layout["margin"]["r"]
+    plot_h = fig.layout.height - layout["margin"]["t"] - layout["margin"]["b"]
+    assert plot_w == plot_h
 
 
 def test_plot_writer_writes_ternary_session_html():

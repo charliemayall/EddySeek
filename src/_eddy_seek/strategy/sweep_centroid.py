@@ -19,7 +19,7 @@ from ..continuous_motion import ContinuousMotionHandler, MotionSample
 from ..plotting import PlotWriter
 from ..session import SeekContext, SeekReporter, SweepContext
 from .base import SeekStrategy
-from .centroid import weighted_centroid
+from .centroid import axis_weighted_centroid
 from .sweep.axis import sweep_axis
 from .sweep.motion import iter_cross_offsets
 
@@ -98,9 +98,10 @@ class SweepCentroidStrategy(SeekStrategy):
             phase,
             speed,
         )
-        samples = samples_x + samples_y
         box = _search_box(best, half_x, half_y, cfg.max_jog_x, cfg.max_jog_y)
-        in_box = _samples_in_box(samples, box)
+        in_box_x = _samples_in_box(samples_x, box)
+        in_box_y = _samples_in_box(samples_y, box)
+        in_box = in_box_x + in_box_y
 
         if len(in_box) < cfg.min_sweep_samples:
             raise RuntimeError(
@@ -110,9 +111,11 @@ class SweepCentroidStrategy(SeekStrategy):
                 "Check sensor and sweep speed."
             )
 
-        probes = [(sample.offset, sample.freq) for sample in in_box]
-        centroid = weighted_centroid(probes, cfg.search_for)
-        if centroid is None:
+        x_profile = [(sample.offset.x, sample.freq) for sample in in_box_x]
+        y_profile = [(sample.offset.y, sample.freq) for sample in in_box_y]
+        centroid_x = axis_weighted_centroid(x_profile, cfg.search_for)
+        centroid_y = axis_weighted_centroid(y_profile, cfg.search_for)
+        if centroid_x is None or centroid_y is None:
             logger.warning(
                 "eddy_seek: flat frequency response on sweep pass %d - "
                 "keeping centre (%.4f, %.4f)",
@@ -132,8 +135,8 @@ class SweepCentroidStrategy(SeekStrategy):
                 )
             return best
 
-        result = centroid.clamp(cfg.max_jog_x, cfg.max_jog_y)
-        freqs = [freq for _, freq in probes]
+        result = Position(centroid_x, centroid_y).clamp(cfg.max_jog_x, cfg.max_jog_y)
+        freqs = [freq for _, freq in x_profile + y_profile]
         logger.debug(
             "eddy_seek: sweep_centroid pass %d %s -> (%.4f, %.4f) "
             "freq_range=[%.2f, %.2f] Hz (%d samples)",

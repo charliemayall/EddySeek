@@ -54,6 +54,23 @@ def weighted_centroid(
     return Position(centroid_x, centroid_y)
 
 
+def axis_weighted_centroid(
+    coords_and_freqs: list[tuple[float, float]],
+    search_for: Literal["min", "max"],
+) -> float | None:
+    """1-D frequency-weighted centroid on a single axis profile."""
+    if not coords_and_freqs:
+        return None
+    freqs = [freq for _, freq in coords_and_freqs]
+    f_min = min(freqs)
+    f_max = max(freqs)
+    weights = [frequency_weight(freq, f_min, f_max, search_for) for freq in freqs]
+    total_w = sum(weights)
+    if total_w < 1e-9:
+        return None
+    return sum(coord * w for (coord, _), w in zip(coords_and_freqs, weights)) / total_w
+
+
 class CentroidStrategy(SeekStrategy):
     def __init__(self) -> None:
         self._plotter: PlotWriter | None = None
