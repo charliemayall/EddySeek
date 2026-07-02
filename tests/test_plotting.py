@@ -335,7 +335,7 @@ def test_one_shot_plot_returns_figure():
     fig = write_one_shot_plot(record=record, search_for="max")
     assert fig is not None
     heatmaps = [trace for trace in fig.data if trace.type == "heatmap"]
-    assert len(heatmaps) == 4
+    assert len(heatmaps) == 5
     base = heatmaps[0]
     assert len(base.x) == len(record.x_centers) + 1
     assert any(
@@ -346,6 +346,15 @@ def test_one_shot_plot_returns_figure():
     assert "@2×" in stats
     assert "@4×" in stats
     assert "@8×" in stats
+    assert "centroid=" in stats
+    assert "prominence=" in stats
+    assert "FWHM X=" in stats
+    marginals = [
+        trace
+        for trace in fig.data
+        if trace.type == "scatter" and trace.mode == "lines+markers"
+    ]
+    assert len(marginals) == 2
 
 
 def test_plot_writer_writes_one_shot_html():
