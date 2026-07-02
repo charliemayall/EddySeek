@@ -41,6 +41,8 @@ SweepSample = MotionSample
 class ContinuousMotion(Protocol):
     """Record sensor batches during continuous moves and align time to XY."""
 
+    _MAX_SCV: float
+
     @property
     def origin(self) -> Position: ...
 
@@ -136,6 +138,7 @@ class ContinuousMotionHandler:
         self._client_registered = False
         self._th: ToolHead | None = None
         self._last_move_end: Position | None = None
+        self._MAX_SCV = 10
 
     @property
     def origin(self) -> Position:
@@ -197,7 +200,7 @@ class ContinuousMotionHandler:
 
         machine = self._origin + offset
         self.th.limit_next_junction_speed(
-            speed
+            min(speed, self._MAX_SCV)
         )  # jerky cornering leeds to dwell like behaviour
         self.th.manual_move([machine.x, machine.y], speed)
 
