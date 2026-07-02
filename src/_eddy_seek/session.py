@@ -22,12 +22,12 @@ if TYPE_CHECKING:
 import json
 import logging
 import math
-import os
-import tempfile
 import time
 import uuid
+from datetime import datetime
+from pathlib import Path
 
-from .common import Position
+from .common import Position, session_artifact_filename
 from .config import SeekConfig
 from .motion_guard import MotionGuard
 
@@ -302,16 +302,22 @@ class SeekSession(SeekContext):
         self._offset = offset
 
 
-_TRACE_FILENAME = "seek_trace.json"
-
-
 def _write_seek_trace(
     host: SeekHost,
     result: SeekSessionResult,
     probes: list[dict[str, Any]],
     plot_traces: list[dict[str, Any]],
 ) -> str | None:
-    path = os.path.join(tempfile.gettempdir(), _TRACE_FILENAME)
+    results_dir = Path(host.seek_config.result_folder)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    path = str(
+        results_dir
+        / session_artifact_filename(
+            result.session_id,
+            datetime.fromtimestamp(result.start_time),
+            ext="json",
+        )
+    )
     payload = {
         "metadata": {
             "session_id": result.session_id,

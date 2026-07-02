@@ -7,9 +7,10 @@
 """
 
 import json
+from datetime import datetime
 
+from _eddy_seek.common import Position, session_artifact_filename
 from _eddy_seek.config import SeekConfig
-from _eddy_seek.common import Position
 from _eddy_seek.session import (
     SeekSession,
     SeekSessionResult,
@@ -24,8 +25,9 @@ class _TraceSensor:
         return {"seek": self.seek_config.to_dict()}
 
 
-def test_write_seek_trace(tmp_path, monkeypatch):
-    monkeypatch.setattr("_eddy_seek.session.tempfile.gettempdir", lambda: str(tmp_path))
+def test_write_seek_trace(tmp_path):
+    host = _TraceSensor()
+    host.seek_config = SeekConfig(save_session_trace=True, result_folder=str(tmp_path))
     result = SeekSessionResult(
         session_id="test-session",
         start_time=1.0,
@@ -44,9 +46,11 @@ def test_write_seek_trace(tmp_path, monkeypatch):
         }
     ]
 
-    _write_seek_trace(_TraceSensor(), result, probes, [])
+    _write_seek_trace(host, result, probes, [])
 
-    path = tmp_path / "seek_trace.json"
+    path = tmp_path / session_artifact_filename(
+        result.session_id, datetime.fromtimestamp(result.start_time), ext="json"
+    )
     assert path.is_file()
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["metadata"]["session_id"] == "test-session"
@@ -54,7 +58,7 @@ def test_write_seek_trace(tmp_path, monkeypatch):
     assert payload["metadata"]["config"]["seek"]["strategy"] == "sweep_centroid"
     assert payload["metadata"]["config"]["seek"]["save_session_trace"] is True
     assert payload["probes"][0]["samples_hz"] == [12340.0, 12350.0, 12346.0]
-    assert _write_seek_trace(_TraceSensor(), result, probes, []) == str(path)
+    assert _write_seek_trace(host, result, probes, []) == str(path)
 
 
 def test_seek_session_collects_probes_when_enabled():

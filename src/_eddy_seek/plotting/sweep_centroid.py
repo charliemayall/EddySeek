@@ -15,7 +15,14 @@ from typing import Any, Literal
 
 from ..common import Phase, Position
 from ..continuous_motion import MotionSample
-from ._plotly import freq_marker, go, pass_color, plotly_available, session_stats_title
+from ._plotly import (
+    freq_marker,
+    go,
+    pass_color,
+    plotly_available,
+    session_stats_title,
+    square_xy_plot_layout,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,9 +124,7 @@ def write_sweep_centroid_session_plot(
         ),
         xaxis_title="X offset (mm)",
         yaxis_title="Y offset (mm)",
-        yaxis={"scaleanchor": "x", "scaleratio": 1},
-        height=max(560, 120 + 40 * len(passes)),
-        margin={"t": max(120, 80 + 18 * len(passes))},
         legend={"orientation": "h", "y": 1.02, "x": 0},
+        **square_xy_plot_layout(title_lines=len(passes)),
     )
     return fig

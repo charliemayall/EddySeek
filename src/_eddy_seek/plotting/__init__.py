@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from ..common import Phase, Position
+from ..common import Phase, Position, session_artifact_filename
 from ..continuous_motion import MotionSample
 from ._plotly import plotly_available, write_html
 from .accuracy import AccuracyRepeatRecord, write_accuracy_plot
@@ -37,12 +37,7 @@ def plot_filename(
     session_id: str, when: datetime | None = None, *, suffix: str = ""
 ) -> str:
     """``HH_MM_DD_MM_YY_{id}[_{suffix}].html`` under ``result_folder`` (no subfolder)."""
-    t = when or datetime.now()
-    sid = session_id[:8]
-    base = f"{t.hour:02d}_{t.minute:02d}_{t.day:02d}_{t.month:02d}_{t.year % 100:02d}_{sid}"
-    if suffix:
-        return f"{base}_{suffix}.html"
-    return f"{base}.html"
+    return session_artifact_filename(session_id, when, suffix=suffix, ext="html")
 
 
 class PlotWriter:
