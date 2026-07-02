@@ -12,6 +12,7 @@ Symlink EddySeek into Klipper's extras directory (optionally, user specified tar
 from __future__ import annotations
 
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from enum import Enum
@@ -35,6 +36,15 @@ def _c(text, color: COLORS):
 
 def cprint(text, color: COLORS):
     print(_c(text, color))
+
+
+def restart_klipper() -> None:
+    if not sys.stdin.isatty():
+        return
+    ans = input("Restart Klipper? (y/n): ")
+    if ans == "y":
+        subprocess.run(["sudo", "systemctl", "restart", "klipper"], check=True)
+        print("Klipper restarted")
 
 
 def purge_pycache(*roots: Path) -> int:
@@ -97,11 +107,12 @@ def main() -> None:
     print(
         f"""\n{_c("Next steps:", COLORS.GREEN)}\n
     1. Add [eddy_seek] to printer.cfg (set sensor_x/sensor_y for your coil)
-    2. Restart Klipper: FIRMWARE_RESTART
+    2. Restart Klipper: sudo systemctl restart klipper
 
     After git pull, re-run ./install.sh then restart Klipper.
     """
     )
+    restart_klipper()
 
 
 if __name__ == "__main__":
