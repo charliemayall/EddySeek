@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from klippy.klippy import Printer
     from klippy.toolhead import ToolHead
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -134,6 +135,7 @@ class ContinuousMotionHandler:
         self._need_stop = False
         self._client_registered = False
         self._th: ToolHead | None = None
+        self._last_move_end: Position | None = None
 
     @property
     def origin(self) -> Position:
@@ -171,12 +173,15 @@ class ContinuousMotionHandler:
     ) -> None:
         if not self._active:
             raise RuntimeError("eddy_seek: continuous motion not active")
+        if self._last_move_end is None or line_start != self._last_move_end:
+            self._manual_move(line_start, speed)
 
-        self._manual_move(line_start, speed)
         capture_start = self.th.get_last_move_time()
+
         self._manual_move(line_end, speed)
         self._position = line_end
         self._register_capture_window(capture_start)
+        self._last_move_end = line_end
 
     def run_capture_legs(
         self,
@@ -191,6 +196,9 @@ class ContinuousMotionHandler:
     def _manual_move(self, offset: Position, speed: float) -> None:
 
         machine = self._origin + offset
+        self.th.limit_next_junction_speed(
+            speed
+        )  # jerky cornering leeds to dwell like behaviour
         self.th.manual_move([machine.x, machine.y], speed)
 
     def _register_capture_window(self, capture_start: float) -> None:
@@ -267,7 +275,6 @@ class ContinuousMotionHandler:
             self._process_buffered_data()
 
     def _sensor_outage(self, systime: float, end_time: float) -> bool:
-        # TODO: Is this needed?
         try:
             mcu = self._printer.lookup_object("mcu")
             est = mcu.estimated_print_time(systime)  # type: ignore[union-attr]
