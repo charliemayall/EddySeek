@@ -25,10 +25,12 @@ from .sweep.motion import iter_cross_offsets
 
 logger = logging.getLogger(__name__)
 
+_N_COARSE = 2
+
 
 class SweepCentroidStrategy(SeekStrategy):
     def __init__(self) -> None:
-        self._recorder: ContinuousMotionHandler | None = None
+        self._motion_handler: ContinuousMotionHandler | None = None
         self._plotter: PlotWriter | None = None
 
     @property
@@ -38,7 +40,7 @@ class SweepCentroidStrategy(SeekStrategy):
     def announce_start(self, ctx: SeekContext, reporter: SeekReporter) -> None:
         sweep_ctx = cast(SweepContext, ctx)
         cfg = sweep_ctx.config
-        self._recorder = ContinuousMotionHandler(
+        self._motion_handler = ContinuousMotionHandler(
             sweep_ctx.host.printer, sweep_ctx.host.add_sensor_client
         )
         if cfg.save_plots:
@@ -52,8 +54,8 @@ class SweepCentroidStrategy(SeekStrategy):
     def on_session_end(self, ctx: SeekContext) -> str | None:
         plotter = self._plotter
         self._plotter = None
-        if self._recorder is not None:
-            self._recorder.close()
+        if self._motion_handler is not None:
+            self._motion_handler.close()
             self._recorder = None
         if plotter is None:
             self._last_plot_passes = 0
@@ -62,7 +64,7 @@ class SweepCentroidStrategy(SeekStrategy):
         return plotter.finalize_sweep_centroid(search_for=ctx.config.search_for)
 
     def _phase(self, pass_num: int) -> Phase:
-        return Phase.COARSE if pass_num == 1 else Phase.FINE
+        return Phase.COARSE if pass_num <= _N_COARSE else Phase.FINE
 
     def _step(self, ctx: SeekContext, pass_num: int, best: Position) -> Position:
         sweep_ctx = cast(SweepContext, ctx)
@@ -201,11 +203,11 @@ class SweepCentroidStrategy(SeekStrategy):
         cross_offsets = iter_cross_offsets(
             cfg.sweep_cross_passes, cfg.sweep_cross_offset
         )
-        if self._recorder is None:
+        if self._motion_handler is None:
             raise RuntimeError("eddy_seek: continuous motion handler not started")
         points, samples = sweep_axis(
             ctx,
-            self._recorder,
+            self._motion_handler,
             axis=axis,
             lo=lo,
             hi=hi,
