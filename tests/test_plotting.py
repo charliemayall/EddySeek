@@ -24,12 +24,14 @@ from _eddy_seek.plotting import (
     write_ternary_session_plot,
 )
 from _eddy_seek.plotting._plotly import square_xy_plot_layout, write_html
+from _eddy_seek.plotting.one_shot import OneShotRecord, write_one_shot_plot
 from _eddy_seek.plotting.sweep_centroid import (
     SweepCentroidPassRecord,
     write_sweep_centroid_session_plot,
 )
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.strategy.centroid import CentroidStrategy
+from _eddy_seek.strategy.one_shot import bin_frequencies
 
 
 def test_plot_filename():
@@ -297,6 +299,108 @@ def test_save_preview_plot():
     out_dir = Path(__file__).resolve().parent / "output"
     out_dir.mkdir(exist_ok=True)
     path = out_dir / "preview_sweep_centroid.html"
+    assert write_html(path, fig)
+    assert path.is_file()
+    print(f"preview plot: {path}")  # noqa: T201
+
+
+def test_one_shot_plot_returns_figure():
+    try:
+        __import__("plotly")
+    except ImportError:
+        return
+
+    box = (-1.0, 1.0, -1.0, 1.0)
+    samples = [
+        MotionSample(
+            Position(x, y),
+            10000.0 - 100.0 * (x * x + y * y),
+            0.0,
+        )
+        for x in (-0.5, 0.0, 0.5)
+        for y in (-0.5, 0.0, 0.5)
+    ]
+    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance=0.5)
+    record = OneShotRecord(
+        center=Position.zero(),
+        result=Position(0.05, -0.02),
+        samples=samples,
+        box=box,
+        z=z,
+        x_centers=x_centers,
+        y_centers=y_centers,
+    )
+    fig = write_one_shot_plot(record=record, search_for="max")
+    assert fig is not None
+    assert any(trace.type == "heatmap" for trace in fig.data)
+
+
+def test_plot_writer_writes_one_shot_html():
+    try:
+        __import__("plotly")
+    except ImportError:
+        return
+
+    box = (-1.0, 1.0, -1.0, 1.0)
+    samples = [MotionSample(Position.zero(), 10000.0, 0.0)]
+    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance=0.5)
+    with tempfile.TemporaryDirectory() as tmp:
+        when = datetime(2026, 7, 2, 14, 30)
+        writer = PlotWriter(Path(tmp), "abcd1234", write_at=when)
+        writer.record_one_shot(
+            center=Position.zero(),
+            result=Position(0.01, 0.02),
+            samples=samples,
+            box=box,
+            z=z,
+            x_centers=x_centers,
+            y_centers=y_centers,
+        )
+        path = writer.finalize_one_shot(search_for="max")
+        assert path is not None
+        assert os.path.isfile(path)
+        assert writer.one_shot_count == 1
+
+
+def test_save_preview_one_shot_plot():
+    """Write a one-shot heatmap under tests/output/ for manual layout checks.
+
+    Run: EDDY_SEEK_PREVIEW_PLOTS=1 pytest tests/test_plotting.py::test_save_preview_one_shot_plot -s
+    """
+    if not os.environ.get("EDDY_SEEK_PREVIEW_PLOTS"):
+        pytest.skip("set EDDY_SEEK_PREVIEW_PLOTS=1 to write preview HTML")
+    try:
+        __import__("plotly")
+    except ImportError:
+        pytest.skip("plotly not installed")
+
+    box = (-1.0, 1.0, -1.0, 1.0)
+    tolerance = 0.2
+    samples = [
+        MotionSample(
+            Position(x, y),
+            10000.0 - 500.0 * (x * x + y * y),
+            0.0,
+        )
+        for x in (-1.0, -0.5, 0.0, 0.5, 1.0)
+        for y in (-1.0, -0.5, 0.0, 0.5, 1.0)
+    ]
+    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance)
+    record = OneShotRecord(
+        center=Position.zero(),
+        result=Position(0.0, 0.0),
+        samples=samples,
+        box=box,
+        z=z,
+        x_centers=x_centers,
+        y_centers=y_centers,
+    )
+    fig = write_one_shot_plot(record=record, search_for="max")
+    assert fig is not None
+
+    out_dir = Path(__file__).resolve().parent / "output"
+    out_dir.mkdir(exist_ok=True)
+    path = out_dir / "preview_one_shot.html"
     assert write_html(path, fig)
     assert path.is_file()
     print(f"preview plot: {path}")  # noqa: T201

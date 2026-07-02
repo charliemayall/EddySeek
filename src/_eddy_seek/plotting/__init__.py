@@ -20,6 +20,7 @@ from ..continuous_motion import MotionSample
 from ._plotly import plotly_available, write_html
 from .accuracy import AccuracyRepeatRecord, write_accuracy_plot
 from .centroid import CentroidPassRecord, write_centroid_session_plot
+from .one_shot import OneShotRecord, write_one_shot_plot
 from .sweep_centroid import SweepCentroidPassRecord, write_sweep_centroid_session_plot
 from .ternary import TernaryPassRecord, TernaryStep, write_ternary_session_plot
 
@@ -63,7 +64,7 @@ class PlotWriter:
         self._sweep_centroid_passes: list[SweepCentroidPassRecord] = []
         self._ternary_passes: list[TernaryPassRecord] = []
         self._accuracy_repeats: list[AccuracyRepeatRecord] = []
-        self._one_shot_records: list[dict[str, Any]] = []
+        self._one_shot_records: list[OneShotRecord] = []
 
     @property
     def centroid_pass_count(self) -> int:
@@ -230,23 +231,19 @@ class PlotWriter:
         y_centers: list[float],
     ) -> None:
         self._one_shot_records.append(
-            {
-                "center": center,
-                "result": result,
-                "samples": samples,
-                "box": box,
-                "z": z,
-                "x_centers": x_centers,
-                "y_centers": y_centers,
-            }
+            OneShotRecord(
+                center=center,
+                result=result,
+                samples=samples,
+                box=box,
+                z=z,
+                x_centers=x_centers,
+                y_centers=y_centers,
+            )
         )
 
     def finalize_one_shot(self, *, search_for: Literal["min", "max"]) -> str | None:
         if not self._one_shot_records:
-            return None
-        try:
-            from .one_shot import write_one_shot_plot
-        except ImportError:
             return None
         record = self._one_shot_records[-1]
         fig = write_one_shot_plot(record=record, search_for=search_for)
