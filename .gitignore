@@ -8,6 +8,6 @@ dist/
 .DS_Store
 tools/deploy_extra.sh
 AGENTS.md
-scripts/*
+scripts/
 references/
 .cursor/
