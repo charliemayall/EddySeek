@@ -11,6 +11,7 @@ One-shot grid sweep strategy: spatial binning and peak pick.
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 from typing import Literal, cast
 
@@ -28,15 +29,20 @@ def bin_frequencies(
     samples: list[MotionSample],
     box: tuple[float, float, float, float],
     tolerance: float,
+    center: Position,
 ) -> tuple[list[list[float | None]], list[float], list[float]]:
     """Return ``(z[ny][nx] mean freq or None, x_centers, y_centers)``."""
     x_lo, x_hi, y_lo, y_hi = box
     if tolerance <= 0.0:
         raise ValueError("tolerance must be positive")
-    nx = max(1, int((x_hi - x_lo) / tolerance) + 1)
-    ny = max(1, int((y_hi - y_lo) / tolerance) + 1)
-    x_centers = [x_lo + (index + 0.5) * tolerance for index in range(nx)]
-    y_centers = [y_lo + (index + 0.5) * tolerance for index in range(ny)]
+    n_x_min = math.ceil((x_lo - center.x) / tolerance - 0.5)
+    n_x_max = math.floor((x_hi - center.x) / tolerance + 0.5)
+    n_y_min = math.ceil((y_lo - center.y) / tolerance - 0.5)
+    n_y_max = math.floor((y_hi - center.y) / tolerance + 0.5)
+    x_centers = [center.x + index * tolerance for index in range(n_x_min, n_x_max + 1)]
+    y_centers = [center.y + index * tolerance for index in range(n_y_min, n_y_max + 1)]
+    nx = len(x_centers)
+    ny = len(y_centers)
 
     sums = [[0.0] * nx for _ in range(ny)]
     counts = [[0] * nx for _ in range(ny)]
@@ -45,8 +51,10 @@ def bin_frequencies(
         y = sample.offset.y
         if not (x_lo <= x <= x_hi and y_lo <= y <= y_hi):
             continue
-        ix = max(0, min(nx - 1, int((x - x_lo) / tolerance)))
-        iy = max(0, min(ny - 1, int((y - y_lo) / tolerance)))
+        ix = math.floor((x - center.x) / tolerance + 0.5) - n_x_min
+        iy = math.floor((y - center.y) / tolerance + 0.5) - n_y_min
+        if not (0 <= ix < nx and 0 <= iy < ny):
+            continue
         sums[iy][ix] += sample.freq
         counts[iy][ix] += 1
 
@@ -91,8 +99,11 @@ def _assert_binning() -> None:
         MotionSample(Position(peak_x + 0.01, peak_y), 100.0, 0.1),
         MotionSample(Position(-0.2, 0.2), 10.0, 0.2),
     ]
-    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance)
+    center = Position.zero()
+    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance, center)
     peak = peak_bin_center(z, x_centers, y_centers, "max")
+    assert any(abs(x) <= tolerance / 2 for x in x_centers)
+    assert any(abs(y) <= tolerance / 2 for y in y_centers)
     assert peak is not None
     assert abs(peak.x - peak_x) <= tolerance
     assert abs(peak.y - peak_y) <= tolerance
@@ -168,7 +179,7 @@ class OneShotStrategy(SeekStrategy):
                 "Check sensor and sweep speed."
             )
 
-        z, x_centers, y_centers = bin_frequencies(samples, box, cfg.tolerance)
+        z, x_centers, y_centers = bin_frequencies(samples, box, cfg.tolerance, best)
         peak = peak_bin_center(z, x_centers, y_centers, cfg.search_for)
         if peak is None:
             logger.warning(

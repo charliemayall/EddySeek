@@ -320,7 +320,9 @@ def test_one_shot_plot_returns_figure():
         for x in (-0.5, 0.0, 0.5)
         for y in (-0.5, 0.0, 0.5)
     ]
-    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance=0.5)
+    z, x_centers, y_centers = bin_frequencies(
+        samples, box, tolerance=0.5, center=Position.zero()
+    )
     record = OneShotRecord(
         center=Position.zero(),
         result=Position(0.05, -0.02),
@@ -333,6 +335,12 @@ def test_one_shot_plot_returns_figure():
     fig = write_one_shot_plot(record=record, search_for="max")
     assert fig is not None
     assert any(trace.type == "heatmap" for trace in fig.data)
+    heatmap = next(trace for trace in fig.data if trace.type == "heatmap")
+    assert len(heatmap.x) == len(record.x_centers) + 1
+    assert any(
+        heatmap.x[index] <= 0.0 <= heatmap.x[index + 1]
+        for index in range(len(heatmap.x) - 1)
+    )
 
 
 def test_plot_writer_writes_one_shot_html():
@@ -343,7 +351,9 @@ def test_plot_writer_writes_one_shot_html():
 
     box = (-1.0, 1.0, -1.0, 1.0)
     samples = [MotionSample(Position.zero(), 10000.0, 0.0)]
-    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance=0.5)
+    z, x_centers, y_centers = bin_frequencies(
+        samples, box, tolerance=0.5, center=Position.zero()
+    )
     with tempfile.TemporaryDirectory() as tmp:
         when = datetime(2026, 7, 2, 14, 30)
         writer = PlotWriter(Path(tmp), "abcd1234", write_at=when)
@@ -385,7 +395,9 @@ def test_save_preview_one_shot_plot():
         for x in (-1.0, -0.5, 0.0, 0.5, 1.0)
         for y in (-1.0, -0.5, 0.0, 0.5, 1.0)
     ]
-    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance)
+    z, x_centers, y_centers = bin_frequencies(
+        samples, box, tolerance, center=Position.zero()
+    )
     record = OneShotRecord(
         center=Position.zero(),
         result=Position(0.0, 0.0),

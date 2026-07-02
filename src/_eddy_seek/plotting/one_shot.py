@@ -29,6 +29,32 @@ class OneShotRecord:
     y_centers: list[float]
 
 
+def _bin_edges(centers: list[float], tolerance: float) -> list[float]:
+    half = tolerance / 2.0
+    if not centers:
+        return []
+    edges = [centers[0] - half]
+    edges.extend(center + half for center in centers)
+    return edges
+
+
+def _grid_tolerance(
+    x_centers: list[float],
+    y_centers: list[float],
+    box: tuple[float, float, float, float],
+) -> float:
+    if len(x_centers) >= 2:
+        return x_centers[1] - x_centers[0]
+    if len(y_centers) >= 2:
+        return y_centers[1] - y_centers[0]
+    x_lo, x_hi, y_lo, y_hi = box
+    if x_centers:
+        return (x_hi - x_lo) / len(x_centers)
+    if y_centers:
+        return (y_hi - y_lo) / len(y_centers)
+    return 1.0
+
+
 def write_one_shot_plot(
     *,
     record: OneShotRecord | dict[str, Any],
@@ -49,6 +75,9 @@ def write_one_shot_plot(
         )
 
     x_lo, x_hi, y_lo, y_hi = record.box
+    tolerance = _grid_tolerance(record.x_centers, record.y_centers, record.box)
+    x_edges = _bin_edges(record.x_centers, tolerance)
+    y_edges = _bin_edges(record.y_centers, tolerance)
     z_display = [
         [value if value is not None else float("nan") for value in row]
         for row in record.z
@@ -61,8 +90,8 @@ def write_one_shot_plot(
     fig = go.Figure()
     fig.add_trace(
         go.Heatmap(
-            x=record.x_centers,
-            y=record.y_centers,
+            x=x_edges,
+            y=y_edges,
             z=z_display,
             colorscale="Viridis",
             reversescale=search_for == "min",
