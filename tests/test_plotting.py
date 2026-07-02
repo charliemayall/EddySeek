@@ -16,7 +16,13 @@ import pytest
 
 from _eddy_seek.common import Axis, Phase, Position
 from _eddy_seek.continuous_motion import MotionSample
-from _eddy_seek.plotting import PlotWriter, TernaryStep, plot_filename
+from _eddy_seek.plotting import (
+    PlotWriter,
+    TernaryPassRecord,
+    TernaryStep,
+    plot_filename,
+    write_ternary_session_plot,
+)
 from _eddy_seek.plotting._plotly import square_xy_plot_layout
 from _eddy_seek.plotting.sweep_centroid import (
     SweepCentroidPassRecord,
