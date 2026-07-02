@@ -20,6 +20,7 @@ from ..continuous_motion import ContinuousMotionHandler, MotionSample
 from ..plotting import PlotWriter
 from ..session import SeekContext, SeekReporter, SweepContext
 from .base import SeekStrategy
+from .centroid import frequency_weight
 from .sweep.grid import sweep_grid
 
 logger = logging.getLogger(__name__)
@@ -30,8 +31,9 @@ def bin_frequencies(
     box: tuple[float, float, float, float],
     tolerance: float,
     center: Position,
+    search_for: Literal["min", "max"],
 ) -> tuple[list[list[float | None]], list[float], list[float]]:
-    """Return ``(z[ny][nx] mean freq or None, x_centers, y_centers)``."""
+    """Return ``(z[ny][nx] mean weight or None, x_centers, y_centers)``."""
     x_lo, x_hi, y_lo, y_hi = box
     if tolerance <= 0.0:
         raise ValueError("tolerance must be positive")
@@ -44,6 +46,17 @@ def bin_frequencies(
     nx = len(x_centers)
     ny = len(y_centers)
 
+    in_box_freqs = [
+        sample.freq
+        for sample in samples
+        if x_lo <= sample.offset.x <= x_hi and y_lo <= sample.offset.y <= y_hi
+    ]
+    if not in_box_freqs:
+        z = [[None] * nx for _ in range(ny)]
+        return z, x_centers, y_centers
+    f_min = min(in_box_freqs)
+    f_max = max(in_box_freqs)
+
     sums = [[0.0] * nx for _ in range(ny)]
     counts = [[0] * nx for _ in range(ny)]
     for sample in samples:
@@ -55,7 +68,8 @@ def bin_frequencies(
         iy = math.floor((y - center.y) / tolerance + 0.5) - n_y_min
         if not (0 <= ix < nx and 0 <= iy < ny):
             continue
-        sums[iy][ix] += sample.freq
+        weight = frequency_weight(sample.freq, f_min, f_max, search_for)
+        sums[iy][ix] += weight
         counts[iy][ix] += 1
 
     z = [
@@ -69,9 +83,8 @@ def peak_bin_center(
     z: list[list[float | None]],
     x_centers: list[float],
     y_centers: list[float],
-    search_for: Literal["min", "max"],
 ) -> Position | None:
-    """Bin with highest mean freq (``search_for=max``) or lowest (``min``). Skip empty bins."""
+    """Bin with highest mean weight. Skip empty bins and flat response."""
     best_value: float | None = None
     best_ix: int | None = None
     best_iy: int | None = None
@@ -79,13 +92,9 @@ def peak_bin_center(
         for ix, value in enumerate(row):
             if value is None:
                 continue
-            if best_value is None:
+            if best_value is None or value > best_value:
                 best_value, best_ix, best_iy = value, ix, iy
-            elif search_for == "max" and value > best_value:
-                best_value, best_ix, best_iy = value, ix, iy
-            elif search_for == "min" and value < best_value:
-                best_value, best_ix, best_iy = value, ix, iy
-    if best_ix is None or best_iy is None:
+    if best_ix is None or best_iy is None or best_value < 1e-9:
         return None
     return Position(x_centers[best_ix], y_centers[best_iy])
 
@@ -100,17 +109,18 @@ def _assert_binning() -> None:
         MotionSample(Position(-0.2, 0.2), 10.0, 0.2),
     ]
     center = Position.zero()
-    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance, center)
-    peak = peak_bin_center(z, x_centers, y_centers, "max")
+    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance, center, "max")
+    peak = peak_bin_center(z, x_centers, y_centers)
     assert any(abs(x) <= tolerance / 2 for x in x_centers)
     assert any(abs(y) <= tolerance / 2 for y in y_centers)
     assert peak is not None
     assert abs(peak.x - peak_x) <= tolerance
     assert abs(peak.y - peak_y) <= tolerance
-    low = peak_bin_center(z, x_centers, y_centers, "min")
+    z_min, _, _ = bin_frequencies(samples, box, tolerance, center, "min")
+    low = peak_bin_center(z_min, x_centers, y_centers)
     assert low is not None
     assert low.x < peak.x or low.y > peak.y
-    assert peak_bin_center([[]], [], [], "max") is None
+    assert peak_bin_center([[]], [], []) is None
 
 
 _assert_binning()
@@ -179,8 +189,10 @@ class OneShotStrategy(SeekStrategy):
                 "Check sensor and sweep speed."
             )
 
-        z, x_centers, y_centers = bin_frequencies(samples, box, cfg.tolerance, best)
-        peak = peak_bin_center(z, x_centers, y_centers, cfg.search_for)
+        z, x_centers, y_centers = bin_frequencies(
+            samples, box, cfg.tolerance, best, cfg.search_for
+        )
+        peak = peak_bin_center(z, x_centers, y_centers)
         if peak is None:
             logger.warning(
                 "eddy_seek: flat frequency response on one_shot grid - "

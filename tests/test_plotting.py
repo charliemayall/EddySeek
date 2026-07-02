@@ -321,7 +321,7 @@ def test_one_shot_plot_returns_figure():
         for y in (-0.5, 0.0, 0.5)
     ]
     z, x_centers, y_centers = bin_frequencies(
-        samples, box, tolerance=0.5, center=Position.zero()
+        samples, box, tolerance=0.5, center=Position.zero(), search_for="max"
     )
     record = OneShotRecord(
         center=Position.zero(),
@@ -352,7 +352,7 @@ def test_plot_writer_writes_one_shot_html():
     box = (-1.0, 1.0, -1.0, 1.0)
     samples = [MotionSample(Position.zero(), 10000.0, 0.0)]
     z, x_centers, y_centers = bin_frequencies(
-        samples, box, tolerance=0.5, center=Position.zero()
+        samples, box, tolerance=0.5, center=Position.zero(), search_for="max"
     )
     with tempfile.TemporaryDirectory() as tmp:
         when = datetime(2026, 7, 2, 14, 30)
@@ -396,7 +396,7 @@ def test_save_preview_one_shot_plot():
         for y in (-1.0, -0.5, 0.0, 0.5, 1.0)
     ]
     z, x_centers, y_centers = bin_frequencies(
-        samples, box, tolerance, center=Position.zero()
+        samples, box, tolerance, center=Position.zero(), search_for="max"
     )
     record = OneShotRecord(
         center=Position.zero(),

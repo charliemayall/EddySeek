@@ -36,8 +36,8 @@ def test_bin_frequencies_finds_peak():
         MotionSample(Position(peak_x + 0.01, peak_y), 100.0, 0.1),
         MotionSample(Position(-0.2, 0.2), 10.0, 0.2),
     ]
-    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance, center)
-    peak = peak_bin_center(z, x_centers, y_centers, "max")
+    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance, center, "max")
+    peak = peak_bin_center(z, x_centers, y_centers)
     assert peak is not None
     assert abs(peak.x - peak_x) <= tolerance
     assert abs(peak.y - peak_y) <= tolerance
@@ -47,7 +47,7 @@ def test_bin_frequencies_grid_centered_on_search_center():
     tolerance = 0.1
     box = (-0.5, 0.5, -0.5, 0.5)
     center = Position.zero()
-    _, x_centers, y_centers = bin_frequencies([], box, tolerance, center)
+    _, x_centers, y_centers = bin_frequencies([], box, tolerance, center, "max")
     assert any(abs(x) <= tolerance / 2 for x in x_centers)
     assert any(abs(y) <= tolerance / 2 for y in y_centers)
 
@@ -60,13 +60,16 @@ def test_peak_bin_center_min_picks_lowest():
         MotionSample(Position(0.05, -0.05), 100.0, 0.0),
         MotionSample(Position(-0.2, 0.2), 10.0, 0.1),
     ]
-    z, x_centers, y_centers = bin_frequencies(samples, box, tolerance, center)
-    low = peak_bin_center(z, x_centers, y_centers, "min")
-    high = peak_bin_center(z, x_centers, y_centers, "max")
+    z_max, x_centers, y_centers = bin_frequencies(
+        samples, box, tolerance, center, "max"
+    )
+    z_min, _, _ = bin_frequencies(samples, box, tolerance, center, "min")
+    low = peak_bin_center(z_min, x_centers, y_centers)
+    high = peak_bin_center(z_max, x_centers, y_centers)
     assert low is not None
     assert high is not None
     assert low.x != high.x or low.y != high.y
 
 
 def test_peak_bin_center_empty_returns_none():
-    assert peak_bin_center([[]], [], [], "max") is None
+    assert peak_bin_center([[]], [], []) is None

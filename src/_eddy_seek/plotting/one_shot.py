@@ -94,10 +94,9 @@ def write_one_shot_plot(
             y=y_edges,
             z=z_display,
             colorscale="Viridis",
-            reversescale=search_for == "min",
-            colorbar={"title": "Hz", "x": 1.02, "xanchor": "left", "len": 0.75},
-            hovertemplate="x=%{x:.4f} y=%{y:.4f} %{z:.1f} Hz<extra></extra>",
-            name="binned mean",
+            colorbar={"title": "weight", "x": 1.02, "xanchor": "left", "len": 0.75},
+            hovertemplate="x=%{x:.4f} y=%{y:.4f} weight=%{z:.3f}<extra></extra>",
+            name="binned weight",
         )
     )
     xs = [sample.offset.x for sample in record.samples]
