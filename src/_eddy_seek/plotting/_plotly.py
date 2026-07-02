@@ -69,6 +69,20 @@ def session_stats_title(strategy: str, pass_lines: list[str], *, final: str) -> 
     return f"{strategy}<br><sup>{stats}<br>{final}</sup>"
 
 
+def square_xy_plot_layout(*, title_lines: int) -> dict[str, Any]:
+    """Fixed-size layout so the plot panel is square (1 mm = 1 mm, drag-zoom tracks cursor)."""
+    plot = 480
+    left, right, bottom = 80, 100, 80  # right margin reserves Hz colorbar space
+    top = max(120, 80 + 18 * title_lines)
+    return {
+        "width": plot + left + right,
+        "height": plot + top + bottom,
+        "margin": {"l": left, "r": right, "t": top, "b": bottom},
+        "yaxis": {"scaleanchor": "x", "scaleratio": 1},
+        "autosize": False,
+    }
+
+
 def write_html(path: str | Path, fig: Any) -> bool:
     if not plotly_available():
         return False

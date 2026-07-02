@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 import math
 from typing import TYPE_CHECKING, Sequence
@@ -104,3 +105,19 @@ class Position:
     @property
     def seq(self) -> tuple[float, float]:
         return self.x, self.y
+
+
+def session_artifact_filename(
+    session_id: str,
+    when: datetime | None = None,
+    *,
+    suffix: str = "",
+    ext: str = "html",
+) -> str:
+    """``HH_MM_DD_MM_YY_{id}[_{suffix}].{ext}`` under ``result_folder``."""
+    t = when or datetime.now()
+    sid = session_id[:8]
+    base = f"{t.hour:02d}_{t.minute:02d}_{t.day:02d}_{t.month:02d}_{t.year % 100:02d}_{sid}"
+    if suffix:
+        return f"{base}_{suffix}.{ext}"
+    return f"{base}.{ext}"
