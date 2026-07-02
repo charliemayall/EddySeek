@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from .base import SeekStrategy
 from .centroid import CentroidStrategy
-from .one_shot import OneShotStrategy
+from .debug_scan import DebugScanStrategy
 from .sweep_centroid import SweepCentroidStrategy
 from .ternary import TernaryStrategy
 
@@ -20,7 +20,7 @@ _STRATEGIES: dict[str, type[SeekStrategy]] = {
     "ternary": TernaryStrategy,
     "centroid": CentroidStrategy,
     "sweep_centroid": SweepCentroidStrategy,
-    "one_shot": OneShotStrategy,
+    "debug_scan": DebugScanStrategy,
 }
 
 
@@ -36,7 +36,7 @@ def strategy_for(name: str) -> SeekStrategy:
 
 __all__ = [
     "CentroidStrategy",
-    "OneShotStrategy",
+    "DebugScanStrategy",
     "SeekStrategy",
     "SweepCentroidStrategy",
     "TernaryStrategy",

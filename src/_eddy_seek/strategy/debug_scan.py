@@ -5,7 +5,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
-One-shot grid sweep strategy: spatial binning and peak pick.
+Debug scan grid sweep strategy: spatial binning and peak pick.
 """
 
 from __future__ import annotations
@@ -126,14 +126,14 @@ def _assert_binning() -> None:
 _assert_binning()
 
 
-class OneShotStrategy(SeekStrategy):
+class DebugScanStrategy(SeekStrategy):
     def __init__(self) -> None:
         self._motion_handler: ContinuousMotionHandler | None = None
         self._plotter: PlotWriter | None = None
 
     @property
     def name(self) -> str:
-        return "one_shot"
+        return "debug_scan"
 
     def announce_start(self, ctx: SeekContext, reporter: SeekReporter) -> None:
         sweep_ctx = cast(SweepContext, ctx)
@@ -144,7 +144,11 @@ class OneShotStrategy(SeekStrategy):
         if cfg.save_plots:
             self._plotter = PlotWriter(Path(cfg.result_folder), ctx.session_id)
         reporter.info(
-            f"EDDY_SEEK: one_shot tolerance={cfg.tolerance} mm  "
+            "EDDY_SEEK: WARNING — debug_scan is for diagnostic use only; "
+            "use sweep_centroid for production alignment."
+        )
+        reporter.info(
+            f"EDDY_SEEK: debug_scan tolerance={cfg.tolerance} mm  "
             f"speed={cfg.sweep_coarse_speed} mm/s"
         )
 
@@ -166,8 +170,8 @@ class OneShotStrategy(SeekStrategy):
         if plotter is None:
             self._last_plot_passes = 0
             return None
-        self._last_plot_passes = plotter.one_shot_count
-        return plotter.finalize_one_shot(search_for=ctx.config.search_for)
+        self._last_plot_passes = plotter.debug_scan_count
+        return plotter.finalize_debug_scan(search_for=ctx.config.search_for)
 
     def _step(self, ctx: SeekContext, pass_num: int, best: Position) -> Position:
         sweep_ctx = cast(SweepContext, ctx)
@@ -184,7 +188,7 @@ class OneShotStrategy(SeekStrategy):
         )
         if len(samples) < cfg.min_sweep_samples:
             raise RuntimeError(
-                f"eddy_seek: one_shot collected {len(samples)} in-range samples "
+                f"eddy_seek: debug_scan collected {len(samples)} in-range samples "
                 f"(need >= {cfg.min_sweep_samples}). "
                 "Check sensor and sweep speed."
             )
@@ -195,13 +199,13 @@ class OneShotStrategy(SeekStrategy):
         peak = peak_bin_center(z, x_centers, y_centers)
         if peak is None:
             logger.warning(
-                "eddy_seek: flat frequency response on one_shot grid - "
+                "eddy_seek: flat frequency response on debug_scan grid - "
                 "keeping centre (%.4f, %.4f)",
                 best.x,
                 best.y,
             )
             if self._plotter is not None:
-                self._plotter.record_one_shot(
+                self._plotter.record_debug_scan(
                     center=best,
                     result=best,
                     samples=samples,
@@ -215,7 +219,7 @@ class OneShotStrategy(SeekStrategy):
         result = peak.clamp(cfg.max_jog_x, cfg.max_jog_y)
         freqs = [sample.freq for sample in samples]
         logger.debug(
-            "eddy_seek: one_shot -> (%.4f, %.4f) freq_range=[%.2f, %.2f] Hz (%d samples)",
+            "eddy_seek: debug_scan -> (%.4f, %.4f) freq_range=[%.2f, %.2f] Hz (%d samples)",
             result.x,
             result.y,
             min(freqs),
@@ -224,14 +228,14 @@ class OneShotStrategy(SeekStrategy):
         )
         ctx.append_trace(
             {
-                "type": "one_shot",
+                "type": "debug_scan",
                 "centre": {"x": best.x, "y": best.y},
                 "result": {"x": result.x, "y": result.y},
                 "samples": len(samples),
             }
         )
         if self._plotter is not None:
-            self._plotter.record_one_shot(
+            self._plotter.record_debug_scan(
                 center=best,
                 result=result,
                 samples=samples,
@@ -249,4 +253,4 @@ class OneShotStrategy(SeekStrategy):
         moved: Position,
         ctx: SeekContext,
     ) -> str:
-        return f"EDDY_SEEK pass {pass_num}: one_shot ({new.x:+.4f}, {new.y:+.4f}) mm"
+        return f"EDDY_SEEK pass {pass_num}: debug_scan ({new.x:+.4f}, {new.y:+.4f}) mm"

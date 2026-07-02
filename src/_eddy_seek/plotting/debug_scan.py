@@ -5,7 +5,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
-Heatmap debug plots for OneShotStrategy.
+Heatmap debug plots for DebugScanStrategy.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ _ESTIMATOR_STYLES: dict[str, dict[str, Any]] = {
 
 
 @dataclass(frozen=True, slots=True)
-class OneShotRecord:
+class DebugScanRecord:
     center: Position
     result: Position
     samples: list[MotionSample]
@@ -46,7 +46,7 @@ class OneShotRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class OneShotAnalysis:
+class DebugScanAnalysis:
     bin_peak: Position
     centroid: Position | None
     axis: Position | None
@@ -239,10 +239,10 @@ def _bin_sample_counts(
     return counts
 
 
-def analyze_one_shot(
-    record: OneShotRecord,
+def analyze_debug_scan(
+    record: DebugScanRecord,
     search_for: Literal["min", "max"],
-) -> OneShotAnalysis:
+) -> DebugScanAnalysis:
     from ..strategy.centroid import axis_weighted_centroid, weighted_centroid
 
     tolerance = _grid_tolerance(record.x_centers, record.y_centers, record.box)
@@ -252,7 +252,7 @@ def analyze_one_shot(
         density = _bin_sample_counts(
             record.samples, record.box, tolerance, record.center
         )
-        return OneShotAnalysis(
+        return DebugScanAnalysis(
             bin_peak=record.result,
             centroid=None,
             axis=None,
@@ -299,7 +299,7 @@ def analyze_one_shot(
         else None
     )
 
-    return OneShotAnalysis(
+    return DebugScanAnalysis(
         bin_peak=Position(record.x_centers[peak_ix], record.y_centers[peak_iy]),
         centroid=centroid,
         axis=axis,
@@ -330,11 +330,11 @@ def _format_optional(value: float | None, *, unit: str = "") -> str:
 
 
 def _scaled_bin_result(
-    record: OneShotRecord,
+    record: DebugScanRecord,
     tolerance: float,
     search_for: Literal["min", "max"],
 ) -> tuple[list[list[float | None]], list[float], list[float], Position]:
-    from ..strategy.one_shot import bin_frequencies, peak_bin_center
+    from ..strategy.debug_scan import bin_frequencies, peak_bin_center
 
     z, x_centers, y_centers = bin_frequencies(
         record.samples, record.box, tolerance, record.center, search_for
@@ -348,7 +348,7 @@ def _add_estimator_markers(
     *,
     row: int,
     col: int,
-    analysis: OneShotAnalysis,
+    analysis: DebugScanAnalysis,
     show_legend: bool,
 ) -> None:
     estimators: list[tuple[str, Position | None]] = [
@@ -398,7 +398,7 @@ def _add_heatmap_panel(
     samples: list[MotionSample],
     colorscale: str,
     colorbar_title: str,
-    analysis: OneShotAnalysis | None = None,
+    analysis: DebugScanAnalysis | None = None,
     show_estimators: bool = False,
     show_legend: bool = False,
 ) -> None:
@@ -556,16 +556,16 @@ def _add_marginal_panel(
         )
 
 
-def write_one_shot_plot(
+def write_debug_scan_plot(
     *,
-    record: OneShotRecord | dict[str, Any],
+    record: DebugScanRecord | dict[str, Any],
     search_for: Literal["min", "max"],
 ) -> Any | None:
     if not plotly_available() or go is None or make_subplots is None:
         return None
 
     if isinstance(record, dict):
-        record = OneShotRecord(
+        record = DebugScanRecord(
             center=record["center"],
             result=record["result"],
             samples=record["samples"],
@@ -575,7 +575,7 @@ def write_one_shot_plot(
             y_centers=record["y_centers"],
         )
 
-    analysis = analyze_one_shot(record, search_for)
+    analysis = analyze_debug_scan(record, search_for)
     base_tolerance = _grid_tolerance(record.x_centers, record.y_centers, record.box)
     panels: list[
         tuple[int, float, list[list[float | None]], list[float], list[float], Position]
@@ -746,7 +746,7 @@ def write_one_shot_plot(
     layout["height"] = layout["height"] * 3 - layout["margin"]["t"]
     layout["annotations"] = [
         session_stats_annotation(
-            f"One shot  search={search_for}",
+            f"Debug scan  search={search_for}",
             pass_lines,
             final=final,
         )

@@ -20,7 +20,7 @@ from ..continuous_motion import MotionSample
 from ._plotly import plotly_available, write_html
 from .accuracy import AccuracyRepeatRecord, write_accuracy_plot
 from .centroid import CentroidPassRecord, write_centroid_session_plot
-from .one_shot import OneShotRecord, write_one_shot_plot
+from .debug_scan import DebugScanRecord, write_debug_scan_plot
 from .sweep_centroid import SweepCentroidPassRecord, write_sweep_centroid_session_plot
 from .ternary import TernaryPassRecord, TernaryStep, write_ternary_session_plot
 
@@ -64,7 +64,7 @@ class PlotWriter:
         self._sweep_centroid_passes: list[SweepCentroidPassRecord] = []
         self._ternary_passes: list[TernaryPassRecord] = []
         self._accuracy_repeats: list[AccuracyRepeatRecord] = []
-        self._one_shot_records: list[OneShotRecord] = []
+        self._debug_scan_records: list[DebugScanRecord] = []
 
     @property
     def centroid_pass_count(self) -> int:
@@ -83,8 +83,8 @@ class PlotWriter:
         return len(self._accuracy_repeats)
 
     @property
-    def one_shot_count(self) -> int:
-        return len(self._one_shot_records)
+    def debug_scan_count(self) -> int:
+        return len(self._debug_scan_records)
 
     def write(self, fig: Any, *, suffix: str = "") -> str | None:
         if not plotly_available():
@@ -219,7 +219,7 @@ class PlotWriter:
             return None
         return self.write(fig, suffix="accuracy")
 
-    def record_one_shot(
+    def record_debug_scan(
         self,
         *,
         center: Position,
@@ -230,8 +230,8 @@ class PlotWriter:
         x_centers: list[float],
         y_centers: list[float],
     ) -> None:
-        self._one_shot_records.append(
-            OneShotRecord(
+        self._debug_scan_records.append(
+            DebugScanRecord(
                 center=center,
                 result=result,
                 samples=samples,
@@ -242,11 +242,11 @@ class PlotWriter:
             )
         )
 
-    def finalize_one_shot(self, *, search_for: Literal["min", "max"]) -> str | None:
-        if not self._one_shot_records:
+    def finalize_debug_scan(self, *, search_for: Literal["min", "max"]) -> str | None:
+        if not self._debug_scan_records:
             return None
-        record = self._one_shot_records[-1]
-        fig = write_one_shot_plot(record=record, search_for=search_for)
+        record = self._debug_scan_records[-1]
+        fig = write_debug_scan_plot(record=record, search_for=search_for)
         if fig is None:
             return None
         return self.write(fig)

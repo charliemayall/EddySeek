@@ -5,7 +5,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
-2D raster sweep leg planning and capture for one_shot.
+2D raster sweep leg planning and capture for debug_scan.
 """
 
 from __future__ import annotations

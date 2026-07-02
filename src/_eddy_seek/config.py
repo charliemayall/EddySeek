@@ -53,11 +53,11 @@ class SeekConfig:
         default="max",
         metadata={"gcode": "SEARCH_FOR", "enum": ("min", "max")},
     )
-    strategy: Literal["ternary", "centroid", "sweep_centroid", "one_shot"] = field(
+    strategy: Literal["ternary", "centroid", "sweep_centroid", "debug_scan"] = field(
         default="sweep_centroid",
         metadata={
             "gcode": "STRATEGY",
-            "enum": ("ternary", "centroid", "sweep_centroid", "one_shot"),
+            "enum": ("ternary", "centroid", "sweep_centroid", "debug_scan"),
         },
     )
     grid_step_x: float = field(

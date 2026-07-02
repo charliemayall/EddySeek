@@ -10,7 +10,7 @@ import pytest
 
 from _eddy_seek.common import Axis, Position
 from _eddy_seek.continuous_motion import MotionSample
-from _eddy_seek.strategy.one_shot import bin_frequencies, peak_bin_center
+from _eddy_seek.strategy.debug_scan import bin_frequencies, peak_bin_center
 from _eddy_seek.strategy.sweep.grid import plan_grid_legs, y_lines
 
 

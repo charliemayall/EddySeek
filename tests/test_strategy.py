@@ -93,10 +93,10 @@ def test_strategy_weights_and_runtime_set():
     assert strategy_for("ternary").name == "ternary"
     assert strategy_for("centroid").name == "centroid"
     assert strategy_for("sweep_centroid").name == "sweep_centroid"
-    assert strategy_for("one_shot").name == "one_shot"
-    changed = cfg.apply_runtime_set(_FakeGcmd({"STRATEGY": "one_shot"}))
-    assert changed == ["strategy=one_shot"]
-    assert cfg.strategy == "one_shot"
+    assert strategy_for("debug_scan").name == "debug_scan"
+    changed = cfg.apply_runtime_set(_FakeGcmd({"STRATEGY": "debug_scan"}))
+    assert changed == ["strategy=debug_scan"]
+    assert cfg.strategy == "debug_scan"
     with raises(ValueError):
         strategy_for("bogus")
 

@@ -24,14 +24,14 @@ from _eddy_seek.plotting import (
     write_ternary_session_plot,
 )
 from _eddy_seek.plotting._plotly import square_xy_plot_layout, write_html
-from _eddy_seek.plotting.one_shot import OneShotRecord, write_one_shot_plot
+from _eddy_seek.plotting.debug_scan import DebugScanRecord, write_debug_scan_plot
 from _eddy_seek.plotting.sweep_centroid import (
     SweepCentroidPassRecord,
     write_sweep_centroid_session_plot,
 )
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.strategy.centroid import CentroidStrategy
-from _eddy_seek.strategy.one_shot import bin_frequencies
+from _eddy_seek.strategy.debug_scan import bin_frequencies
 
 
 def test_plot_filename():
@@ -304,7 +304,7 @@ def test_save_preview_plot():
     print(f"preview plot: {path}")  # noqa: T201
 
 
-def test_one_shot_plot_returns_figure():
+def test_debug_scan_plot_returns_figure():
     try:
         __import__("plotly")
     except ImportError:
@@ -323,7 +323,7 @@ def test_one_shot_plot_returns_figure():
     z, x_centers, y_centers = bin_frequencies(
         samples, box, tolerance=0.5, center=Position.zero(), search_for="max"
     )
-    record = OneShotRecord(
+    record = DebugScanRecord(
         center=Position.zero(),
         result=Position(0.05, -0.02),
         samples=samples,
@@ -332,7 +332,7 @@ def test_one_shot_plot_returns_figure():
         x_centers=x_centers,
         y_centers=y_centers,
     )
-    fig = write_one_shot_plot(record=record, search_for="max")
+    fig = write_debug_scan_plot(record=record, search_for="max")
     assert fig is not None
     heatmaps = [trace for trace in fig.data if trace.type == "heatmap"]
     assert len(heatmaps) == 5
@@ -357,7 +357,7 @@ def test_one_shot_plot_returns_figure():
     assert len(marginals) == 2
 
 
-def test_plot_writer_writes_one_shot_html():
+def test_plot_writer_writes_debug_scan_html():
     try:
         __import__("plotly")
     except ImportError:
@@ -371,7 +371,7 @@ def test_plot_writer_writes_one_shot_html():
     with tempfile.TemporaryDirectory() as tmp:
         when = datetime(2026, 7, 2, 14, 30)
         writer = PlotWriter(Path(tmp), "abcd1234", write_at=when)
-        writer.record_one_shot(
+        writer.record_debug_scan(
             center=Position.zero(),
             result=Position(0.01, 0.02),
             samples=samples,
@@ -380,16 +380,16 @@ def test_plot_writer_writes_one_shot_html():
             x_centers=x_centers,
             y_centers=y_centers,
         )
-        path = writer.finalize_one_shot(search_for="max")
+        path = writer.finalize_debug_scan(search_for="max")
         assert path is not None
         assert os.path.isfile(path)
-        assert writer.one_shot_count == 1
+        assert writer.debug_scan_count == 1
 
 
-def test_save_preview_one_shot_plot():
-    """Write a one-shot heatmap under tests/output/ for manual layout checks.
+def test_save_preview_debug_scan_plot():
+    """Write a debug-scan heatmap under tests/output/ for manual layout checks.
 
-    Run: EDDY_SEEK_PREVIEW_PLOTS=1 pytest tests/test_plotting.py::test_save_preview_one_shot_plot -s
+    Run: EDDY_SEEK_PREVIEW_PLOTS=1 pytest tests/test_plotting.py::test_save_preview_debug_scan_plot -s
     """
     if not os.environ.get("EDDY_SEEK_PREVIEW_PLOTS"):
         pytest.skip("set EDDY_SEEK_PREVIEW_PLOTS=1 to write preview HTML")
@@ -412,7 +412,7 @@ def test_save_preview_one_shot_plot():
     z, x_centers, y_centers = bin_frequencies(
         samples, box, tolerance, center=Position.zero(), search_for="max"
     )
-    record = OneShotRecord(
+    record = DebugScanRecord(
         center=Position.zero(),
         result=Position(0.0, 0.0),
         samples=samples,
@@ -421,12 +421,12 @@ def test_save_preview_one_shot_plot():
         x_centers=x_centers,
         y_centers=y_centers,
     )
-    fig = write_one_shot_plot(record=record, search_for="max")
+    fig = write_debug_scan_plot(record=record, search_for="max")
     assert fig is not None
 
     out_dir = Path(__file__).resolve().parent / "output"
     out_dir.mkdir(exist_ok=True)
-    path = out_dir / "preview_one_shot.html"
+    path = out_dir / "preview_debug_scan.html"
     assert write_html(path, fig)
     assert path.is_file()
     print(f"preview plot: {path}")  # noqa: T201
