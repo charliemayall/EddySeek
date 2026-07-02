@@ -63,6 +63,7 @@ class PlotWriter:
         self._sweep_centroid_passes: list[SweepCentroidPassRecord] = []
         self._ternary_passes: list[TernaryPassRecord] = []
         self._accuracy_repeats: list[AccuracyRepeatRecord] = []
+        self._one_shot_records: list[dict[str, Any]] = []
 
     @property
     def centroid_pass_count(self) -> int:
@@ -79,6 +80,10 @@ class PlotWriter:
     @property
     def accuracy_repeat_count(self) -> int:
         return len(self._accuracy_repeats)
+
+    @property
+    def one_shot_count(self) -> int:
+        return len(self._one_shot_records)
 
     def write(self, fig: Any, *, suffix: str = "") -> str | None:
         if not plotly_available():
@@ -212,3 +217,39 @@ class PlotWriter:
         if fig is None:
             return None
         return self.write(fig, suffix="accuracy")
+
+    def record_one_shot(
+        self,
+        *,
+        center: Position,
+        result: Position,
+        samples: list[MotionSample],
+        box: tuple[float, float, float, float],
+        z: list[list[float | None]],
+        x_centers: list[float],
+        y_centers: list[float],
+    ) -> None:
+        self._one_shot_records.append(
+            {
+                "center": center,
+                "result": result,
+                "samples": samples,
+                "box": box,
+                "z": z,
+                "x_centers": x_centers,
+                "y_centers": y_centers,
+            }
+        )
+
+    def finalize_one_shot(self, *, search_for: Literal["min", "max"]) -> str | None:
+        if not self._one_shot_records:
+            return None
+        try:
+            from .one_shot import write_one_shot_plot
+        except ImportError:
+            return None
+        record = self._one_shot_records[-1]
+        fig = write_one_shot_plot(record=record, search_for=search_for)
+        if fig is None:
+            return None
+        return self.write(fig)
