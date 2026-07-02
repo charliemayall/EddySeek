@@ -45,6 +45,8 @@ EDDY_SEEK_ACCURACY, EDDY_SEEK_TOOL, EDDY_SEEK_TOOLS, EDDY_SEEK_APPLY_OFFSET
 from __future__ import annotations
 
 import logging
+import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -57,6 +59,7 @@ try:
     from ._eddy_seek.config import load_seek_config
     from ._eddy_seek.tools import ToolAlignConfig, apply_tool_offset
     from ._eddy_seek.strategy import strategy_for
+    from ._eddy_seek.plotting import PlotWriter
     from ._eddy_seek.session import (
         SeekHost,
         SeekSession,
@@ -68,6 +71,7 @@ except ImportError:
     from _eddy_seek.config import load_seek_config  # type: ignore[no-redef]
     from _eddy_seek.tools import ToolAlignConfig, apply_tool_offset  # type: ignore[no-redef]
     from _eddy_seek.strategy import strategy_for  # type: ignore[no-redef]
+    from _eddy_seek.plotting import PlotWriter  # type: ignore[no-redef]
     from _eddy_seek.session import (  # type: ignore[no-redef]
         SeekHost,
         SeekSession,
@@ -389,6 +393,12 @@ class EddySeek(SeekHost):
         gcode = self.printer.lookup_object("gcode")
         gcode.run_script_from_command("SAVE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY")
 
+        cfg = self.seek_config
+        accuracy_id = str(uuid.uuid4())
+        plotter: PlotWriter | None = None
+        if cfg.save_plots:
+            plotter = PlotWriter(Path(cfg.result_folder), accuracy_id)
+
         offsets: list[Position] = []
         try:
             for repeat in range(1, repeats + 1):
@@ -409,6 +419,12 @@ class EddySeek(SeekHost):
                     break
 
                 offsets.append(result.offset)
+                if plotter is not None:
+                    plotter.record_accuracy_repeat(
+                        repeat_num=repeat,
+                        offset=result.offset,
+                        session_plot_path=result.plot_path,
+                    )
                 gcmd.respond_info(
                     f"EDDY_SEEK_ACCURACY: repeat {repeat} result "
                     f"X={result.offset.x:+.4f} mm  Y={result.offset.y:+.4f} mm"
@@ -422,6 +438,12 @@ class EddySeek(SeekHost):
                 return
 
             report_accuracy_stats(gcmd, offsets)
+            if plotter is not None:
+                accuracy_plot_path = plotter.finalize_accuracy()
+                if accuracy_plot_path is not None:
+                    gcmd.respond_info(
+                        f"EDDY_SEEK_ACCURACY: debug plot saved to {accuracy_plot_path}"
+                    )
         finally:
             gcode.run_script_from_command(
                 "RESTORE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY MOVE=1"

@@ -12,6 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from _eddy_seek.common import Axis, Phase, Position
 from _eddy_seek.continuous_motion import MotionSample
 from _eddy_seek.plotting import PlotWriter, TernaryStep, plot_filename
@@ -23,6 +25,62 @@ from _eddy_seek.strategy.centroid import CentroidStrategy
 def test_plot_filename():
     when = datetime(2026, 7, 2, 14, 30)
     assert plot_filename("abcd1234-session", when) == "14_30_02_07_26_abcd1234.html"
+    assert (
+        plot_filename("abcd1234-session", when, suffix="accuracy")
+        == "14_30_02_07_26_abcd1234_accuracy.html"
+    )
+
+
+def test_plot_writer_writes_accuracy_session_html():
+    try:
+        __import__("plotly")
+    except ImportError:
+        return
+
+    with tempfile.TemporaryDirectory() as tmp:
+        when = datetime(2026, 7, 2, 14, 30)
+        writer = PlotWriter(Path(tmp), "abcd1234", write_at=when)
+        writer.record_accuracy_repeat(
+            repeat_num=1,
+            offset=Position(0.01, 0.02),
+            session_plot_path="/tmp/repeat1.html",
+        )
+        writer.record_accuracy_repeat(
+            repeat_num=2,
+            offset=Position(-0.02, 0.01),
+        )
+        writer.record_accuracy_repeat(
+            repeat_num=3,
+            offset=Position(0.0, -0.01),
+        )
+        path = writer.finalize_accuracy()
+        assert path is not None
+        assert os.path.isfile(path)
+        assert path.endswith("14_30_02_07_26_abcd1234_accuracy.html")
+        assert writer.accuracy_repeat_count == 3
+
+
+def test_plot_writer_finalize_accuracy_needs_two_repeats():
+    with tempfile.TemporaryDirectory() as tmp:
+        writer = PlotWriter(Path(tmp), "abcd1234")
+        writer.record_accuracy_repeat(repeat_num=1, offset=Position.zero())
+        assert writer.finalize_accuracy() is None
+
+
+def test_compute_accuracy_stats():
+    from _eddy_seek.session import compute_accuracy_stats
+
+    stats = compute_accuracy_stats(
+        [
+            Position(0.0, 0.0),
+            Position(0.1, 0.0),
+            Position(0.0, 0.1),
+        ]
+    )
+    assert stats.mean.x == pytest.approx(1 / 30)
+    assert stats.mean.y == pytest.approx(1 / 30)
+    assert stats.max_pair == pytest.approx((0.1**2 + 0.1**2) ** 0.5)
+    assert len(stats.radial) == 3
 
 
 def test_plot_writer_creates_results_dir():
