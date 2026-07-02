@@ -83,6 +83,34 @@ def test_compute_accuracy_stats():
     assert len(stats.radial) == 3
 
 
+def test_accuracy_plot_draws_spread_box():
+    try:
+        __import__("plotly")
+    except ImportError:
+        return
+
+    from _eddy_seek.plotting.accuracy import AccuracyRepeatRecord, write_accuracy_plot
+
+    fig = write_accuracy_plot(
+        repeats=[
+            AccuracyRepeatRecord(1, Position(0.0, 0.0)),
+            AccuracyRepeatRecord(2, Position(0.1, 0.05)),
+            AccuracyRepeatRecord(3, Position(-0.02, -0.03)),
+        ]
+    )
+    assert fig is not None
+    assert len(fig.layout.shapes) == 1
+    shape = fig.layout.shapes[0]
+    assert shape.x0 == pytest.approx(-0.02)
+    assert shape.x1 == pytest.approx(0.1)
+    assert shape.y0 == pytest.approx(-0.03)
+    assert shape.y1 == pytest.approx(0.05)
+
+    texts = [a.text for a in fig.layout.annotations]
+    assert "ΔX = 0.1200 mm" in texts
+    assert "ΔY = 0.0800 mm" in texts
+
+
 def test_plot_writer_creates_results_dir():
     with tempfile.TemporaryDirectory() as tmp:
         results_dir = Path(tmp) / "eddy_seek_results"

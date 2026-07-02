@@ -108,6 +108,37 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
             line += f"  plot={record.session_plot_path}"
         repeat_lines.append(line)
 
+    x_lo, x_hi = stats.xs_range
+    y_lo, y_hi = stats.ys_range
+    x_span = x_hi - x_lo
+    y_span = y_hi - y_lo
+    fig.add_shape(
+        type="rect",
+        x0=x_lo,
+        x1=x_hi,
+        y0=y_lo,
+        y1=y_hi,
+        line={"color": "#666", "width": 1.5, "dash": "dash"},
+        fillcolor="rgba(100,100,100,0.08)",
+    )
+    fig.add_annotation(
+        x=(x_lo + x_hi) / 2,
+        y=y_lo,
+        text=f"ΔX = {x_span:.4f} mm",
+        showarrow=False,
+        yshift=-18,
+        font={"size": 11, "color": "#444"},
+    )
+    fig.add_annotation(
+        x=x_lo,
+        y=(y_lo + y_hi) / 2,
+        text=f"ΔY = {y_span:.4f} mm",
+        showarrow=False,
+        xshift=-52,
+        textangle=-90,
+        font={"size": 11, "color": "#444"},
+    )
+
     fig.update_layout(
         title=session_stats_title(
             f"EDDY_SEEK_ACCURACY ({len(repeats)} repeats)",
