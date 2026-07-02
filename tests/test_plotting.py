@@ -334,13 +334,18 @@ def test_one_shot_plot_returns_figure():
     )
     fig = write_one_shot_plot(record=record, search_for="max")
     assert fig is not None
-    assert any(trace.type == "heatmap" for trace in fig.data)
-    heatmap = next(trace for trace in fig.data if trace.type == "heatmap")
-    assert len(heatmap.x) == len(record.x_centers) + 1
+    heatmaps = [trace for trace in fig.data if trace.type == "heatmap"]
+    assert len(heatmaps) == 4
+    base = heatmaps[0]
+    assert len(base.x) == len(record.x_centers) + 1
     assert any(
-        heatmap.x[index] <= 0.0 <= heatmap.x[index + 1]
-        for index in range(len(heatmap.x) - 1)
+        base.x[index] <= 0.0 <= base.x[index + 1] for index in range(len(base.x) - 1)
     )
+    assert len(fig.layout.annotations) >= 1
+    stats = fig.layout.annotations[0].text
+    assert "@2×" in stats
+    assert "@4×" in stats
+    assert "@8×" in stats
 
 
 def test_plot_writer_writes_one_shot_html():
