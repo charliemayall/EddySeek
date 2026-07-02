@@ -80,14 +80,14 @@ class MotionGuard:
             square_corner_velocity=applied_scv,
             min_cruise_ratio=0.0 if self._saved_mcr is not None else None,
         )
-        logger.debug(f"EDDY_SEEK: set square_corner_velocity to {applied_scv}")
+        logger.info(f"EDDY_SEEK: set square_corner_velocity to {applied_scv}")
 
         self._input_shaper = self._printer.lookup_object("input_shaper", None)
         if self._input_shaper is not None:
             self._input_shaper.disable_shaping()
-            logger.debug("EDDY_SEEK: disabled input shaping")
+            logger.info("EDDY_SEEK: disabled input shaping")
         else:
-            logger.debug("EDDY_SEEK: no input shaping found")
+            logger.info("EDDY_SEEK: no input shaping found")
 
         self._respond("EDDY_SEEK: cleared gcode offset")
         return self
@@ -95,9 +95,7 @@ class MotionGuard:
     def __exit__(self, *exc: object) -> None:
         if self._saved_gcode_offset is not None:
             _set_gcode_offset_xy(self._printer, self._saved_gcode_offset)
-            logger.debug(
-                f"EDDY_SEEK: restored gcode offset: {self._saved_gcode_offset}"
-            )
+            logger.info(f"EDDY_SEEK: restored gcode offset: {self._saved_gcode_offset}")
         toolhead = self._printer.lookup_object("toolhead")
         if self._saved_scv is not None:
             _apply_toolhead_limits(
