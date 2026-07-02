@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..common import Position
-from ._plotly import freq_marker, go, pass_color, plotly_available, session_stats_title
+from ._plotly import freq_marker, go, pass_color, plotly_available, xy_session_layout
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,16 +97,13 @@ def write_centroid_session_plot(
         )
     final = passes[-1].result
     fig.update_layout(
-        title=session_stats_title(
+        xaxis_title="X offset (mm)",
+        yaxis_title="Y offset (mm)",
+        **xy_session_layout(
             f"Centroid alignment ({len(passes)} pass"
             f"{'' if len(passes) == 1 else 'es'})  search={search_for}",
             pass_lines,
             final=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
         ),
-        xaxis_title="X offset (mm)",
-        yaxis_title="Y offset (mm)",
-        height=max(560, 120 + 40 * len(passes)),
-        margin={"t": max(120, 80 + 18 * len(passes))},
-        legend={"orientation": "h", "y": 1.02, "x": 0},
     )
     return fig

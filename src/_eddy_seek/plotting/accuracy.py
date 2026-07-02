@@ -15,7 +15,7 @@ from typing import Any
 
 from ..common import Position
 from ..session import compute_accuracy_stats
-from ._plotly import go, pass_color, plotly_available, session_stats_title
+from ._plotly import go, pass_color, plotly_available, xy_session_layout
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,40 +121,40 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
         line={"color": "#666", "width": 1.5, "dash": "dash"},
         fillcolor="rgba(100,100,100,0.08)",
     )
-    fig.add_annotation(
-        x=(x_lo + x_hi) / 2,
-        y=y_lo,
-        text=f"ΔX = {x_span:.4f} mm",
-        showarrow=False,
-        yshift=-18,
-        font={"size": 11, "color": "#444"},
-    )
-    fig.add_annotation(
-        x=x_lo,
-        y=(y_lo + y_hi) / 2,
-        text=f"ΔY = {y_span:.4f} mm",
-        showarrow=False,
-        xshift=-52,
-        textangle=-90,
-        font={"size": 11, "color": "#444"},
-    )
-
-    fig.update_layout(
-        title=session_stats_title(
-            f"EDDY_SEEK_ACCURACY ({len(repeats)} repeats)",
-            repeat_lines,
-            final=(
-                f"Mean: ({stats.mean.x:+.4f}, {stats.mean.y:+.4f}) mm  "
-                f"stdev: ({stats.std_x:.4f}, {stats.std_y:.4f}) mm  "
-                f"max radial={stats.max_radial:.4f} mm  "
-                f"max pair={stats.max_pair:.4f} mm"
-            ),
+    layout = xy_session_layout(
+        f"EDDY_SEEK_ACCURACY ({len(repeats)} repeats)",
+        repeat_lines,
+        final=(
+            f"Mean: ({stats.mean.x:+.4f}, {stats.mean.y:+.4f}) mm  "
+            f"stdev: ({stats.std_x:.4f}, {stats.std_y:.4f}) mm  "
+            f"max radial={stats.max_radial:.4f} mm  "
+            f"max pair={stats.max_pair:.4f} mm"
         ),
+    )
+    layout["annotations"].extend(
+        [
+            {
+                "x": (x_lo + x_hi) / 2,
+                "y": y_lo,
+                "text": f"ΔX = {x_span:.4f} mm",
+                "showarrow": False,
+                "yshift": -18,
+                "font": {"size": 11, "color": "#444"},
+            },
+            {
+                "x": x_lo,
+                "y": (y_lo + y_hi) / 2,
+                "text": f"ΔY = {y_span:.4f} mm",
+                "showarrow": False,
+                "xshift": -52,
+                "textangle": -90,
+                "font": {"size": 11, "color": "#444"},
+            },
+        ]
+    )
+    fig.update_layout(
         xaxis_title="X offset from session start (mm)",
         yaxis_title="Y offset from session start (mm)",
-        yaxis={"scaleanchor": "x", "scaleratio": 1},
-        height=max(560, 120 + 40 * len(repeats)),
-        margin={"t": max(120, 80 + 18 * len(repeats))},
-        legend={"orientation": "h", "y": 1.02, "x": 0},
+        **layout,
     )
     return fig

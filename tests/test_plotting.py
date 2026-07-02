@@ -23,7 +23,7 @@ from _eddy_seek.plotting import (
     plot_filename,
     write_ternary_session_plot,
 )
-from _eddy_seek.plotting._plotly import square_xy_plot_layout
+from _eddy_seek.plotting._plotly import square_xy_plot_layout, write_html
 from _eddy_seek.plotting.sweep_centroid import (
     SweepCentroidPassRecord,
     write_sweep_centroid_session_plot,
@@ -227,7 +227,9 @@ def test_sweep_centroid_plot_has_square_layout():
         search_for="max",
     )
     assert fig is not None
-    layout = square_xy_plot_layout(title_lines=1)
+    layout = square_xy_plot_layout(stats_lines=3)  # strategy + 1 pass + final
+    assert fig.layout.title.text in (None, "")
+    assert len(fig.layout.annotations) >= 1
     assert fig.layout.autosize is False
     assert fig.layout.width == layout["width"]
     assert fig.layout.height == layout["height"]
@@ -236,6 +238,68 @@ def test_sweep_centroid_plot_has_square_layout():
     plot_w = fig.layout.width - layout["margin"]["l"] - layout["margin"]["r"]
     plot_h = fig.layout.height - layout["margin"]["t"] - layout["margin"]["b"]
     assert plot_w == plot_h
+    assert fig.layout.legend.y < 0
+
+
+def test_save_preview_plot():
+    """Write a sweep-centroid HTML plot under tests/output/ for manual layout checks.
+
+    Run: EDDY_SEEK_PREVIEW_PLOTS=1 pytest tests/test_plotting.py::test_save_preview_plot -s
+    """
+    if not os.environ.get("EDDY_SEEK_PREVIEW_PLOTS"):
+        pytest.skip("set EDDY_SEEK_PREVIEW_PLOTS=1 to write preview HTML")
+    try:
+        __import__("plotly")
+    except ImportError:
+        pytest.skip("plotly not installed")
+
+    samples = [
+        MotionSample(
+            Position(x, y),
+            10000.0 - 100.0 * (x * x + y * y),
+            0.0,
+        )
+        for x in (-1.0, -0.5, 0.0, 0.5, 1.0)
+        for y in (-1.0, -0.5, 0.0, 0.5, 1.0)
+    ]
+    passes = [
+        SweepCentroidPassRecord(
+            pass_num=1,
+            phase=Phase.COARSE,
+            center=Position.zero(),
+            result=Position(0.12, 0.04),
+            moved=Position(0.12, 0.04),
+            samples=samples,
+            box=(-1.0, 1.0, -1.0, 1.0),
+        ),
+        SweepCentroidPassRecord(
+            pass_num=2,
+            phase=Phase.FINE,
+            center=Position(0.12, 0.04),
+            result=Position(0.03, -0.02),
+            moved=Position(0.12, 0.04),
+            samples=samples,
+            box=(-0.5, 0.5, -0.5, 0.5),
+        ),
+        SweepCentroidPassRecord(
+            pass_num=3,
+            phase=Phase.FINE,
+            center=Position(0.03, -0.02),
+            result=Position(0.005, 0.001),
+            moved=Position(0.12, 0.04),
+            samples=samples,
+            box=(-0.2, 0.2, -0.2, 0.2),
+        ),
+    ]
+    fig = write_sweep_centroid_session_plot(passes=passes, search_for="max")
+    assert fig is not None
+
+    out_dir = Path(__file__).resolve().parent / "output"
+    out_dir.mkdir(exist_ok=True)
+    path = out_dir / "preview_sweep_centroid.html"
+    assert write_html(path, fig)
+    assert path.is_file()
+    print(f"preview plot: {path}")  # noqa: T201
 
 
 def test_plot_writer_writes_ternary_session_html():

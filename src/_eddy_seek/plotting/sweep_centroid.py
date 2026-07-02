@@ -20,8 +20,7 @@ from ._plotly import (
     go,
     pass_color,
     plotly_available,
-    session_stats_title,
-    square_xy_plot_layout,
+    xy_session_layout,
 )
 
 
@@ -116,15 +115,13 @@ def write_sweep_centroid_session_plot(
         )
     final = passes[-1].result
     fig.update_layout(
-        title=session_stats_title(
+        xaxis_title="X offset (mm)",
+        yaxis_title="Y offset (mm)",
+        **xy_session_layout(
             f"Sweep centroid ({len(passes)} pass"
             f"{'' if len(passes) == 1 else 'es'})  search={search_for}",
             pass_lines,
             final=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
         ),
-        xaxis_title="X offset (mm)",
-        yaxis_title="Y offset (mm)",
-        legend={"orientation": "h", "y": 1.02, "x": 0},
-        **square_xy_plot_layout(title_lines=len(passes)),
     )
     return fig

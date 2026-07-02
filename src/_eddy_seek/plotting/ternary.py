@@ -19,7 +19,7 @@ from ._plotly import (
     make_subplots,
     pass_color,
     plotly_available,
-    session_stats_title,
+    session_stats_annotation,
 )
 
 
@@ -136,6 +136,7 @@ def write_ternary_session_plot(
             f"{record.moved.y:.4f})  {freq_range}"
         )
     final = passes[-1].result
+    stats_lines = 1 + len(pass_lines) + 1
     fig.update_xaxes(title_text="X offset (mm)", row=1, col=1)
     fig.update_yaxes(title_text="Y offset (mm)", row=1, col=1)
     fig.update_xaxes(title_text="Offset (mm)", row=2, col=1)
@@ -143,15 +144,18 @@ def write_ternary_session_plot(
     fig.update_yaxes(title_text="Iteration", row=2, col=1)
     fig.update_yaxes(title_text="Iteration", row=3, col=1)
     fig.update_layout(
-        title=session_stats_title(
-            f"Ternary alignment ({len(passes)} pass"
-            f"{'' if len(passes) == 1 else 'es'})  search={search_for}",
-            pass_lines,
-            final=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
-        ),
-        height=max(900, 160 + 40 * len(passes)),
-        margin={"t": max(140, 100 + 18 * len(passes))},
-        legend={"orientation": "h", "y": 1.06, "x": 0},
+        annotations=[
+            session_stats_annotation(
+                f"Ternary alignment ({len(passes)} pass"
+                f"{'' if len(passes) == 1 else 'es'})  search={search_for}",
+                pass_lines,
+                final=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
+            )
+        ],
+        title=None,
+        height=max(900, 220 + 15 * stats_lines + 40 * len(passes)),
+        margin={"t": stats_lines * 15 + 12 + 48, "b": 72, "l": 60, "r": 40},
+        legend={"orientation": "h", "y": -0.02, "x": 0, "xanchor": "left"},
     )
     return fig
 
