@@ -117,6 +117,7 @@ def write_sweep_centroid_session_plot(
         ),
         xaxis_title="X offset (mm)",
         yaxis_title="Y offset (mm)",
+        yaxis={"scaleanchor": "x", "scaleratio": 1},
         height=max(560, 120 + 40 * len(passes)),
         margin={"t": max(120, 80 + 18 * len(passes))},
         legend={"orientation": "h", "y": 1.02, "x": 0},
