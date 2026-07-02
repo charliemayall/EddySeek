@@ -8,7 +8,7 @@
 
 import pytest
 
-from _eddy_seek.common import Position
+from _eddy_seek.common import Axis, Position
 from _eddy_seek.continuous_motion import MotionSample
 from _eddy_seek.strategy.one_shot import bin_frequencies, peak_bin_center
 from _eddy_seek.strategy.sweep.grid import plan_grid_legs, y_lines
@@ -22,8 +22,11 @@ def test_plan_grid_legs_row_count():
     box = (-5.0, 5.0, -5.0, 5.0)
     tolerance = 0.1
     rows = len(y_lines(box[2], box[3], tolerance))
-    legs = plan_grid_legs(box, tolerance, overscan=1.0)
-    assert len(legs) == rows * 2
+    cols = len(y_lines(box[0], box[1], tolerance))
+    x_legs = plan_grid_legs(box, tolerance, overscan=1.0, axis=Axis.X)
+    y_legs = plan_grid_legs(box, tolerance, overscan=1.0, axis=Axis.Y)
+    assert len(x_legs) == rows * 2
+    assert len(y_legs) == cols * 2
 
 
 def test_bin_frequencies_finds_peak():

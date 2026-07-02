@@ -36,19 +36,24 @@ def plan_grid_legs(
     tolerance: float,
     overscan: float,
     *,
+    axis: Axis = Axis.X,
     serpentine: bool = True,
 ) -> list[tuple[Position, Position]]:
-    """Horizontal X sweeps at each Y row; two traverses per row."""
+    """Raster sweeps on ``axis`` at lines spaced by ``tolerance`` on the cross axis."""
     x_lo, x_hi, y_lo, y_hi = box
+    if axis is Axis.X:
+        lo, hi, cross_lo, cross_hi = x_lo, x_hi, y_lo, y_hi
+    else:
+        lo, hi, cross_lo, cross_hi = y_lo, y_hi, x_lo, x_hi
     legs: list[tuple[Position, Position]] = []
-    for row_index, y in enumerate(y_lines(y_lo, y_hi, tolerance)):
-        if serpentine and row_index % 2 == 1:
+    for line_index, cross in enumerate(y_lines(cross_lo, cross_hi, tolerance)):
+        if serpentine and line_index % 2 == 1:
             traverses = (True, False)
         else:
             traverses = (False, True)
         for reverse in traverses:
             legs.append(
-                traversal_endpoints(Axis.X, x_lo, x_hi, y, overscan, reverse=reverse)
+                traversal_endpoints(axis, lo, hi, cross, overscan, reverse=reverse)
             )
     return legs
 
@@ -65,17 +70,8 @@ def sweep_grid(
     box = _search_box(
         center, cfg.max_jog_x, cfg.max_jog_y, cfg.max_jog_x, cfg.max_jog_y
     )
-    legs = plan_grid_legs(box, tolerance, cfg.sweep_overscan)
-
-    def rotate_legs(
-        legs: list[tuple[Position, Position]],
-    ) -> list[tuple[Position, Position]]:
-        return [
-            (Position(x=leg[0].x, y=leg[0].y), Position(x=leg[1].x, y=leg[1].y))
-            for leg in legs
-        ]
-
-    legs.extend(rotate_legs(legs))
+    legs = plan_grid_legs(box, tolerance, cfg.sweep_overscan, axis=Axis.X)
+    legs.extend(plan_grid_legs(box, tolerance, cfg.sweep_overscan, axis=Axis.Y))
 
     handler.begin(ctx.session_start)
     handler.run_capture_legs(legs, speed)
