@@ -43,7 +43,7 @@ def weighted_centroid(
     f_max = max(freqs)
     weights = [frequency_weight(freq, f_min, f_max, search_for) for freq in freqs]
     total_w = sum(weights)
-    if total_w < 1e-9:
+    if total_w < 1e-9:  # prevent division by zero
         return None
     centroid_x = (
         sum(position.x * w for (position, _), w in zip(probes, weights)) / total_w

@@ -66,6 +66,17 @@ def sweep_grid(
         center, cfg.max_jog_x, cfg.max_jog_y, cfg.max_jog_x, cfg.max_jog_y
     )
     legs = plan_grid_legs(box, tolerance, cfg.sweep_overscan)
+
+    def rotate_legs(
+        legs: list[tuple[Position, Position]],
+    ) -> list[tuple[Position, Position]]:
+        return [
+            (Position(x=leg[0].x, y=leg[0].y), Position(x=leg[1].x, y=leg[1].y))
+            for leg in legs
+        ]
+
+    legs.extend(rotate_legs(legs))
+
     handler.begin(ctx.session_start)
     handler.run_capture_legs(legs, speed)
     ctx.sync_offset(handler.position)
