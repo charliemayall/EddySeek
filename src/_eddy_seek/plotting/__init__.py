@@ -18,6 +18,7 @@ from typing import Any, Literal
 from ..common import Phase, Position
 from ..continuous_motion import MotionSample
 from ._plotly import plotly_available, write_html
+from .accuracy import AccuracyRepeatRecord, write_accuracy_plot
 from .centroid import CentroidPassRecord, write_centroid_session_plot
 from .sweep_centroid import SweepCentroidPassRecord, write_sweep_centroid_session_plot
 from .ternary import TernaryPassRecord, TernaryStep, write_ternary_session_plot
@@ -25,21 +26,32 @@ from .ternary import TernaryPassRecord, TernaryStep, write_ternary_session_plot
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "AccuracyRepeatRecord",
     "PlotWriter",
     "TernaryStep",
     "plot_filename",
 ]
 
 
-def plot_filename(session_id: str, when: datetime | None = None) -> str:
-    """``HH_MM_DD_MM_YY_{id}.html`` under ``result_folder`` (no subfolder)."""
+def plot_filename(
+    session_id: str, when: datetime | None = None, *, suffix: str = ""
+) -> str:
+    """``HH_MM_DD_MM_YY_{id}[_{suffix}].html`` under ``result_folder`` (no subfolder)."""
     t = when or datetime.now()
     sid = session_id[:8]
-    return f"{t.hour:02d}_{t.minute:02d}_{t.day:02d}_{t.month:02d}_{t.year % 100:02d}_{sid}.html"
+    base = f"{t.hour:02d}_{t.minute:02d}_{t.day:02d}_{t.month:02d}_{t.year % 100:02d}_{sid}"
+    if suffix:
+        return f"{base}_{suffix}.html"
+    return f"{base}.html"
 
 
 class PlotWriter:
-    """Write interactive strategy debug plots as HTML under the results folder."""
+    """Write interactive debug plots as HTML under the results folder.
+
+    Each plot kind follows the same pattern: ``record_*`` calls during the run,
+    then a single ``finalize_*`` writes one HTML file (or returns ``None`` if
+    plotly is missing).
+    """
 
     def __init__(
         self,
@@ -55,6 +67,7 @@ class PlotWriter:
         self._centroid_passes: list[CentroidPassRecord] = []
         self._sweep_centroid_passes: list[SweepCentroidPassRecord] = []
         self._ternary_passes: list[TernaryPassRecord] = []
+        self._accuracy_repeats: list[AccuracyRepeatRecord] = []
 
     @property
     def centroid_pass_count(self) -> int:
@@ -68,11 +81,17 @@ class PlotWriter:
     def ternary_pass_count(self) -> int:
         return len(self._ternary_passes)
 
-    def write(self, fig: Any) -> str | None:
+    @property
+    def accuracy_repeat_count(self) -> int:
+        return len(self._accuracy_repeats)
+
+    def write(self, fig: Any, *, suffix: str = "") -> str | None:
         if not plotly_available():
             logger.warning("eddy_seek: save_plots enabled but plotly is not installed")
             return None
-        out_path = self._results_dir / plot_filename(self._session_id, self._write_at)
+        out_path = self._results_dir / plot_filename(
+            self._session_id, self._write_at, suffix=suffix
+        )
         if not write_html(str(out_path), fig):
             return None
         logger.info("eddy_seek: debug plot saved to %s", out_path)
@@ -175,3 +194,26 @@ class PlotWriter:
         if fig is None:
             return None
         return self.write(fig)
+
+    def record_accuracy_repeat(
+        self,
+        *,
+        repeat_num: int,
+        offset: Position,
+        session_plot_path: str | None = None,
+    ) -> None:
+        self._accuracy_repeats.append(
+            AccuracyRepeatRecord(
+                repeat_num=repeat_num,
+                offset=offset,
+                session_plot_path=session_plot_path,
+            )
+        )
+
+    def finalize_accuracy(self) -> str | None:
+        if len(self._accuracy_repeats) < 2:
+            return None
+        fig = write_accuracy_plot(repeats=self._accuracy_repeats)
+        if fig is None:
+            return None
+        return self.write(fig, suffix="accuracy")

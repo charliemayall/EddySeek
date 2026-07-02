@@ -96,6 +96,7 @@ class SeekSessionResult:
     offset: Position | None
     passes_run: int
     error_message: str | None
+    plot_path: str | None = None
 
 
 class SeekSession(SeekContext):
@@ -200,17 +201,17 @@ class SeekSession(SeekContext):
                     exc_info=True,
                 )
         finally:
-            plot_path = strategy.on_session_end(self)
-            if plot_path is not None:
+            session_plot_path = strategy.on_session_end(self)
+            if session_plot_path is not None:
                 self.append_plot_trace(
                     {
                         "type": "plot",
                         "strategy": strategy.name,
                         "passes": getattr(strategy, "_last_plot_passes", 0),
-                        "path": plot_path,
+                        "path": session_plot_path,
                     }
                 )
-                gcmd.respond_info(f"EDDY_SEEK: debug plot saved to {plot_path}")
+                gcmd.respond_info(f"EDDY_SEEK: debug plot saved to {session_plot_path}")
             self._host.release_sensor_stream()
             self._gcode.run_script_from_command(
                 f"RESTORE_GCODE_STATE NAME={self._GCODE_STATE_MOVE}"
@@ -223,6 +224,7 @@ class SeekSession(SeekContext):
             offset=offset,
             passes_run=passes_run,
             error_message=error_message,
+            plot_path=session_plot_path,
         )
         if self._save_trace:
             path = _write_seek_trace(
@@ -345,7 +347,20 @@ def _sample_stdev(values: list[float], mean: float) -> float:
     return math.sqrt(variance)
 
 
-def report_accuracy_stats(gcmd: GCodeCommand, offsets: list[Position]) -> None:
+@dataclass(frozen=True, slots=True)
+class AccuracyStats:
+    mean: Position
+    std_x: float
+    std_y: float
+    radial: tuple[float, ...]
+    max_radial: float
+    mean_radial: float
+    max_pair: float
+    xs_range: tuple[float, float]
+    ys_range: tuple[float, float]
+
+
+def compute_accuracy_stats(offsets: list[Position]) -> AccuracyStats:
     n = len(offsets)
     xs = [p.x for p in offsets]
     ys = [p.y for p in offsets]
@@ -355,7 +370,7 @@ def report_accuracy_stats(gcmd: GCodeCommand, offsets: list[Position]) -> None:
     std_y = _sample_stdev(ys, mean_y)
 
     mean = Position(mean_x, mean_y)
-    radial = [offset.distance_to(mean) for offset in offsets]
+    radial = tuple(offset.distance_to(mean) for offset in offsets)
     max_radial = max(radial)
     mean_radial = sum(radial) / n
 
@@ -364,36 +379,57 @@ def report_accuracy_stats(gcmd: GCodeCommand, offsets: list[Position]) -> None:
         for j in range(i + 1, n):
             max_pair = max(max_pair, offsets[i].distance_to(offsets[j]))
 
+    return AccuracyStats(
+        mean=mean,
+        std_x=std_x,
+        std_y=std_y,
+        radial=radial,
+        max_radial=max_radial,
+        mean_radial=mean_radial,
+        max_pair=max_pair,
+        xs_range=(min(xs), max(xs)),
+        ys_range=(min(ys), max(ys)),
+    )
+
+
+def report_accuracy_stats(gcmd: GCodeCommand, offsets: list[Position]) -> None:
+    n = len(offsets)
+    stats = compute_accuracy_stats(offsets)
+
     gcmd.respond_info("EDDY_SEEK_ACCURACY: --- repeatability report ---")
     for i, offset in enumerate(offsets, start=1):
         gcmd.respond_info(
             f"EDDY_SEEK_ACCURACY:   #{i}  X={offset.x:+.4f} mm  "
             f"Y={offset.y:+.4f} mm  "
-            f"radial={radial[i - 1]:.4f} mm"
+            f"radial={stats.radial[i - 1]:.4f} mm"
         )
     gcmd.respond_info(
-        f"EDDY_SEEK_ACCURACY: mean   X={mean_x:+.4f} mm  Y={mean_y:+.4f} mm"
+        f"EDDY_SEEK_ACCURACY: mean   X={stats.mean.x:+.4f} mm  Y={stats.mean.y:+.4f} mm"
     )
-    gcmd.respond_info(f"EDDY_SEEK_ACCURACY: stdev  X={std_x:.4f} mm  Y={std_y:.4f} mm")
     gcmd.respond_info(
-        f"EDDY_SEEK_ACCURACY: range  X=[{min(xs):+.4f}, {max(xs):+.4f}] mm  "
-        f"Y=[{min(ys):+.4f}, {max(ys):+.4f}] mm"
+        f"EDDY_SEEK_ACCURACY: stdev  X={stats.std_x:.4f} mm  Y={stats.std_y:.4f} mm"
+    )
+    gcmd.respond_info(
+        f"EDDY_SEEK_ACCURACY: range  X=[{stats.xs_range[0]:+.4f}, "
+        f"{stats.xs_range[1]:+.4f}] mm  "
+        f"Y=[{stats.ys_range[0]:+.4f}, {stats.ys_range[1]:+.4f}] mm"
     )
     gcmd.respond_info(
         f"EDDY_SEEK_ACCURACY: radial from mean  "
-        f"max={max_radial:.4f} mm  mean={mean_radial:.4f} mm"
+        f"max={stats.max_radial:.4f} mm  mean={stats.mean_radial:.4f} mm"
     )
     gcmd.respond_info(
-        f"EDDY_SEEK_ACCURACY: max pairwise distance = {max_pair:.4f} mm  ({n} repeats)"
+        f"EDDY_SEEK_ACCURACY: max pairwise distance = {stats.max_pair:.4f} mm  "
+        f"({n} repeats)"
     )
     logger.debug(
         "eddy_seek: accuracy report n=%d mean=(%.4f, %.4f) stdev=(%.4f, %.4f) "
         "max_radial=%.4f max_pair=%.4f",
         n,
-        mean_x,
-        mean_y,
-        std_x,
-        std_y,
-        max_radial,
-        max_pair,
+        stats.mean.x,
+        stats.mean.y,
+        stats.std_x,
+        stats.std_y,
+        stats.max_radial,
+        stats.max_pair,
     )
