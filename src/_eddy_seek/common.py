@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from klippy.klippy import Printer
 
 _ROUND_PRECISION = 4
+CHAR_DELTA = "\u0394"
 
 
 class Axis(str, Enum):
@@ -104,6 +105,9 @@ class Offset:
             "x": round(self.x, _ROUND_PRECISION),
             "y": round(self.y, _ROUND_PRECISION),
         }
+
+    def to_delta_str(self) -> str:
+        return f"{CHAR_DELTA}X={round(self.x, _ROUND_PRECISION)} {CHAR_DELTA}Y={round(self.y, _ROUND_PRECISION)}"
 
     @property
     def seq(self) -> tuple[float, float]:
