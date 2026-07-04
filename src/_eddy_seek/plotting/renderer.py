@@ -67,9 +67,9 @@ def add_scatter(
     freqs = record.cloud.freqs
     marker: dict[str, Any]
     if freqs is not None:
-        marker = freq_marker(list(freqs), search_for, size=9, opacity=1.0)
+        marker = freq_marker(list(freqs), search_for, size=7, opacity=1.0)
     else:
-        marker = {"size": 9, "color": color}
+        marker = {"size": 7, "color": color}
     trace = go.Scatter(
         x=list(record.cloud.xs),
         y=list(record.cloud.ys),
