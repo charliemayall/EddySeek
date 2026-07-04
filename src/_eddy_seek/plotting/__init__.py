@@ -20,6 +20,11 @@ from ..movement.handler import MotionSample
 from ._plotly import plotly_available, write_html
 from .accuracy import AccuracyRepeatRecord, write_accuracy_plot
 from .centroid import CentroidPassRecord, write_centroid_session_plot
+from .circle_harmonic import (
+    CircleHarmonicBootstrapRecord,
+    CircleHarmonicCircleRecord,
+    write_circle_harmonic_session_plot,
+)
 from .debug_scan import DebugScanRecord, write_debug_scan_plot
 from .sweep_centroid import SweepCentroidPassRecord, write_sweep_centroid_session_plot
 from .ternary import TernaryPassRecord, TernaryStep, write_ternary_session_plot
@@ -77,6 +82,15 @@ class PlotWriter:
         self._ternary_passes: list[TernaryPassRecord] = []
         self._accuracy_repeats: list[AccuracyRepeatRecord] = []
         self._debug_scan_records: list[DebugScanRecord] = []
+        self._circle_harmonic_bootstrap: CircleHarmonicBootstrapRecord | None = None
+        self._circle_harmonic_circles: list[CircleHarmonicCircleRecord] = []
+
+    @property
+    def circle_harmonic_pass_count(self) -> int:
+        count = len(self._circle_harmonic_circles)
+        if self._circle_harmonic_bootstrap is not None:
+            count += 1
+        return count
 
     @property
     def centroid_pass_count(self) -> int:
@@ -263,6 +277,79 @@ class PlotWriter:
             return None
         record = self._debug_scan_records[-1]
         fig = write_debug_scan_plot(record=record, search_for=search_for)
+        if fig is None:
+            return None
+        return self.write(fig)
+
+    def record_circle_harmonic_bootstrap(
+        self,
+        *,
+        pass_num: int,
+        center: Offset,
+        result: Offset,
+        moved: Offset,
+        samples: list[MotionSample],
+        box: tuple[float, float, float, float],
+    ) -> None:
+        self._circle_harmonic_bootstrap = CircleHarmonicBootstrapRecord(
+            pass_num=pass_num,
+            center=center,
+            result=result,
+            moved=moved,
+            samples=samples,
+            box=box,
+        )
+
+    def record_circle_harmonic_circle(
+        self,
+        *,
+        pass_num: int,
+        trace_center: Offset,
+        radius: float,
+        result: Offset,
+        moved: Offset,
+        samples: list[MotionSample],
+        binned: list[tuple[float, float]],
+        fit_c0: float | None = None,
+        fit_a: float | None = None,
+        fit_b: float | None = None,
+        fit_amp: float | None = None,
+        fit_noise: float | None = None,
+        rejected: bool = False,
+        reject_reasons: str = "",
+    ) -> None:
+        self._circle_harmonic_circles.append(
+            CircleHarmonicCircleRecord(
+                pass_num=pass_num,
+                trace_center=trace_center,
+                radius=radius,
+                result=result,
+                moved=moved,
+                samples=samples,
+                binned=binned,
+                fit_c0=fit_c0,
+                fit_a=fit_a,
+                fit_b=fit_b,
+                fit_amp=fit_amp,
+                fit_noise=fit_noise,
+                rejected=rejected,
+                reject_reasons=reject_reasons,
+            )
+        )
+
+    def finalize_circle_harmonic(
+        self, *, search_for: Literal["min", "max"]
+    ) -> str | None:
+        if (
+            self._circle_harmonic_bootstrap is None
+            and not self._circle_harmonic_circles
+        ):
+            return None
+        fig = write_circle_harmonic_session_plot(
+            bootstrap=self._circle_harmonic_bootstrap,
+            circles=self._circle_harmonic_circles,
+            search_for=search_for,
+        )
         if fig is None:
             return None
         return self.write(fig)

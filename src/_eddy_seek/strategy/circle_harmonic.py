@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ..common import Axis, Offset, Phase, samples_in_box, search_box
 from ..harmonic import (
+    HarmonicFit,
     bin_samples_by_angle,
     binned_to_motion_samples,
     circle_in_jog_box,
@@ -70,11 +71,15 @@ class CircleHarmonicStrategy(SeekStrategy):
         )
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
+        plotter = self._plotter
         self._plotter = None
         self._bootstrap = None
         self._frozen = None
         self._last_pass_rejected = False
-        return None
+        if plotter is None:
+            return None
+        self._last_plot_passes = plotter.circle_harmonic_pass_count
+        return plotter.finalize_circle_harmonic(search_for=ctx.config.search_for)
 
     def search(self, ctx: SeekSession, console: KConsole) -> tuple[Offset, int]:
         """Keep trying smaller circle radii after a rejected harmonic fit."""
@@ -188,12 +193,26 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"keeping ({best.x:.4f}, {best.y:.4f})"
             )
             self._bootstrap = best
+            self._record_bootstrap_plot(
+                pass_num,
+                best,
+                best,
+                [*in_box_x, *in_box_y],
+                box,
+            )
             return best
 
         result = result_or_none.clamp(cfg.max_jog_x, cfg.max_jog_y)
         self._bootstrap = result
         logger.debug(
             f"eddy_seek: circle_harmonic bootstrap -> ({result.x:.4f}, {result.y:.4f})"
+        )
+        self._record_bootstrap_plot(
+            pass_num,
+            best,
+            result,
+            [*in_box_x, *in_box_y],
+            box,
         )
         ctx.append_trace(
             {
@@ -264,6 +283,18 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"eddy_seek: circle_harmonic pass {pass_num} fit failed "
                 f"(r={trace_radius:.3f}) - holding bootstrap"
             )
+            self._record_circle_plot(
+                pass_num,
+                best,
+                bootstrap,
+                trace_center,
+                trace_radius,
+                samples,
+                binned,
+                fit=None,
+                rejected=True,
+                reject_reasons="fit failed",
+            )
             return bootstrap
 
         reject_reasons = harmonic_reject_reasons(
@@ -278,6 +309,18 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"eddy_seek: circle_harmonic pass {pass_num} model rejected "
                 f"(r={trace_radius:.3f} amp={fit.amplitude:.4f} "
                 f"noise={fit.noise:.4f}): {', '.join(reject_reasons)}"
+            )
+            self._record_circle_plot(
+                pass_num,
+                best,
+                bootstrap,
+                trace_center,
+                trace_radius,
+                samples,
+                binned,
+                fit=fit,
+                rejected=True,
+                reject_reasons=", ".join(reject_reasons),
             )
             return bootstrap
 
@@ -298,11 +341,35 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"eddy_seek: circle_harmonic pass {pass_num} diverged from bootstrap "
                 f"({result.x:.4f}, {result.y:.4f}) vs ({bootstrap.x:.4f}, {bootstrap.y:.4f})"
             )
+            self._record_circle_plot(
+                pass_num,
+                best,
+                bootstrap,
+                trace_center,
+                trace_radius,
+                samples,
+                binned,
+                fit=fit,
+                rejected=True,
+                reject_reasons="diverged from bootstrap",
+            )
             return bootstrap
 
         if harmonic_converged(fit, step, cfg.tolerance, cfg.noise_k):
             logger.debug(f"eddy_seek: circle_harmonic converged at pass {pass_num}")
             self._frozen = result
+
+        self._record_circle_plot(
+            pass_num,
+            best,
+            result,
+            trace_center,
+            trace_radius,
+            samples,
+            binned,
+            fit=fit,
+            rejected=False,
+        )
 
         ctx.append_trace(
             {
@@ -314,6 +381,58 @@ class CircleHarmonicStrategy(SeekStrategy):
             }
         )
         return result
+
+    def _record_bootstrap_plot(
+        self,
+        pass_num: int,
+        center: Offset,
+        result: Offset,
+        samples: list[MotionSample],
+        box: tuple[float, float, float, float],
+    ) -> None:
+        if self._plotter is None:
+            return
+        self._plotter.record_circle_harmonic_bootstrap(
+            pass_num=pass_num,
+            center=center,
+            result=result,
+            moved=(result - center).abs_components(),
+            samples=samples,
+            box=box,
+        )
+
+    def _record_circle_plot(
+        self,
+        pass_num: int,
+        best: Offset,
+        result: Offset,
+        trace_center: Offset,
+        trace_radius: float,
+        samples: list[MotionSample],
+        binned: list[tuple[float, float]],
+        *,
+        fit: HarmonicFit | None,
+        rejected: bool,
+        reject_reasons: str = "",
+    ) -> None:
+        if self._plotter is None:
+            return
+        self._plotter.record_circle_harmonic_circle(
+            pass_num=pass_num,
+            trace_center=trace_center,
+            radius=trace_radius,
+            result=result,
+            moved=(result - best).abs_components(),
+            samples=samples,
+            binned=binned,
+            fit_c0=fit.c0 if fit is not None else None,
+            fit_a=fit.a if fit is not None else None,
+            fit_b=fit.b if fit is not None else None,
+            fit_amp=fit.amplitude if fit is not None else None,
+            fit_noise=fit.noise if fit is not None else None,
+            rejected=rejected,
+            reject_reasons=reject_reasons,
+        )
 
     def _refresh_profiles(
         self,

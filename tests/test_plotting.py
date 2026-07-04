@@ -6,6 +6,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 This file may be distributed under the terms of the GNU GPLv3 license.
 """
 
+import math
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -526,6 +527,99 @@ def test_ternary_plot_pass_bands_do_not_overlap(requires_plotly):
     pass1_max = max(end for _, end in x_bracket_ranges[:3])
     pass2_min = min(start for start, _ in x_bracket_ranges[3:])
     assert pass2_min > pass1_max
+
+
+def test_plot_writer_writes_circle_harmonic_session_html(requires_plotly, plot_tmp):
+    import math
+
+    samples = [
+        MotionSample(Offset(x, y), 10000.0 - 100.0 * (x * x + y * y), 0.0)
+        for x in (-1.0, 0.0, 1.0)
+        for y in (-1.0, 0.0, 1.0)
+    ]
+    circle_samples = [
+        MotionSample(
+            Offset(0.3 + math.cos(theta), 0.1 + math.sin(theta)),
+            10000.0 + 50.0 * math.cos(theta),
+            0.0,
+        )
+        for theta in [2.0 * math.pi * i / 36.0 for i in range(36)]
+    ]
+    binned = [
+        (2.0 * math.pi * i / 36.0, 10000.0 + 50.0 * math.cos(2.0 * math.pi * i / 36.0))
+        for i in range(36)
+    ]
+    writer, _tmp_path = plot_tmp
+    writer.record_circle_harmonic_bootstrap(
+        pass_num=1,
+        center=Offset.zero(),
+        result=Offset(0.3, 0.1),
+        moved=Offset(0.3, 0.1),
+        samples=samples,
+        box=(-1.0, 1.0, -1.0, 1.0),
+    )
+    writer.record_circle_harmonic_circle(
+        pass_num=2,
+        trace_center=Offset(0.3, 0.1),
+        radius=1.0,
+        result=Offset(0.3, 0.1),
+        moved=Offset.zero(),
+        samples=circle_samples,
+        binned=binned,
+        fit_c0=10000.0,
+        fit_a=50.0,
+        fit_b=0.0,
+        fit_amp=50.0,
+        fit_noise=1.0,
+        rejected=True,
+        reject_reasons="snr (amp=50.00 < 2×noise=2.00)",
+    )
+    path = writer.finalize_circle_harmonic(search_for="max")
+    assert path is not None
+    assert os.path.isfile(path)
+    assert path.endswith(PLOT_HTML_SUFFIX)
+    assert writer.circle_harmonic_pass_count == 2
+
+
+def test_circle_harmonic_plot_has_wide_layout(requires_plotly):
+    from _eddy_seek.plotting.circle_harmonic import (
+        CircleHarmonicBootstrapRecord,
+        CircleHarmonicCircleRecord,
+        write_circle_harmonic_session_plot,
+    )
+
+    fig = write_circle_harmonic_session_plot(
+        bootstrap=CircleHarmonicBootstrapRecord(
+            pass_num=1,
+            center=Offset.zero(),
+            result=Offset(0.2, 0.0),
+            moved=Offset(0.2, 0.0),
+            samples=[MotionSample(Offset.zero(), 10000.0, 0.0)],
+            box=(-1.0, 1.0, -1.0, 1.0),
+        ),
+        circles=[
+            CircleHarmonicCircleRecord(
+                pass_num=2,
+                trace_center=Offset(0.2, 0.0),
+                radius=0.5,
+                result=Offset(0.2, 0.0),
+                moved=Offset.zero(),
+                samples=[MotionSample(Offset(0.2, 0.5), 10050.0, 0.0)],
+                binned=[(0.0, 10050.0), (math.pi, 9950.0)],
+                fit_c0=10000.0,
+                fit_a=50.0,
+                fit_b=0.0,
+                fit_amp=50.0,
+                fit_noise=1.0,
+                rejected=False,
+            )
+        ],
+        search_for="max",
+    )
+    assert fig is not None
+    assert fig.layout.meta["eddy_chart"] == "wide"
+    header = fig.layout.meta["eddy_header"]
+    assert "Circle harmonic" in header["title"]
 
 
 def test_centroid_on_session_end_returns_plot_path(requires_plotly, tmp_path):
