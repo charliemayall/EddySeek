@@ -16,8 +16,8 @@ from _eddy_seek.harmonic import (
     HarmonicFit,
     bin_samples_by_angle,
     binned_to_motion_samples,
+    circle_arc_legs,
     circle_in_jog_box,
-    circle_legs,
     fit_first_harmonic,
     fit_second_harmonic_amplitude,
     harmonic_bootstrap_diverged,
@@ -60,7 +60,13 @@ def test_circle_in_jog_box_clips_boundary():
     trace_center, trace_radius = circle_in_jog_box(center, 0.5, 5.0, 5.0)
     assert trace_center.x < center.x
     assert trace_radius <= 0.5
-    assert circle_legs(trace_center, trace_radius, 36)
+    legs = circle_arc_legs(trace_center, trace_radius, 1.0)
+    assert len(legs) >= 3
+
+
+def test_circle_arc_legs_segment_count():
+    assert len(circle_arc_legs(Offset.zero(), 1.0, 1.0)) == 6
+    assert len(circle_arc_legs(Offset.zero(), 0.5, 1.0)) == 3
 
 
 def test_fit_first_harmonic_recovers_known_offset():

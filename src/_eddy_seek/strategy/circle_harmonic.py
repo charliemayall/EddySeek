@@ -19,8 +19,8 @@ from ..harmonic import (
     HarmonicFit,
     bin_samples_by_angle,
     binned_to_motion_samples,
+    circle_arc_legs,
     circle_in_jog_box,
-    circle_legs,
     circle_radius_for_pass,
     fit_first_harmonic,
     harmonic_bootstrap_diverged,
@@ -74,7 +74,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         logger.debug(
             f"eddy_seek: circle_harmonic coarse={cfg.sweep_coarse_speed / 60.0:.2f} mm/s "
             f"circle={cfg.circle_speed / 60.0:.2f} mm/s "
-            f"segments={cfg.circle_segments} "
+            f"arc_res={cfg.circle_arc_resolution} "
             f"refresh_sweeps={cfg.circle_refresh_sweeps} "
             f"skip_bootstrap={cfg.circle_skip_bootstrap} "
             f"slope_only={cfg.circle_bootstrap_slope_only}"
@@ -312,7 +312,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             self._frozen = bootstrap
             return bootstrap
 
-        legs = circle_legs(trace_center, trace_radius, cfg.circle_segments)
+        legs = circle_arc_legs(trace_center, trace_radius, cfg.circle_arc_resolution)
         if not legs:
             self._frozen = bootstrap
             return bootstrap
@@ -325,7 +325,8 @@ class CircleHarmonicStrategy(SeekStrategy):
             ),  # try to get a sample per segment
         )
         logger.debug(
-            f"eddy_seek: circle_harmonic pass {pass_num} clamped_speed={clamped_speed:.4f} mm/s"
+            f"eddy_seek: circle_harmonic pass {pass_num} "
+            f"arc_segments={len(legs)} clamped_speed={clamped_speed:.4f} mm/s"
         )
 
         if cfg.circle_refresh_sweeps:
@@ -339,7 +340,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"{len(samples)} samples (need >= 3)"
             )
 
-        binned = bin_samples_by_angle(samples, trace_center, cfg.circle_segments)
+        binned = bin_samples_by_angle(samples, trace_center, len(legs))
         fit_samples = binned_to_motion_samples(trace_center, trace_radius, binned)
         fit = fit_first_harmonic(fit_samples, trace_center)
         if fit is None:

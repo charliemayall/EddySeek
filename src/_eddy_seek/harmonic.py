@@ -21,7 +21,7 @@ from .movement.handler import MotionSample
 
 logger = getLogger(__name__)
 
-_MIN_RADIAL_SLOPE = 1e-3
+_MIN_RADIAL_SLOPE = 1e-3  # minimum radial slope to use Newton step
 _TWO_PI = 2.0 * math.pi
 
 
@@ -37,14 +37,19 @@ class HarmonicFit:
     n: int
 
 
-def circle_legs(
+def circle_arc_legs(
     center: Offset,
     radius: float,
-    segments: int,
+    resolution: float,
 ) -> list[tuple[Offset, Offset]]:
-    """Polygon approximation of one revolution at ``radius`` around ``center``."""
-    if segments < 3 or radius <= 0.0:
+    """One revolution as short chords; segment count from arc length / ``resolution``.
+
+    Same rule as Klipper ``[gcode_arcs]``: ``floor(circumference / resolution)``,
+    minimum 3 segments.
+    """
+    if radius <= 0.0 or resolution <= 0.0:
         return []
+    segments = max(3, math.floor(_TWO_PI * radius / resolution))
     legs: list[tuple[Offset, Offset]] = []
     for index in range(segments):
         theta0 = _TWO_PI * index / segments

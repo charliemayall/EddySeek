@@ -117,8 +117,8 @@ class SeekConfig:
     circle_shrink: float = field(
         default=0.5, metadata={"gcode": "CIRCLE_SHRINK", "positive": True}
     )
-    circle_segments: int = field(
-        default=36, metadata={"gcode": "CIRCLE_SEGMENTS", "min": 3}
+    circle_arc_resolution: float = field(
+        default=1.0, metadata={"gcode": "CIRCLE_ARC_RESOLUTION", "positive": True}
     )
     circle_speed: float = field(
         default=600.0,
