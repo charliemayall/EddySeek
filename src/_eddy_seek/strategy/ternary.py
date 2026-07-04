@@ -241,18 +241,18 @@ class TernaryPlotter(StrategyPlotter):
 
         pass_nums = sorted(passes, reverse=False)
         pass_rows: list[dict[str, str]] = []
+
         for pass_num in pass_nums:
             color = pass_color(pass_num)
             group = passes[pass_num]
+            ternary_steps = [
+                record for record in group if isinstance(record, TernaryStepRecord)
+            ]
             x_steps = [
-                record
-                for record in group
-                if isinstance(record, TernaryStepRecord) and record.axis == Axis.X.value
+                record for record in ternary_steps if record.axis == Axis.X.value
             ]
             y_steps = [
-                record
-                for record in group
-                if isinstance(record, TernaryStepRecord) and record.axis == Axis.Y.value
+                record for record in ternary_steps if record.axis == Axis.Y.value
             ]
             for record in group:
                 if isinstance(record, ScatterRecord):

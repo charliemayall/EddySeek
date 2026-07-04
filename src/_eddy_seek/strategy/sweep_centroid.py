@@ -221,13 +221,8 @@ class SweepCentroidPlotter(StrategyPlotter):
                 elif isinstance(record, BoxRecord):
                     add_box(fig, record, color)
                 elif isinstance(record, MarkerRecord):
-                    size = (
-                        14
-                        if pass_num == pass_nums[-1] and record.symbol == "star"
-                        else 11
-                    )
-                    if record.symbol == "x":
-                        size = 10
+                    size = 11 if record.symbol == "star" else 10
+
                     add_marker(fig, record, color, size=size)
 
             scatter = next(
