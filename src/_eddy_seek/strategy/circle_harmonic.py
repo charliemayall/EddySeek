@@ -22,7 +22,7 @@ from ..harmonic import (
     circle_radius_for_pass,
     fit_first_harmonic,
     harmonic_converged,
-    harmonic_model_accepted,
+    harmonic_reject_reasons,
     harmonic_step_v2,
     radial_slope,
 )
@@ -46,6 +46,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._x_profile: list[tuple[float, float]] = []
         self._y_profile: list[tuple[float, float]] = []
         self._frozen: Offset | None = None
+        self._last_pass_rejected = False
         self._last_plot_passes = 0
 
     @property
@@ -72,7 +73,60 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._plotter = None
         self._bootstrap = None
         self._frozen = None
+        self._last_pass_rejected = False
         return None
+
+    def search(self, ctx: SeekSession, console: KConsole) -> tuple[Offset, int]:
+        """Keep trying smaller circle radii after a rejected harmonic fit."""
+        from .base import _check_pass_divergence
+
+        cfg = ctx.config
+        best = Offset.zero()
+        positions = [best]
+        passes_run = 0
+
+        for pass_num in range(1, cfg.max_passes + 1):
+            passes_run = pass_num
+            logger.debug(
+                f"eddy_seek: {self.name} pass {pass_num} start "
+                f"best=({best.x:.4f}, {best.y:.4f})"
+            )
+            self._last_pass_rejected = False
+            new = self._step(ctx, pass_num, best)
+            moved = (new - best).abs_components()
+            console.info(self._pass_message(pass_num, new, moved, ctx))
+            positions.append(new)
+            _check_pass_divergence(
+                positions, tolerance=cfg.tolerance, pass_num=pass_num
+            )
+            best = new
+
+            if self._frozen is not None:
+                logger.debug(
+                    f"eddy_seek: {self.name} finished after pass {pass_num} "
+                    f"(frozen at {best.x:.4f}, {best.y:.4f})"
+                )
+                break
+
+            if moved.x < cfg.tolerance and moved.y < cfg.tolerance:
+                if self._last_pass_rejected:
+                    logger.debug(
+                        f"eddy_seek: {self.name} pass {pass_num} rejected "
+                        f"- retrying with smaller circle if passes remain"
+                    )
+                    continue
+                logger.debug(
+                    f"eddy_seek: {self.name} converged after pass {pass_num} "
+                    f"(moved {moved.x:.4f}, {moved.y:.4f})"
+                )
+                break
+        else:
+            logger.debug(
+                f"eddy_seek: {self.name} hit max_passes={cfg.max_passes} "
+                "without convergence"
+            )
+
+        return best, passes_run
 
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         if self._frozen is not None:
@@ -198,23 +252,26 @@ class CircleHarmonicStrategy(SeekStrategy):
         fit_samples = binned_to_motion_samples(trace_center, trace_radius, binned)
         fit = fit_first_harmonic(fit_samples, trace_center)
         if fit is None:
+            self._last_pass_rejected = True
             logger.warning(
-                f"eddy_seek: circle_harmonic pass {pass_num} fit failed - bootstrap"
+                f"eddy_seek: circle_harmonic pass {pass_num} fit failed "
+                f"(r={trace_radius:.3f}) - holding bootstrap"
             )
-            self._frozen = bootstrap
             return bootstrap
 
-        if not harmonic_model_accepted(
+        reject_reasons = harmonic_reject_reasons(
             fit,
             binned,
             noise_k=cfg.noise_k,
             min_quality=cfg.harmonic_min_quality,
-        ):
+        )
+        if reject_reasons:
+            self._last_pass_rejected = True
             logger.warning(
                 f"eddy_seek: circle_harmonic pass {pass_num} model rejected "
-                f"(amp={fit.amplitude:.4f} noise={fit.noise:.4f}) - bootstrap"
+                f"(r={trace_radius:.3f} amp={fit.amplitude:.4f} "
+                f"noise={fit.noise:.4f}): {', '.join(reject_reasons)}"
             )
-            self._frozen = bootstrap
             return bootstrap
 
         f_prime = radial_slope(self._x_profile, self._y_profile, trace_radius)
@@ -229,11 +286,11 @@ class CircleHarmonicStrategy(SeekStrategy):
         result = unclamped.clamp(cfg.max_jog_x, cfg.max_jog_y)
 
         if result.distance_to(bootstrap) > cfg.tolerance:
+            self._last_pass_rejected = True
             logger.warning(
                 f"eddy_seek: circle_harmonic pass {pass_num} diverged from bootstrap "
                 f"({result.x:.4f}, {result.y:.4f}) vs ({bootstrap.x:.4f}, {bootstrap.y:.4f})"
             )
-            self._frozen = bootstrap
             return bootstrap
 
         if harmonic_converged(fit, step, cfg.tolerance, cfg.noise_k):

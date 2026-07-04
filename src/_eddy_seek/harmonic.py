@@ -237,6 +237,29 @@ def fit_second_harmonic_amplitude(
     return math.hypot(a2, b2)
 
 
+def harmonic_reject_reasons(
+    fit: HarmonicFit,
+    binned: Sequence[tuple[float, float]],
+    *,
+    noise_k: float,
+    min_quality: float,
+) -> list[str]:
+    """Human-readable reasons ``harmonic_model_accepted`` would reject the fit."""
+    reasons: list[str] = []
+    snr_floor = noise_k * fit.noise
+    if fit.amplitude < snr_floor:
+        reasons.append(
+            f"snr (amp={fit.amplitude:.2f} < {noise_k}×noise={snr_floor:.2f})"
+        )
+    quality = harmonic_fit_quality(fit, binned)
+    if quality < min_quality:
+        reasons.append(f"quality ({quality:.2f} < {min_quality})")
+    h2 = fit_second_harmonic_amplitude(binned)
+    if h2 >= fit.amplitude:
+        reasons.append(f"h2 ({h2:.2f} >= amp={fit.amplitude:.2f})")
+    return reasons
+
+
 def harmonic_model_accepted(
     fit: HarmonicFit,
     binned: Sequence[tuple[float, float]],
@@ -244,13 +267,9 @@ def harmonic_model_accepted(
     noise_k: float,
     min_quality: float,
 ) -> bool:
-    if fit.amplitude < noise_k * fit.noise:
-        return False
-    if harmonic_fit_quality(fit, binned) < min_quality:
-        return False
-    if fit_second_harmonic_amplitude(binned) >= fit.amplitude:
-        return False
-    return True
+    return not harmonic_reject_reasons(
+        fit, binned, noise_k=noise_k, min_quality=min_quality
+    )
 
 
 def radial_slope(

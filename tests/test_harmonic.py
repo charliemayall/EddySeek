@@ -11,6 +11,7 @@ import math
 import pytest
 
 from _eddy_seek.common import Offset
+from _eddy_seek.config import SeekConfig
 from _eddy_seek.harmonic import (
     HarmonicFit,
     bin_samples_by_angle,
@@ -22,6 +23,7 @@ from _eddy_seek.harmonic import (
     harmonic_converged,
     harmonic_fit_quality,
     harmonic_model_accepted,
+    harmonic_reject_reasons,
     harmonic_step_v2,
     radial_slope,
 )
@@ -180,6 +182,48 @@ def test_composite_field_large_radius_accepted():
 def test_harmonic_converged_noise_floor():
     fit = HarmonicFit(c0=0.0, a=0.0, b=0.0, amplitude=0.5, noise=0.5, n=36)
     assert harmonic_converged(fit, Offset(1.0, 1.0), 0.05, 2.0)
+
+
+def test_harmonic_reject_reasons_lists_failures():
+    fit = HarmonicFit(c0=0.0, a=1.0, b=0.0, amplitude=1.0, noise=1.0, n=36)
+    binned = [
+        (2.0 * math.pi * i / 36.0, 1.0 + math.cos(2.0 * math.pi * i / 36.0))
+        for i in range(36)
+    ]
+    reasons = harmonic_reject_reasons(fit, binned, noise_k=2.0, min_quality=0.5)
+    assert reasons
+    assert any("snr" in reason for reason in reasons)
+
+
+def test_circle_harmonic_search_retries_after_rejected_pass():
+    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
+
+    class _FakeReporter:
+        def info(self, msg: str) -> None:
+            pass
+
+    class _RetrySession:
+        config = SeekConfig(max_passes=4, tolerance=0.05)
+
+    strategy = CircleHarmonicStrategy()
+    calls: list[int] = []
+
+    def fake_step(_ctx, pass_num, best):
+        calls.append(pass_num)
+        if pass_num == 1:
+            return Offset(1.0, 0.0)
+        if pass_num == 2:
+            strategy._last_pass_rejected = True
+            return Offset(1.0, 0.0)
+        if pass_num == 3:
+            return Offset(0.96, 0.0)
+        return best
+
+    strategy._step = fake_step  # type: ignore[method-assign]
+    best, passes_run = strategy.search(_RetrySession(), _FakeReporter())  # type: ignore[arg-type]
+    assert passes_run == 3
+    assert calls == [1, 2, 3]
+    assert best.x == pytest.approx(0.96)
 
 
 def test_radial_slope_asymmetric_paraboloid():
