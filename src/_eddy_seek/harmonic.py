@@ -13,10 +13,13 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from logging import getLogger
 from statistics import median
 
 from .common import Offset
 from .movement.handler import MotionSample
+
+logger = getLogger(__name__)
 
 _MIN_RADIAL_SLOPE = 1e-3
 _TWO_PI = 2.0 * math.pi
@@ -69,6 +72,10 @@ def circle_in_jog_box(
     margin_x = max_x - abs(safe_center.x)
     margin_y = max_y - abs(safe_center.y)
     safe_radius = min(radius, margin_x, margin_y)
+    if radius > max(margin_x, margin_y):
+        logger.warning(
+            f"Circle radius {radius} is too large for jog box {max_x}x{max_y}"
+        )
     return safe_center, max(safe_radius, 0.0)
 
 
