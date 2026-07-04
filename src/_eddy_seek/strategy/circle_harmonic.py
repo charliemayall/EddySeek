@@ -11,6 +11,7 @@ Circle-harmonic strategy: sweep bootstrap + guarded first-harmonic nulling.
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 
 from ..common import Axis, Offset, Phase, samples_in_box, search_box
@@ -255,12 +256,16 @@ class CircleHarmonicStrategy(SeekStrategy):
         if not legs:
             self._frozen = bootstrap
             return bootstrap
+        circumfrence = 2 * math.pi * radius
         clamped_speed = get_clamped_speed_for_min_samples_over_span(
             requested_mm_min=cfg.circle_speed,
-            span_mm=sum(leg_end.distance_to(leg_start) for leg_start, leg_end in legs),
+            span_mm=circumfrence,  # approx equal, we are doing a polygon, not a circle
             min_samples=max(
                 cfg.min_sweep_samples, len(legs)
             ),  # try to get a sample per segment
+        )
+        logger.debug(
+            f"eddy_seek: circle_harmonic pass {pass_num} clamped_speed={clamped_speed:.4f} mm/s"
         )
 
         self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
