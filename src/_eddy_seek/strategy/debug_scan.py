@@ -141,4 +141,4 @@ class DebugScanStrategy(SeekStrategy):
         logger.debug(
             f"eddy_seek: debug_scan pass {pass_num} moved=({moved.x:.4f}, {moved.y:.4f})"
         )
-        return f"Pass {pass_num}: X={new.x:+.4f} Y={new.y:+.4f} mm"
+        return f"Pass {pass_num}: {new.to_delta_str()}"

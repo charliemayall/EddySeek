@@ -170,7 +170,7 @@ class SweepCentroidStrategy(SeekStrategy):
             f"eddy_seek: sweep_centroid pass {pass_num} ({phase}) "
             f"moved=({moved.x:.4f}, {moved.y:.4f})"
         )
-        return f"Pass {pass_num} ({phase}): X={new.x:+.4f} Y={new.y:+.4f} mm"
+        return f"Pass {pass_num} ({phase}): {new.to_delta_str()}"
 
     def _sweep_axis(
         self,

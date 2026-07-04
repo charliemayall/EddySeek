@@ -182,8 +182,7 @@ class SeekSession:
             )
             if boundaries:
                 console.exit(
-                    f"Done - offset X={best.x:+.4f} Y={best.y:+.4f} mm "
-                    f"({passes_run} passes)"
+                    f"Done - offset {best.to_delta_str()} ({passes_run} passes)"
                 )
             status = "ok"
             offset = best

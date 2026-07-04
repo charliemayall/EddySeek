@@ -92,11 +92,7 @@ class CircleHarmonicStrategy(SeekStrategy):
     ) -> str:
         if pass_num == 1:
             return f"Pass {pass_num} (bootstrap): X={new.x:+.4f} Y={new.y:+.4f} mm"
-        return (
-            f"Pass {pass_num} (circle): "
-            f"X={new.x:+.4f} Y={new.y:+.4f} mm  "
-            f"(moved {moved.to_delta_str()})"
-        )
+        return f"Pass {pass_num} (circle): {new.to_delta_str()}"
 
     def _bootstrap_pass(
         self,

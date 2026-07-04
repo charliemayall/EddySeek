@@ -87,9 +87,9 @@ class TernaryStrategy(SeekStrategy):
         ctx: SeekSession,
     ) -> str:
         logger.debug(
-            f"eddy_seek: ternary pass {pass_num} moved=({moved.x:.4f}, {moved.y:.4f})"
+            f"eddy_seek: ternary pass {pass_num} moved=({moved.x:.4f}, {moved.y:.4f}) Moved: {moved.to_delta_str()}"
         )
-        return f"Pass {pass_num}: X={new.x:+.4f} Y={new.y:+.4f} mm"
+        return f"Pass {pass_num}: {new.to_delta_str()}"
 
     def _ternary_search_1d(
         self,
