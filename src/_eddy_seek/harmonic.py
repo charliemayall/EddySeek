@@ -14,7 +14,6 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from logging import getLogger
-from statistics import median
 
 from .common import Offset
 from .movement.handler import MotionSample
@@ -105,7 +104,7 @@ def bin_samples_by_angle(
     for index, freqs in enumerate(bucket_freqs):
         if freqs:
             theta = _TWO_PI * (index + 0.5) / bins
-            result.append((theta, median(freqs)))
+            result.append((theta, sum(freqs) / len(freqs)))
     return result
 
 
