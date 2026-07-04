@@ -324,7 +324,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 cfg.min_sweep_samples, 2 * len(legs)
             ),  # try to force ~2 samples per segment
         )
-        logger.debug(
+        logger.info(
             f"eddy_seek: circle_harmonic pass {pass_num} "
             f"arc_segments={len(legs)} clamped_speed={clamped_speed:.4f} mm/s"
         )
@@ -333,7 +333,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
         samples = get_samples_from_capture_legs(ctx, legs, clamped_speed)
-        logger.debug(
+        logger.info(
             f"eddy_seek: circle_harmonic pass {pass_num} collected {len(samples)} --> {len(samples) / len(legs):.2f} samples per segment"
         )
 
