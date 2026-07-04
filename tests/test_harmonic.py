@@ -277,6 +277,38 @@ def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one()
     assert result == Offset.zero()
 
 
+def test_circle_harmonic_slope_only_search_continues_to_circles():
+    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
+
+    class _FakeReporter:
+        def info(self, msg: str) -> None:
+            pass
+
+    class _SlopeOnlySession:
+        config = SeekConfig(
+            circle_bootstrap_slope_only=True,
+            max_passes=4,
+            tolerance=0.05,
+        )
+
+    strategy = CircleHarmonicStrategy()
+    calls: list[int] = []
+
+    def fake_step(_ctx, pass_num, best):
+        calls.append(pass_num)
+        if pass_num == 1:
+            return best
+        if pass_num == 2:
+            return Offset(0.1, 0.0)
+        return best
+
+    strategy._step = fake_step  # type: ignore[method-assign]
+    best, passes_run = strategy.search(_SlopeOnlySession(), _FakeReporter())  # type: ignore[arg-type]
+    assert calls == [1, 2, 3]
+    assert passes_run == 3
+    assert best.x == pytest.approx(0.1)
+
+
 def test_circle_harmonic_search_retries_after_rejected_pass():
     from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
 

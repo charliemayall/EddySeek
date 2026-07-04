@@ -130,6 +130,12 @@ class CircleHarmonicStrategy(SeekStrategy):
                         f"- retrying with smaller circle if passes remain"
                     )
                     continue
+                if cfg.circle_bootstrap_slope_only and pass_num == 1:
+                    logger.debug(
+                        f"eddy_seek: {self.name} slope-only bootstrap done "
+                        f"- continuing to circle passes"
+                    )
+                    continue
                 logger.debug(
                     f"eddy_seek: {self.name} converged after pass {pass_num} "
                     f"(moved {moved.x:.4f}, {moved.y:.4f})"
