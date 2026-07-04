@@ -215,6 +215,27 @@ def test_harmonic_reject_reasons_lists_failures():
     assert any("snr" in reason for reason in reasons)
 
 
+def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one():
+    from unittest.mock import MagicMock, patch
+
+    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
+
+    strategy = CircleHarmonicStrategy()
+    ctx = MagicMock()
+    ctx.config = SeekConfig(circle_skip_bootstrap=True)
+
+    with patch.object(strategy, "_bootstrap_pass") as bootstrap:
+        with patch.object(
+            strategy, "_circle_pass", return_value=Offset.zero()
+        ) as circle:
+            result = strategy._step(ctx, 1, Offset.zero())
+
+    bootstrap.assert_not_called()
+    circle.assert_called_once_with(ctx, 1, Offset.zero())
+    assert strategy._bootstrap == Offset.zero()
+    assert result == Offset.zero()
+
+
 def test_circle_harmonic_search_retries_after_rejected_pass():
     from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
 

@@ -135,6 +135,10 @@ class SeekConfig:
         default=False,
         metadata={"gcode": "CIRCLE_REFRESH_SWEEPS", "bool": True},
     )
+    circle_skip_bootstrap: bool = field(
+        default=False,
+        metadata={"gcode": "CIRCLE_SKIP_BOOTSTRAP", "bool": True},
+    )
     debug: bool = field(default=False, metadata={"bool": True})
 
     def __post_init__(self) -> None:

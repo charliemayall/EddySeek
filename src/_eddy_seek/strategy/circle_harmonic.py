@@ -71,7 +71,8 @@ class CircleHarmonicStrategy(SeekStrategy):
             f"eddy_seek: circle_harmonic coarse={cfg.sweep_coarse_speed / 60.0:.2f} mm/s "
             f"circle={cfg.circle_speed / 60.0:.2f} mm/s "
             f"segments={cfg.circle_segments} "
-            f"refresh_sweeps={cfg.circle_refresh_sweeps}"
+            f"refresh_sweeps={cfg.circle_refresh_sweeps} "
+            f"skip_bootstrap={cfg.circle_skip_bootstrap}"
         )
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
@@ -141,6 +142,11 @@ class CircleHarmonicStrategy(SeekStrategy):
         if self._frozen is not None:
             return self._frozen
 
+        if ctx.config.circle_skip_bootstrap:
+            if self._bootstrap is None:
+                self._bootstrap = best
+            return self._circle_pass(ctx, pass_num, best)
+
         if pass_num == 1:
             return self._bootstrap_pass(ctx, pass_num, best)
 
@@ -153,7 +159,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         moved: Offset,
         ctx: SeekSession,
     ) -> str:
-        if pass_num == 1:
+        if pass_num == 1 and not ctx.config.circle_skip_bootstrap:
             return f"Pass {pass_num} (bootstrap): X={new.x:+.4f} Y={new.y:+.4f} mm"
         return f"Pass {pass_num} (circle): {new.to_delta_str()}"
 
@@ -236,8 +242,9 @@ class CircleHarmonicStrategy(SeekStrategy):
         cfg = ctx.config
         bootstrap = self._bootstrap if self._bootstrap is not None else best
 
+        circle_pass_num = pass_num if cfg.circle_skip_bootstrap else pass_num - 1
         radius = circle_radius_for_pass(
-            pass_num,
+            circle_pass_num + 1,
             radius_start=cfg.circle_radius_start,
             radius_min=cfg.circle_radius_min,
             radius_shrink=cfg.circle_shrink,
