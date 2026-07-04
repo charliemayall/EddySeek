@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 from fakes import fake_motion_printer
 from pytest import raises
 
-from _eddy_seek.common import Axis, Offset, Position, samples_in_box, search_box
+from _eddy_seek.common import Axis, Offset, Phase, Position, samples_in_box, search_box
 from _eddy_seek.movement.handler import (
     MotionHandler,
     MotionSample,
@@ -19,7 +19,11 @@ from _eddy_seek.movement.handler import (
     axis_profile,
     get_clamped_speed_for_min_samples_over_span,
 )
-from _eddy_seek.movement.leg_planner import iter_cross_offsets, traversal_endpoints
+from _eddy_seek.movement.leg_planner import (
+    iter_cross_offsets,
+    sweep_axis,
+    traversal_endpoints,
+)
 
 
 def _make_handler(printer, origin: Position = Position.zero()) -> MotionHandler:
@@ -153,3 +157,28 @@ def test_speed_clamp_for_min_samples_leaves_slow_request():
         )
         == 1200.0
     )
+
+
+def test_sweep_axis_clamps_speed_for_short_in_range_span():
+    ctx = MagicMock()
+    ctx.config.min_sweep_samples = 20
+    ctx.config.sweep_overscan = 1.0
+    ctx.session_start = Position.zero()
+    handler = MagicMock()
+    ctx.motion = handler
+    handler.collect_samples.return_value = []
+
+    speed = 1800.0
+    lo, hi = 0.5, 1.5
+    expected = get_clamped_speed_for_min_samples_over_span(
+        requested_mm_min=speed,
+        span_mm=hi - lo,
+        min_samples=20,
+    )
+    assert expected < speed
+
+    sweep_axis(ctx, Axis.X, lo, hi, 0.0, [0.0], speed, Phase.FINE, 2)
+
+    handler.run_capture_legs.assert_called_once()
+    assert handler.run_capture_legs.call_args.args[1] == expected
+    assert handler.run_capture_legs.call_args.kwargs["clamp"] is False

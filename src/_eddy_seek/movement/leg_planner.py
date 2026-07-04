@@ -18,7 +18,6 @@ from ..session import SeekSession
 from .handler import (
     MotionSample,
     axis_profile,
-    get_clamped_speed_for_min_samples_over_span,
 )
 
 logger = logging.getLogger(__name__)
@@ -149,13 +148,8 @@ def sweep_axis(
     cfg = ctx.config
     if hi < lo:
         lo, hi = hi, lo
-    clamped_speed = get_clamped_speed_for_min_samples_over_span(
-        requested_mm_min=speed,
-        span_mm=hi - lo,
-        min_samples=cfg.min_sweep_samples,
-    )
     legs = plan_axis_legs(axis, lo, hi, cross_center, cross_offsets, cfg.sweep_overscan)
-    samples = get_samples_from_capture_legs(ctx, legs, clamped_speed)
+    samples = get_samples_from_capture_legs(ctx, legs, speed)
     points = axis_profile(samples, axis, lo, hi)
 
     logger.debug(
