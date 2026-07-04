@@ -322,9 +322,16 @@ def harmonic_bootstrap_divergence_limit(
     bootstrap: Offset,
     trace_radius: float,
     tolerance: float,
+    *,
+    anchor_floor: float = 0.0,
 ) -> float:
     """Max |result - bootstrap| before the harmonic correction is distrusted."""
-    return max(tolerance, trace_radius, bootstrap.distance_to(Offset.zero()))
+    return max(
+        tolerance,
+        trace_radius,
+        bootstrap.distance_to(Offset.zero()),
+        anchor_floor,
+    )
 
 
 def harmonic_bootstrap_diverged(
@@ -332,9 +339,11 @@ def harmonic_bootstrap_diverged(
     bootstrap: Offset,
     trace_radius: float,
     tolerance: float,
+    *,
+    anchor_floor: float = 0.0,
 ) -> bool:
     return result.distance_to(bootstrap) > harmonic_bootstrap_divergence_limit(
-        bootstrap, trace_radius, tolerance
+        bootstrap, trace_radius, tolerance, anchor_floor=anchor_floor
     )
 
 

@@ -204,6 +204,18 @@ def test_harmonic_bootstrap_divergence_scales_with_offset_and_radius():
     )
 
 
+def test_harmonic_bootstrap_divergence_anchor_floor():
+    bootstrap = Offset.zero()
+    refined = Offset(1.04, 0.0)
+    assert not harmonic_bootstrap_diverged(
+        refined,
+        bootstrap,
+        trace_radius=0.3125,
+        tolerance=0.05,
+        anchor_floor=2.5,
+    )
+
+
 def test_harmonic_reject_reasons_lists_failures():
     fit = HarmonicFit(c0=0.0, a=1.0, b=0.0, amplitude=1.0, noise=1.0, n=36)
     binned = [
@@ -213,6 +225,35 @@ def test_harmonic_reject_reasons_lists_failures():
     reasons = harmonic_reject_reasons(fit, binned, noise_k=2.0, min_quality=0.5)
     assert reasons
     assert any("snr" in reason for reason in reasons)
+
+
+def test_circle_harmonic_slope_only_bootstrap_holds_center_and_keeps_profiles():
+    from unittest.mock import MagicMock, patch
+
+    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
+
+    strategy = CircleHarmonicStrategy()
+    ctx = MagicMock()
+    ctx.config = SeekConfig(circle_bootstrap_slope_only=True, search_for="min")
+
+    samples_x = [
+        MagicMock(offset=Offset(x, 0.0), freq=100.0 - 5.0 * x * x)
+        for x in [i * 0.1 for i in range(-10, 11)]
+    ]
+    samples_y = [
+        MagicMock(offset=Offset(0.0, y), freq=100.0 - 5.0 * y * y)
+        for y in [i * 0.1 for i in range(-10, 11)]
+    ]
+
+    with patch.object(
+        strategy, "_sweep_axis", side_effect=[([], samples_x), ([], samples_y)]
+    ):
+        result = strategy._bootstrap_pass(ctx, 1, Offset.zero())
+
+    assert result == Offset.zero()
+    assert strategy._bootstrap == Offset.zero()
+    assert len(strategy._x_profile) == len(samples_x)
+    assert len(strategy._y_profile) == len(samples_y)
 
 
 def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one():

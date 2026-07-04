@@ -105,6 +105,21 @@ def test_load_seek_config_circle_skip_bootstrap():
     )
 
 
+def test_load_seek_config_circle_bootstrap_slope_only():
+    assert load_seek_config(FakeKlipperConfig()).circle_bootstrap_slope_only is False
+    assert (
+        load_seek_config(
+            FakeKlipperConfig(circle_bootstrap_slope_only="true")
+        ).circle_bootstrap_slope_only
+        is True
+    )
+
+
+def test_seek_config_rejects_slope_only_with_skip_bootstrap():
+    with raises(ValueError, match="mutually exclusive"):
+        SeekConfig(circle_skip_bootstrap=True, circle_bootstrap_slope_only=True)
+
+
 def test_load_seek_config_rejects_circle_radius_min_above_start():
     with raises(ValueError, match="circle_radius_min"):
         SeekConfig(circle_radius_start=0.5, circle_radius_min=1.0)

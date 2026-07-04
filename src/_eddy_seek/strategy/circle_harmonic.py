@@ -76,7 +76,8 @@ class CircleHarmonicStrategy(SeekStrategy):
             f"circle={cfg.circle_speed / 60.0:.2f} mm/s "
             f"segments={cfg.circle_segments} "
             f"refresh_sweeps={cfg.circle_refresh_sweeps} "
-            f"skip_bootstrap={cfg.circle_skip_bootstrap}"
+            f"skip_bootstrap={cfg.circle_skip_bootstrap} "
+            f"slope_only={cfg.circle_bootstrap_slope_only}"
         )
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
@@ -163,8 +164,14 @@ class CircleHarmonicStrategy(SeekStrategy):
         moved: Offset,
         ctx: SeekSession,
     ) -> str:
-        if pass_num == 1 and not ctx.config.circle_skip_bootstrap:
-            return f"Pass {pass_num} (bootstrap): X={new.x:+.4f} Y={new.y:+.4f} mm"
+        if pass_num == 1:
+            if ctx.config.circle_bootstrap_slope_only:
+                return (
+                    f"Pass {pass_num} (slope cal): "
+                    f"holding X={new.x:+.4f} Y={new.y:+.4f} mm"
+                )
+            if not ctx.config.circle_skip_bootstrap:
+                return f"Pass {pass_num} (bootstrap): X={new.x:+.4f} Y={new.y:+.4f} mm"
         return f"Pass {pass_num} (circle): {new.to_delta_str()}"
 
     def _bootstrap_pass(
@@ -201,6 +208,41 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._y_profile = y_profile
 
         result_or_none = decoupled_centroid(x_profile, y_profile, cfg.search_for)
+        if cfg.circle_bootstrap_slope_only:
+            self._bootstrap = best
+            centroid = (
+                result_or_none.clamp(cfg.max_jog_x, cfg.max_jog_y)
+                if result_or_none is not None
+                else None
+            )
+            if centroid is not None:
+                logger.debug(
+                    f"eddy_seek: circle_harmonic slope-only: "
+                    f"centroid=({centroid.x:.4f}, {centroid.y:.4f}) ignored, "
+                    f"holding ({best.x:.4f}, {best.y:.4f}) for circle passes"
+                )
+            else:
+                logger.warning(
+                    f"eddy_seek: flat frequency on slope-only bootstrap - "
+                    f"holding ({best.x:.4f}, {best.y:.4f})"
+                )
+            self._record_bootstrap_plot(
+                pass_num,
+                best,
+                best,
+                [*in_box_x, *in_box_y],
+                box,
+            )
+            trace: dict[str, object] = {
+                "type": "circle_harmonic_bootstrap_slope_only",
+                "pass": pass_num,
+                "result": {"x": best.x, "y": best.y},
+            }
+            if centroid is not None:
+                trace["centroid_skipped"] = {"x": centroid.x, "y": centroid.y}
+            ctx.append_trace(trace)
+            return best
+
         if result_or_none is None:
             logger.warning(
                 f"eddy_seek: flat frequency on bootstrap - "
@@ -353,10 +395,21 @@ class CircleHarmonicStrategy(SeekStrategy):
         result = unclamped.clamp(cfg.max_jog_x, cfg.max_jog_y)
 
         divergence = result.distance_to(bootstrap)
-        divergence_limit = harmonic_bootstrap_divergence_limit(
-            bootstrap, trace_radius, cfg.tolerance
+        anchor_floor = (
+            math.hypot(cfg.max_jog_x, cfg.max_jog_y)
+            if cfg.circle_skip_bootstrap or cfg.circle_bootstrap_slope_only
+            else 0.0
         )
-        if harmonic_bootstrap_diverged(result, bootstrap, trace_radius, cfg.tolerance):
+        divergence_limit = harmonic_bootstrap_divergence_limit(
+            bootstrap, trace_radius, cfg.tolerance, anchor_floor=anchor_floor
+        )
+        if harmonic_bootstrap_diverged(
+            result,
+            bootstrap,
+            trace_radius,
+            cfg.tolerance,
+            anchor_floor=anchor_floor,
+        ):
             self._last_pass_rejected = True
             logger.warning(
                 f"eddy_seek: circle_harmonic pass {pass_num} diverged from bootstrap "
