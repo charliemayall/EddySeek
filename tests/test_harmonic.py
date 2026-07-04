@@ -20,6 +20,8 @@ from _eddy_seek.harmonic import (
     circle_legs,
     fit_first_harmonic,
     fit_second_harmonic_amplitude,
+    harmonic_bootstrap_diverged,
+    harmonic_bootstrap_divergence_limit,
     harmonic_converged,
     harmonic_fit_quality,
     harmonic_model_accepted,
@@ -182,6 +184,24 @@ def test_composite_field_large_radius_accepted():
 def test_harmonic_converged_noise_floor():
     fit = HarmonicFit(c0=0.0, a=0.0, b=0.0, amplitude=0.5, noise=0.5, n=36)
     assert harmonic_converged(fit, Offset(1.0, 1.0), 0.05, 2.0)
+
+
+def test_harmonic_bootstrap_divergence_scales_with_offset_and_radius():
+    bootstrap = Offset(-0.6655, -0.0026)
+    limit = harmonic_bootstrap_divergence_limit(
+        bootstrap, trace_radius=0.5, tolerance=0.05
+    )
+    assert limit == pytest.approx(bootstrap.distance_to(Offset.zero()))
+
+    refined = Offset(-0.60, -0.0026)
+    assert not harmonic_bootstrap_diverged(
+        refined, bootstrap, trace_radius=0.5, tolerance=0.05
+    )
+
+    wild = Offset(0.5, 0.5)
+    assert harmonic_bootstrap_diverged(
+        wild, bootstrap, trace_radius=0.5, tolerance=0.05
+    )
 
 
 def test_harmonic_reject_reasons_lists_failures():

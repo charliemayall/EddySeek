@@ -22,6 +22,8 @@ from ..harmonic import (
     circle_legs,
     circle_radius_for_pass,
     fit_first_harmonic,
+    harmonic_bootstrap_diverged,
+    harmonic_bootstrap_divergence_limit,
     harmonic_converged,
     harmonic_reject_reasons,
     harmonic_step_v2,
@@ -335,10 +337,15 @@ class CircleHarmonicStrategy(SeekStrategy):
         unclamped = trace_center + step
         result = unclamped.clamp(cfg.max_jog_x, cfg.max_jog_y)
 
-        if result.distance_to(bootstrap) > cfg.tolerance:
+        divergence = result.distance_to(bootstrap)
+        divergence_limit = harmonic_bootstrap_divergence_limit(
+            bootstrap, trace_radius, cfg.tolerance
+        )
+        if harmonic_bootstrap_diverged(result, bootstrap, trace_radius, cfg.tolerance):
             self._last_pass_rejected = True
             logger.warning(
                 f"eddy_seek: circle_harmonic pass {pass_num} diverged from bootstrap "
+                f"Δ={divergence:.4f} > limit {divergence_limit:.4f} "
                 f"({result.x:.4f}, {result.y:.4f}) vs ({bootstrap.x:.4f}, {bootstrap.y:.4f})"
             )
             self._record_circle_plot(
@@ -351,7 +358,9 @@ class CircleHarmonicStrategy(SeekStrategy):
                 binned,
                 fit=fit,
                 rejected=True,
-                reject_reasons="diverged from bootstrap",
+                reject_reasons=(
+                    f"diverged from bootstrap (Δ={divergence:.4f} > {divergence_limit:.4f})"
+                ),
             )
             return bootstrap
 

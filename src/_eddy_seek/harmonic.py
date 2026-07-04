@@ -318,6 +318,26 @@ def harmonic_step_v2(
     return step.clamp(max_jog_x, max_jog_y)
 
 
+def harmonic_bootstrap_divergence_limit(
+    bootstrap: Offset,
+    trace_radius: float,
+    tolerance: float,
+) -> float:
+    """Max |result - bootstrap| before the harmonic correction is distrusted."""
+    return max(tolerance, trace_radius, bootstrap.distance_to(Offset.zero()))
+
+
+def harmonic_bootstrap_diverged(
+    result: Offset,
+    bootstrap: Offset,
+    trace_radius: float,
+    tolerance: float,
+) -> bool:
+    return result.distance_to(bootstrap) > harmonic_bootstrap_divergence_limit(
+        bootstrap, trace_radius, tolerance
+    )
+
+
 def harmonic_converged(
     fit: HarmonicFit,
     step: Offset,
