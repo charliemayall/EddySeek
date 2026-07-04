@@ -54,11 +54,19 @@ class SeekConfig:
         default="max",
         metadata={"gcode": "SEARCH_FOR", "enum": ("min", "max")},
     )
-    strategy: Literal["ternary", "centroid", "sweep_centroid", "debug_scan"] = field(
+    strategy: Literal[
+        "ternary", "centroid", "sweep_centroid", "debug_scan", "circle_harmonic"
+    ] = field(
         default="sweep_centroid",
         metadata={
             "gcode": "STRATEGY",
-            "enum": ("ternary", "centroid", "sweep_centroid", "debug_scan"),
+            "enum": (
+                "ternary",
+                "centroid",
+                "sweep_centroid",
+                "debug_scan",
+                "circle_harmonic",
+            ),
         },
     )
     grid_step_x: float = field(
@@ -99,6 +107,29 @@ class SeekConfig:
     )
     min_sweep_samples: int = field(
         default=20, metadata={"gcode": "MIN_SWEEP_SAMPLES", "min": 3}
+    )
+    circle_radius_start: float = field(
+        default=1.0, metadata={"gcode": "CIRCLE_RADIUS_START", "positive": True}
+    )
+    circle_radius_min: float = field(
+        default=0.5, metadata={"gcode": "CIRCLE_RADIUS_MIN", "positive": True}
+    )
+    circle_shrink: float = field(
+        default=0.5, metadata={"gcode": "CIRCLE_SHRINK", "positive": True}
+    )
+    circle_segments: int = field(
+        default=36, metadata={"gcode": "CIRCLE_SEGMENTS", "min": 3}
+    )
+    circle_speed: float = field(
+        default=600.0,
+        metadata={"gcode": "CIRCLE_SPEED", "positive": True, "speed": True},
+    )
+    noise_k: float = field(default=2.0, metadata={"gcode": "NOISE_K", "positive": True})
+    harmonic_step_gain: float = field(
+        default=0.15, metadata={"gcode": "HARMONIC_STEP_GAIN", "positive": True}
+    )
+    harmonic_min_quality: float = field(
+        default=0.5, metadata={"gcode": "HARMONIC_MIN_QUALITY", "positive": True}
     )
     debug: bool = field(default=False, metadata={"bool": True})
 
@@ -247,6 +278,11 @@ def _validate(cfg: SeekConfig) -> None:
             raise ValueError(
                 f"{spec.name} must be one of {meta['enum']!r} (got {value!r})"
             )
+    if cfg.circle_radius_min > cfg.circle_radius_start:
+        raise ValueError(
+            "circle_radius_min must be <= circle_radius_start "
+            f"(got {cfg.circle_radius_min} > {cfg.circle_radius_start})"
+        )
 
 
 def _config_option_set(config: Any, key: str) -> bool:

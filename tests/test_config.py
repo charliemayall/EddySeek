@@ -68,6 +68,28 @@ def test_load_seek_config_save_plots_wins_over_legacy():
     assert cfg.save_plots is False
 
 
+def test_load_seek_config_circle_harmonic_params():
+    cfg = load_seek_config(
+        FakeKlipperConfig(
+            strategy="circle_harmonic",
+            circle_radius_start="1.2",
+            circle_radius_min="0.5",
+            circle_speed="10",
+            harmonic_step_gain="0.2",
+        )
+    )
+    assert cfg.strategy == "circle_harmonic"
+    assert cfg.circle_radius_start == 1.2
+    assert cfg.circle_radius_min == 0.5
+    assert cfg.circle_speed == 600.0
+    assert cfg.harmonic_step_gain == 0.2
+
+
+def test_load_seek_config_rejects_circle_radius_min_above_start():
+    with raises(ValueError, match="circle_radius_min"):
+        SeekConfig(circle_radius_start=0.5, circle_radius_min=1.0)
+
+
 def test_load_seek_config_debug():
     assert load_seek_config(FakeKlipperConfig()).debug is False
     assert load_seek_config(FakeKlipperConfig(debug="true")).debug is True
