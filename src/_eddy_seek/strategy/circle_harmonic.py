@@ -289,8 +289,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             ctx.recorder.record(
                 CircleBootstrapTraceRecord(
                     pass_num=pass_num,
-                    result_x=result.x,
-                    result_y=result.y,
+                    result=result,
                 )
             )
         return result

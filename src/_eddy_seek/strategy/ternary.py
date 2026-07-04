@@ -195,7 +195,7 @@ def _record_ternary_pass(
         rec.record(
             TernaryStepRecord(
                 pass_num=pass_num,
-                axis=step.axis.value,
+                axis=step.axis,
                 iteration=step.iteration,
                 lo=step.lo,
                 hi=step.hi,

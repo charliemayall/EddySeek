@@ -139,10 +139,10 @@ def add_box(
 ) -> None:
     shape = {
         "type": "rect",
-        "x0": record.x_lo,
-        "x1": record.x_hi,
-        "y0": record.y_lo,
-        "y1": record.y_hi,
+        "x0": record.lo.x,
+        "x1": record.hi.x,
+        "y0": record.lo.y,
+        "y1": record.hi.y,
         "line": {"color": color, "width": 1, "dash": "dot"},
         "fillcolor": "rgba(0,0,0,0)",
     }

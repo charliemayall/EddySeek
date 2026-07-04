@@ -15,7 +15,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from ..common import Axis, Offset, Phase, samples_in_box, search_box
+from ..common import Axis, Offset, Phase, Position, samples_in_box, search_box
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample
 from ..movement.leg_planner import clamped_sweep_axis
@@ -167,7 +167,7 @@ def _record_sweep_centroid_pass(
         )
     )
     x_lo, x_hi, y_lo, y_hi = box
-    rec.record(BoxRecord(pass_num, x_lo, x_hi, y_lo, y_hi))
+    rec.record(BoxRecord(pass_num, Position(x_lo, y_lo), Position(x_hi, y_hi)))
     rec.record(MarkerRecord(pass_num, f"{label} centre", center.x, center.y, "x"))
     rec.record(MarkerRecord(pass_num, f"{label} result", result.x, result.y, "star"))
     if rec.trace:
@@ -175,10 +175,8 @@ def _record_sweep_centroid_pass(
             SweepCentroidTraceRecord(
                 pass_num=pass_num,
                 phase=phase.value,
-                center_x=center.x,
-                center_y=center.y,
-                result_x=result.x,
-                result_y=result.y,
+                center=center,
+                result=result,
                 samples=len(samples),
             )
         )

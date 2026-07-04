@@ -15,7 +15,7 @@ from unittest.mock import patch
 import pytest
 from fakes import PLOT_HTML_SUFFIX, PLOT_SESSION_ID, PLOT_WRITE_AT
 
-from _eddy_seek.common import Axis, Offset, Phase
+from _eddy_seek.common import Axis, Offset, Phase, Position
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.movement.handler import MotionSample
 from _eddy_seek.optimizer import bin_frequencies
@@ -402,14 +402,10 @@ def test_debug_scan_plot_writes_html(requires_plotly, plot_tmp):
     tmp_path, session_id, write_at = plot_tmp
     records = (
         HeatmapRecord(
-            center_x=0.0,
-            center_y=0.0,
-            result_x=0.01,
-            result_y=0.02,
-            x_lo=box[0],
-            x_hi=box[1],
-            y_lo=box[2],
-            y_hi=box[3],
+            center=Offset.zero(),
+            result=Offset(0.01, 0.02),
+            lo=Position(box[0], box[2]),
+            hi=Position(box[1], box[3]),
             z=tuple(tuple(row) for row in z),
             x_centers=tuple(x_centers),
             y_centers=tuple(y_centers),

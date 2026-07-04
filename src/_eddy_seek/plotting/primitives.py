@@ -10,9 +10,11 @@ Shared session/plot record primitives — JSON-serializable, consumed by recorde
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from typing import Any, TypeAlias
+
+from _eddy_seek.common import Axis, Offset, Position
 
 PASS_COLORS = (
     "#636EFA",
@@ -60,7 +62,13 @@ def pass_color(pass_num: int) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class ScatterRecord:
+class _Record:
+    def to_dict(self) -> dict[str, Any]:
+        return _record_to_dict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class ScatterRecord(_Record):
     pass_num: int
     label: str
     xs: tuple[float, ...]
@@ -69,12 +77,9 @@ class ScatterRecord:
     mode: ScatterMode = ScatterMode.MARKERS
     type: RecordType = RecordType.SCATTER
 
-    def to_dict(self) -> dict[str, Any]:
-        return _record_to_dict(self)
-
 
 @dataclass(frozen=True, slots=True)
-class MarkerRecord:
+class MarkerRecord(_Record):
     pass_num: int
     label: str
     x: float
@@ -82,37 +87,26 @@ class MarkerRecord:
     symbol: str
     type: RecordType = RecordType.MARKER
 
-    def to_dict(self) -> dict[str, Any]:
-        return _record_to_dict(self)
-
 
 @dataclass(frozen=True, slots=True)
-class BoxRecord:
+class BoxRecord(_Record):
     pass_num: int
-    x_lo: float
-    x_hi: float
-    y_lo: float
-    y_hi: float
+    lo: Position
+    hi: Position
     type: RecordType = RecordType.BOX
 
-    def to_dict(self) -> dict[str, Any]:
-        return _record_to_dict(self)
-
 
 @dataclass(frozen=True, slots=True)
-class StatsRecord:
+class StatsRecord(_Record):
     title: str
     columns: tuple[tuple[str, str], ...]
     rows: tuple[dict[str, str], ...]
     footer: str = ""
     type: RecordType = RecordType.STATS
 
-    def to_dict(self) -> dict[str, Any]:
-        return _record_to_dict(self)
-
 
 @dataclass(frozen=True, slots=True)
-class ProbeRecord:
+class ProbeRecord(_Record):
     x: float
     y: float
     mean_hz: float
@@ -129,7 +123,7 @@ class ProbeRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class SeriesRecord:
+class SeriesRecord(_Record):
     pass_num: int
     label: str
     xs: tuple[float, ...]
@@ -139,20 +133,13 @@ class SeriesRecord:
     showlegend: bool = True
     type: RecordType = RecordType.SERIES
 
-    def to_dict(self) -> dict[str, Any]:
-        return _record_to_dict(self)
-
 
 @dataclass(frozen=True, slots=True)
-class HeatmapRecord:
-    center_x: float
-    center_y: float
-    result_x: float
-    result_y: float
-    x_lo: float
-    x_hi: float
-    y_lo: float
-    y_hi: float
+class HeatmapRecord(_Record):
+    center: Offset
+    result: Offset
+    lo: Position
+    hi: Position
     z: tuple[tuple[float | None, ...], ...]
     x_centers: tuple[float, ...]
     y_centers: tuple[float, ...]
@@ -161,28 +148,20 @@ class HeatmapRecord:
     sample_freqs: tuple[float, ...]
     type: RecordType = RecordType.HEATMAP
 
-    def to_dict(self) -> dict[str, Any]:
-        return _record_to_dict(self)
-
 
 @dataclass(frozen=True, slots=True)
-class PlotArtifactRecord:
+class PlotArtifactRecord(_Record):
     strategy: str
     passes: int
     path: str
     type: RecordType = RecordType.PLOT
 
-    def to_dict(self) -> dict[str, Any]:
-        out = _record_to_dict(self)
-        out["type"] = "plot"
-        return out
-
 
 @dataclass(frozen=True, slots=True)
-class SweepTraceRecord:
+class SweepTraceRecord(_Record):
     pass_num: int
     phase: str
-    axis: str
+    axis: Axis
     cross_offsets: tuple[float, ...]
     cross_center: float
     lo: float
@@ -190,77 +169,33 @@ class SweepTraceRecord:
     samples: tuple[tuple[float, float], ...]
     type: RecordType = RecordType.SWEEP
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "type": self.type.value,
-            "pass": self.pass_num,
-            "phase": self.phase,
-            "axis": self.axis,
-            "cross_offsets": list(self.cross_offsets),
-            "cross_center": self.cross_center,
-            "lo": self.lo,
-            "hi": self.hi,
-            "samples": [list(point) for point in self.samples],
-        }
-
 
 @dataclass(frozen=True, slots=True)
-class SweepGridTraceRecord:
-    center_x: float
-    center_y: float
-    x_lo: float
-    x_hi: float
-    y_lo: float
-    y_hi: float
+class SweepGridTraceRecord(_Record):
+    center: Offset
+    lo: Position
+    hi: Position
     step_size: float
     rows: int
     legs: int
     samples: int
     type: RecordType = RecordType.SWEEP_GRID
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "type": self.type.value,
-            "center": {"x": self.center_x, "y": self.center_y},
-            "box": {
-                "x_lo": self.x_lo,
-                "x_hi": self.x_hi,
-                "y_lo": self.y_lo,
-                "y_hi": self.y_hi,
-            },
-            "step_size": self.step_size,
-            "rows": self.rows,
-            "legs": self.legs,
-            "samples": self.samples,
-        }
-
 
 @dataclass(frozen=True, slots=True)
-class SweepCentroidTraceRecord:
+class SweepCentroidTraceRecord(_Record):
     pass_num: int
     phase: str
-    center_x: float
-    center_y: float
-    result_x: float
-    result_y: float
+    center: Offset
+    result: Offset
     samples: int
     type: RecordType = RecordType.SWEEP_CENTROID
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "type": self.type.value,
-            "pass": self.pass_num,
-            "phase": self.phase,
-            "centre": {"x": self.center_x, "y": self.center_y},
-            "result": {"x": self.result_x, "y": self.result_y},
-            "samples": self.samples,
-        }
-
 
 @dataclass(frozen=True, slots=True)
-class TernaryStepRecord:
+class TernaryStepRecord(_Record):
     pass_num: int
-    axis: str
+    axis: Axis
     iteration: int
     lo: float
     hi: float
@@ -270,45 +205,24 @@ class TernaryStepRecord:
     f2: float
     type: RecordType = RecordType.TERNARY_STEP
 
-    def to_dict(self) -> dict[str, Any]:
-        return _record_to_dict(self)
-
 
 @dataclass(frozen=True, slots=True)
-class DebugScanTraceRecord:
-    center_x: float
-    center_y: float
-    result_x: float
-    result_y: float
+class DebugScanTraceRecord(_Record):
+    center: Offset
+    result: Offset
     samples: int
     type: RecordType = RecordType.DEBUG_SCAN
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "type": self.type.value,
-            "centre": {"x": self.center_x, "y": self.center_y},
-            "result": {"x": self.result_x, "y": self.result_y},
-            "samples": self.samples,
-        }
-
 
 @dataclass(frozen=True, slots=True)
-class CircleBootstrapTraceRecord:
+class CircleBootstrapTraceRecord(_Record):
     pass_num: int
-    result_x: float
-    result_y: float
+    result: Offset
     type: RecordType = RecordType.CIRCLE_BOOTSTRAP
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "type": self.type.value,
-            "pass": self.pass_num,
-            "result": {"x": self.result_x, "y": self.result_y},
-        }
-
 
 @dataclass(frozen=True, slots=True)
-class CircleHarmonicSlopeTraceRecord:
+class CircleHarmonicSlopeTraceRecord(_Record):
     pass_num: int
     result_x: float
     result_y: float
@@ -316,22 +230,9 @@ class CircleHarmonicSlopeTraceRecord:
     centroid_skipped_y: float | None = None
     type: RecordType = RecordType.CIRCLE_HARMONIC_SLOPE
 
-    def to_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {
-            "type": self.type.value,
-            "pass": self.pass_num,
-            "result": {"x": self.result_x, "y": self.result_y},
-        }
-        if self.centroid_skipped_x is not None and self.centroid_skipped_y is not None:
-            out["centroid_skipped"] = {
-                "x": self.centroid_skipped_x,
-                "y": self.centroid_skipped_y,
-            }
-        return out
-
 
 @dataclass(frozen=True, slots=True)
-class CircleHarmonicTraceRecord:
+class CircleHarmonicTraceRecord(_Record):
     pass_num: int
     radius: float
     result_x: float
@@ -341,22 +242,9 @@ class CircleHarmonicTraceRecord:
     harmonic_amp: float
     type: RecordType = RecordType.CIRCLE_HARMONIC
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "type": self.type.value,
-            "pass": self.pass_num,
-            "radius": self.radius,
-            "result": {"x": self.result_x, "y": self.result_y},
-            "harmonic": {
-                "a": self.harmonic_a,
-                "b": self.harmonic_b,
-                "amp": self.harmonic_amp,
-            },
-        }
-
 
 @dataclass(frozen=True, slots=True)
-class CircleBootstrapRecord:
+class CircleBootstrapRecord(_Record):
     pass_num: int
     center_x: float
     center_y: float
@@ -373,12 +261,9 @@ class CircleBootstrapRecord:
     y_hi: float
     type: RecordType = RecordType.CIRCLE_BOOTSTRAP_PASS
 
-    def to_dict(self) -> dict[str, Any]:
-        return _record_to_dict(self)
-
 
 @dataclass(frozen=True, slots=True)
-class CircleHarmonicPassRecord:
+class CircleHarmonicPassRecord(_Record):
     pass_num: int
     trace_center_x: float
     trace_center_y: float
@@ -401,20 +286,14 @@ class CircleHarmonicPassRecord:
     reject_reasons: str = ""
     type: RecordType = RecordType.CIRCLE_PASS
 
-    def to_dict(self) -> dict[str, Any]:
-        return _record_to_dict(self)
-
 
 @dataclass(frozen=True, slots=True)
-class AccuracyRepeatRecord:
+class AccuracyRepeatRecord(_Record):
     repeat_num: int
     offset_x: float
     offset_y: float
     session_plot_path: str | None = None
     type: RecordType = RecordType.ACCURACY_REPEAT
-
-    def to_dict(self) -> dict[str, Any]:
-        return _record_to_dict(self)
 
 
 SessionRecord: TypeAlias = (
@@ -456,6 +335,8 @@ _PLOT_ONLY_RECORDS = (
 def _json_value(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
+    if is_dataclass(value) and not isinstance(value, type):
+        return _json_value(asdict(value))
     if isinstance(value, tuple):
         return [_json_value(item) for item in value]
     if isinstance(value, dict):
@@ -465,7 +346,16 @@ def _json_value(value: Any) -> Any:
     return value
 
 
-def _record_to_dict(record: SessionRecord) -> dict[str, Any]:
+def _record_to_dict(record: _Record) -> dict[str, Any]:
+    if isinstance(record, BoxRecord):
+        return {
+            "type": record.type.value,
+            "pass_num": record.pass_num,
+            "x_lo": record.lo.x,
+            "x_hi": record.hi.x,
+            "y_lo": record.lo.y,
+            "y_hi": record.hi.y,
+        }
     out = _json_value(asdict(record))
     if isinstance(record, ScatterRecord) and record.freqs is None:
         out.pop("freqs", None)
@@ -478,7 +368,7 @@ def _test_primitives() -> None:
     scatter = ScatterRecord(1, "pts", (1.0, 2.0), (3.0, 4.0), freqs=(100.0, 101.0))
     scatter_no_freqs = ScatterRecord(1, "pts", (1.0,), (2.0,))
     marker = MarkerRecord(1, "best", 1.0, 2.0, "star")
-    box = BoxRecord(1, 0.0, 1.0, 0.0, 1.0)
+    box = BoxRecord(1, Position(0.0, 0.0), Position(1.0, 1.0))
     stats = StatsRecord("title", (("k", "K"),), ({"k": "v"},))
     probe = ProbeRecord(1.0, 2.0, 100.0, (99.0, 101.0))
 

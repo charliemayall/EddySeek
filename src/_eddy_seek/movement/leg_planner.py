@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
-from ..common import Axis, Offset, Phase, samples_in_box, search_box
+from ..common import Axis, Offset, Phase, Position, samples_in_box, search_box
 from ..plotting.primitives import SweepGridTraceRecord, SweepTraceRecord
 from ..session import SeekSession
 from .handler import (
@@ -163,7 +163,7 @@ def sweep_axis(
             SweepTraceRecord(
                 pass_num=pass_num,
                 phase=phase.value,
-                axis=axis.value,
+                axis=axis,
                 cross_offsets=tuple(cross_offsets),
                 cross_center=cross_center,
                 lo=lo,
@@ -236,12 +236,9 @@ def sweep_grid(
     if ctx.recorder.trace:
         ctx.recorder.record(
             SweepGridTraceRecord(
-                center_x=center.x,
-                center_y=center.y,
-                x_lo=x_lo,
-                x_hi=x_hi,
-                y_lo=y_lo,
-                y_hi=y_hi,
+                center=center,
+                lo=Position(x_lo, y_lo),
+                hi=Position(x_hi, y_hi),
                 step_size=step_size,
                 rows=rows,
                 legs=len(legs),

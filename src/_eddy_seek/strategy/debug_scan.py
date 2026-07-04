@@ -14,7 +14,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from ..common import Offset
+from ..common import Offset, Position
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample
 from ..movement.leg_planner import sweep_grid
@@ -122,14 +122,10 @@ def _record_debug_scan(
     x_lo, x_hi, y_lo, y_hi = box
     rec.record(
         HeatmapRecord(
-            center_x=center.x,
-            center_y=center.y,
-            result_x=result.x,
-            result_y=result.y,
-            x_lo=x_lo,
-            x_hi=x_hi,
-            y_lo=y_lo,
-            y_hi=y_hi,
+            center=center,
+            result=result,
+            lo=Position(x_lo, y_lo),
+            hi=Position(x_hi, y_hi),
             z=tuple(tuple(row) for row in z),
             x_centers=tuple(x_centers),
             y_centers=tuple(y_centers),
@@ -141,10 +137,8 @@ def _record_debug_scan(
     if rec.trace:
         rec.record(
             DebugScanTraceRecord(
-                center_x=center.x,
-                center_y=center.y,
-                result_x=result.x,
-                result_y=result.y,
+                center=center,
+                result=result,
                 samples=len(samples),
             )
         )
@@ -174,10 +168,10 @@ class DebugScanPlotter(StrategyPlotter):
             )
         ]
         record = DebugScanRecord(
-            center=Offset(heatmap.center_x, heatmap.center_y),
-            result=Offset(heatmap.result_x, heatmap.result_y),
+            center=heatmap.center,
+            result=heatmap.result,
             samples=samples,
-            box=(heatmap.x_lo, heatmap.x_hi, heatmap.y_lo, heatmap.y_hi),
+            box=(heatmap.lo.x, heatmap.hi.x, heatmap.lo.y, heatmap.hi.y),
             z=[list(row) for row in heatmap.z],
             x_centers=list(heatmap.x_centers),
             y_centers=list(heatmap.y_centers),
