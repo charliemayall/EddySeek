@@ -15,7 +15,11 @@ from collections.abc import Sequence
 
 from ..common import Axis, Offset, Phase, samples_in_box, search_box
 from ..session import SeekSession
-from .handler import MotionSample, axis_profile
+from .handler import (
+    MotionSample,
+    axis_profile,
+    get_clamped_speed_for_min_samples_over_span,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,11 +125,13 @@ def capture_legs(
     ctx: SeekSession,
     legs: Sequence[tuple[Offset, Offset]],
     speed: float,
+    *,
+    clamp: bool = True,
 ) -> list[MotionSample]:
     """Run continuous capture legs and return merged session-relative samples."""
     handler = ctx.motion
     handler.begin(ctx.session_start)
-    handler.run_capture_legs(legs, speed)
+    handler.run_capture_legs(legs, speed, clamp=clamp)
     ctx.sync_offset(handler.position)
     return handler.collect_samples()
 
@@ -143,8 +149,15 @@ def sweep_axis(
 ) -> tuple[list[tuple[float, float]], list[MotionSample]]:
     """Continuous ± traverses on ``axis``; merged profile in session offsets."""
     cfg = ctx.config
+    if hi < lo:
+        lo, hi = hi, lo
+    clamped_speed = get_clamped_speed_for_min_samples_over_span(
+        requested_mm_min=speed,
+        span_mm=hi - lo,
+        min_samples=cfg.min_sweep_samples,
+    )
     legs = plan_axis_legs(axis, lo, hi, cross_center, cross_offsets, cfg.sweep_overscan)
-    samples = capture_legs(ctx, legs, speed)
+    samples = capture_legs(ctx, legs, clamped_speed, clamp=False)
     points = axis_profile(samples, axis, lo, hi)
 
     logger.debug(
