@@ -15,7 +15,7 @@ from pathlib import Path
 
 from ..common import Axis, Offset, Phase, samples_in_box, search_box
 from ..kconsole import KConsole
-from ..movement.handler import MotionSample
+from ..movement.handler import MotionSample, get_clamped_speed_for_min_samples_over_span
 from ..movement.leg_planner import iter_cross_offsets, sweep_axis
 from ..optimizer import decoupled_centroid
 from ..plotting import PlotWriter
@@ -190,6 +190,12 @@ class SweepCentroidStrategy(SeekStrategy):
         cross_offsets = iter_cross_offsets(
             cfg.sweep_cross_passes, cfg.sweep_cross_offset
         )
+        length_one_leg = abs(hi - lo)
+        clamped_speed = get_clamped_speed_for_min_samples_over_span(
+            requested_mm_min=speed,
+            span_mm=length_one_leg,
+            min_samples=cfg.min_sweep_samples,
+        )
         points, samples = sweep_axis(
             ctx,
             axis=axis,
@@ -197,7 +203,7 @@ class SweepCentroidStrategy(SeekStrategy):
             hi=hi,
             cross_center=cross_center,
             cross_offsets=cross_offsets,
-            speed=speed,
+            speed=clamped_speed,
             phase=phase,
             pass_num=pass_num,
         )
