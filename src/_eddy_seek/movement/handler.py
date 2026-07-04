@@ -266,24 +266,14 @@ class MotionHandler(_SessionMotionBase):
         self._active = False
         self._th = None
 
-    def capture_leg(
-        self, line_start: Offset, line_end: Offset, speed: float, *, clamp: bool = True
-    ) -> None:
+    def capture_leg(self, line_start: Offset, line_end: Offset, speed: float) -> None:
         if not self._active:
             raise RuntimeError("eddy_seek: continuous motion not active")
         if self._last_move_end is None or line_start != self._last_move_end:
-            # Start so don't clamp speed
             self._manual_move(line_start, speed)
 
-        if clamp:
-            clamped_speed = get_clamped_speed_for_min_samples_over_span(
-                requested_mm_min=speed,
-                span_mm=line_start.distance_to(line_end),
-                min_samples=self._config.min_sweep_samples,
-            )
-
         capture_start_t = self.th.get_last_move_time()
-        self._manual_move(line_end, clamped_speed if clamp else speed)  # type: ignore[arg-type]
+        self._manual_move(line_end, speed)
         self._position = line_end
         self._register_capture_window(
             capture_start_t
@@ -291,24 +281,11 @@ class MotionHandler(_SessionMotionBase):
         self._last_move_end = line_end
 
     def run_capture_legs(
-        self,
-        legs: Sequence[tuple[Offset, Offset]],
-        speed: float,
-        *,
-        clamp: bool = True,
+        self, legs: Sequence[tuple[Offset, Offset]], speed: float
     ) -> None:
-        """
-        Run a sequence of capture legs.
-        Args:
-            legs: A sequence of (start, end) offset pairs.
-            speed: The speed to move at.
-            clamp: Whether to clamp the speed to the provide minimum required number
-
-            Clamp provides min samples PER LEG, not total samples over all legs.
-        """
 
         for line_start, line_end in legs:
-            self.capture_leg(line_start, line_end, speed, clamp=clamp)
+            self.capture_leg(line_start, line_end, speed)
         self.th.wait_moves()
         self.th.get_last_move_time()
 

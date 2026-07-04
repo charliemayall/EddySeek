@@ -121,17 +121,15 @@ def plan_grid_legs(
     return legs
 
 
-def capture_legs(
+def get_samples_from_capture_legs(
     ctx: SeekSession,
     legs: Sequence[tuple[Offset, Offset]],
     speed: float,
-    *,
-    clamp: bool = True,
 ) -> list[MotionSample]:
     """Run continuous capture legs and return merged session-relative samples."""
     handler = ctx.motion
     handler.begin(ctx.session_start)
-    handler.run_capture_legs(legs, speed, clamp=clamp)
+    handler.run_capture_legs(legs, speed)
     ctx.sync_offset(handler.position)
     return handler.collect_samples()
 
@@ -157,7 +155,7 @@ def sweep_axis(
         min_samples=cfg.min_sweep_samples,
     )
     legs = plan_axis_legs(axis, lo, hi, cross_center, cross_offsets, cfg.sweep_overscan)
-    samples = capture_legs(ctx, legs, clamped_speed, clamp=False)
+    samples = get_samples_from_capture_legs(ctx, legs, clamped_speed)
     points = axis_profile(samples, axis, lo, hi)
 
     logger.debug(
@@ -184,18 +182,17 @@ def sweep_grid(
     ctx: SeekSession,
     center: Offset,
     speed: float,
-    tolerance: float,
+    step_size: float,
 ) -> tuple[list[MotionSample], tuple[float, float, float, float]]:
     """Raster the search box once; return samples clipped to the box bounds."""
     cfg = ctx.config
     box = search_box(center, cfg.max_jog_x, cfg.max_jog_y, cfg.max_jog_x, cfg.max_jog_y)
-    legs = plan_grid_legs(box, tolerance, cfg.sweep_overscan, axis=Axis.X)
-    legs.extend(plan_grid_legs(box, tolerance, cfg.sweep_overscan, axis=Axis.Y))
-
+    legs = plan_grid_legs(box, step_size, cfg.sweep_overscan, axis=Axis.X)
+    legs.extend(plan_grid_legs(box, step_size, cfg.sweep_overscan, axis=Axis.Y))
     x_lo, x_hi, y_lo, y_hi = box
-    samples = capture_legs(ctx, legs, speed)
+    samples = get_samples_from_capture_legs(ctx, legs, speed)
     in_box = samples_in_box(samples, box)
-    rows = len(y_lines(y_lo, y_hi, tolerance))
+    rows = len(y_lines(y_lo, y_hi, step_size))
     logger.debug(
         f"eddy_seek: sweep_grid rows={rows} legs={len(legs)} "
         f"samples={len(samples)} in_box={len(in_box)}"
@@ -205,7 +202,7 @@ def sweep_grid(
             "type": "sweep_grid",
             "center": {"x": center.x, "y": center.y},
             "box": {"x_lo": x_lo, "x_hi": x_hi, "y_lo": y_lo, "y_hi": y_hi},
-            "tolerance": tolerance,
+            "step_size": step_size,
             "rows": rows,
             "legs": len(legs),
             "samples": len(in_box),
