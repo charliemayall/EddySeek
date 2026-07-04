@@ -15,14 +15,14 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .common import Axis, Offset, Position
+from ..common import Axis, Offset, Position
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer
     from klippy.toolhead import ToolHead
 
-    from .config import SeekConfig
-    from .session import SeekHost
+    from ..config import SeekConfig
+    from ..session import SeekHost
 
 
 logger = logging.getLogger(__name__)
@@ -274,7 +274,7 @@ class MotionHandler(_SessionMotionBase):
             self._manual_move(line_start, speed)
         clamped_speed = get_clamped_speed_for_min_samples_over_span(
             requested_mm_min=speed,
-            span_mm=line_end.x - line_start.x,
+            span_mm=line_start.distance_to(line_end),
             min_samples=self._config.min_sweep_samples,
         )
 

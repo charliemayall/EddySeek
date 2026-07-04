@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from .common import Offset
-from .motion_handler import MotionSample
+from .movement.handler import MotionSample
 
 _MIN_RADIAL_SLOPE = 1e-3
 _TWO_PI = 2.0 * math.pi

@@ -13,7 +13,7 @@ from __future__ import annotations
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-from .common import Offset
+from ..common import Offset
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer

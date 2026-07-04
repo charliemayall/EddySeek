@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..common import Offset
-from ..motion_handler import MotionSample
+from ..movement.handler import MotionSample
 from ._plotly import (
     _DEBUG_ROW_HEIGHT_PX,
     COLORSCALE,

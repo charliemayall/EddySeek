@@ -15,13 +15,12 @@ from pathlib import Path
 
 from ..common import Axis, Offset, Phase, samples_in_box, search_box
 from ..kconsole import KConsole
-from ..motion_handler import MotionSample
+from ..movement.handler import MotionSample
+from ..movement.leg_planner import iter_cross_offsets, sweep_axis
 from ..optimizer import decoupled_centroid
 from ..plotting import PlotWriter
 from ..session import SeekSession
 from .base import SeekStrategy
-from .sweep.axis import sweep_axis
-from .sweep.motion import iter_cross_offsets
 
 logger = logging.getLogger(__name__)
 

@@ -25,7 +25,7 @@ from _eddy_seek.harmonic import (
     harmonic_step_v2,
     radial_slope,
 )
-from _eddy_seek.motion_handler import MotionSample
+from _eddy_seek.movement.handler import MotionSample
 
 
 def _circle_samples(

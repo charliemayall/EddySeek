@@ -18,8 +18,8 @@ from typing import Literal
 
 from .common import Offset, Position
 from .kconsole import KConsole, console_for_gcmd
-from .motion_guard import clear_gcode_offset_xy
-from .motion_handler import move_to_xy
+from .movement.guard import clear_gcode_offset_xy
+from .movement.handler import move_to_xy
 from .session import SeekHost, SeekSession, SeekSessionResult
 from .strategy import strategy_for
 from .tools import Tool, ToolAlignConfig

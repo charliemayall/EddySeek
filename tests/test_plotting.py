@@ -15,7 +15,7 @@ from fakes import PLOT_HTML_SUFFIX, PLOT_SESSION_ID, PLOT_WRITE_AT
 
 from _eddy_seek.common import Axis, Offset, Phase
 from _eddy_seek.config import SeekConfig
-from _eddy_seek.motion_handler import MotionSample
+from _eddy_seek.movement.handler import MotionSample
 from _eddy_seek.optimizer import bin_frequencies
 from _eddy_seek.plotting import (
     PlotWriter,

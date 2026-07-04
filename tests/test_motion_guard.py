@@ -8,7 +8,7 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 
 from fakes import FakeGcode, FakePrinter
 
-from _eddy_seek.motion_guard import (
+from _eddy_seek.movement.guard import (
     MAX_ACCEL,
     KnownKinematicLimits,
     clear_gcode_offset_xy,

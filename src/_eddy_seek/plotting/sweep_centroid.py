@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..common import Offset, Phase
-from ..motion_handler import MotionSample
+from ..movement.handler import MotionSample
 from ._plotly import (
     apply_axes_theme,
     freq_marker,

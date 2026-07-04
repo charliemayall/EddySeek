@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 from ._eddy_seek.common import Offset, Position
 from ._eddy_seek.config import load_seek_config
 from ._eddy_seek.kconsole import KConsole, console_for_gcmd
-from ._eddy_seek.motion_guard import clear_gcode_offset_xy
+from ._eddy_seek.movement.guard import clear_gcode_offset_xy
 from ._eddy_seek.plotting import PlotWriter
 from ._eddy_seek.session import SeekHost, SeekSession, report_accuracy_stats
 from ._eddy_seek.strategy import strategy_for

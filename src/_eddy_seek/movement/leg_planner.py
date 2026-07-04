@@ -5,16 +5,19 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-Generic motion planning and capture helpers.
+Leg geometry, sweep/grid path planning, and session capture orchestration.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
-from ...common import Axis, Offset
-from ...motion_handler import MotionSample
-from ...session import SeekSession
+from ..common import Axis, Offset, Phase, samples_in_box, search_box
+from ..session import SeekSession
+from .handler import MotionSample, axis_profile
+
+logger = logging.getLogger(__name__)
 
 
 def effective_overscan(overscan: float) -> float:
@@ -125,6 +128,77 @@ def capture_legs(
     handler.run_capture_legs(legs, speed)
     ctx.sync_offset(handler.position)
     return handler.collect_samples()
+
+
+def sweep_axis(
+    ctx: SeekSession,
+    axis: Axis,
+    lo: float,
+    hi: float,
+    cross_center: float,
+    cross_offsets: list[float],
+    speed: float,
+    phase: Phase,
+    pass_num: int,
+) -> tuple[list[tuple[float, float]], list[MotionSample]]:
+    """Continuous ± traverses on ``axis``; merged profile in session offsets."""
+    cfg = ctx.config
+    legs = plan_axis_legs(axis, lo, hi, cross_center, cross_offsets, cfg.sweep_overscan)
+    samples = capture_legs(ctx, legs, speed)
+    points = axis_profile(samples, axis, lo, hi)
+
+    logger.debug(
+        f"eddy_seek: sweep_axis {axis.value} pass {pass_num} {phase.value} "
+        f"cross_passes={len(cross_offsets)} -> {len(points)} points"
+    )
+    ctx.append_trace(
+        {
+            "type": "sweep",
+            "pass": pass_num,
+            "phase": phase.value,
+            "axis": axis.value,
+            "cross_offsets": cross_offsets,
+            "cross_center": cross_center,
+            "lo": lo,
+            "hi": hi,
+            "samples": points,
+        }
+    )
+    return points, samples
+
+
+def sweep_grid(
+    ctx: SeekSession,
+    center: Offset,
+    speed: float,
+    tolerance: float,
+) -> tuple[list[MotionSample], tuple[float, float, float, float]]:
+    """Raster the search box once; return samples clipped to the box bounds."""
+    cfg = ctx.config
+    box = search_box(center, cfg.max_jog_x, cfg.max_jog_y, cfg.max_jog_x, cfg.max_jog_y)
+    legs = plan_grid_legs(box, tolerance, cfg.sweep_overscan, axis=Axis.X)
+    legs.extend(plan_grid_legs(box, tolerance, cfg.sweep_overscan, axis=Axis.Y))
+
+    x_lo, x_hi, y_lo, y_hi = box
+    samples = capture_legs(ctx, legs, speed)
+    in_box = samples_in_box(samples, box)
+    rows = len(y_lines(y_lo, y_hi, tolerance))
+    logger.debug(
+        f"eddy_seek: sweep_grid rows={rows} legs={len(legs)} "
+        f"samples={len(samples)} in_box={len(in_box)}"
+    )
+    ctx.append_trace(
+        {
+            "type": "sweep_grid",
+            "center": {"x": center.x, "y": center.y},
+            "box": {"x_lo": x_lo, "x_hi": x_hi, "y_lo": y_lo, "y_hi": y_hi},
+            "tolerance": tolerance,
+            "rows": rows,
+            "legs": len(legs),
+            "samples": len(in_box),
+        }
+    )
+    return in_box, box
 
 
 def _assert_grid_leg_count() -> None:

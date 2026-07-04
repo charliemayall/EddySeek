@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from ..common import Offset, Phase, session_artifact_filename
-from ..motion_handler import MotionSample
+from ..movement.handler import MotionSample
 from ._plotly import plotly_available, write_html
 from .accuracy import AccuracyRepeatRecord, write_accuracy_plot
 from .centroid import CentroidPassRecord, write_centroid_session_plot

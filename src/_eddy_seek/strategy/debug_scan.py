@@ -15,11 +15,11 @@ from pathlib import Path
 
 from ..common import Offset
 from ..kconsole import KConsole
+from ..movement.leg_planner import sweep_grid
 from ..optimizer import bin_frequencies, peak_bin_center
 from ..plotting import PlotWriter
 from ..session import SeekSession
 from .base import SeekStrategy
-from .sweep.grid import sweep_grid
 
 logger = logging.getLogger(__name__)
 

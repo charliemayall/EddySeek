@@ -12,17 +12,14 @@ from fakes import fake_motion_printer
 from pytest import raises
 
 from _eddy_seek.common import Axis, Offset, Position, samples_in_box, search_box
-from _eddy_seek.motion_handler import (
+from _eddy_seek.movement.handler import (
     MotionHandler,
     MotionSample,
     align_measurements,
     axis_profile,
+    get_clamped_speed_for_min_samples_over_span,
 )
-from _eddy_seek.strategy.sweep.motion import (
-    iter_cross_offsets,
-    speed_clamp_for_min_samples,
-    traversal_endpoints,
-)
+from _eddy_seek.movement.leg_planner import iter_cross_offsets, traversal_endpoints
 
 
 def _make_handler(printer, origin: Position = Position.zero()) -> MotionHandler:
@@ -30,6 +27,7 @@ def _make_handler(printer, origin: Position = Position.zero()) -> MotionHandler:
     config = MagicMock()
     config.jog_speed = 3000.0
     config.dwell_time = 0.5
+    config.min_sweep_samples = 1
     return MotionHandler(printer, host, config, origin)
 
 
@@ -98,7 +96,7 @@ def test_align_measurements_uses_toolhead_lookup():
     toolhead.get_kinematics.return_value.calc_position.return_value = [10.5, 20.0]
 
     with patch(
-        "_eddy_seek.motion_handler.lookup_toolhead_position",
+        "_eddy_seek.movement.handler.lookup_toolhead_position",
         return_value=Position(10.5, 20.0),
     ) as lookup:
         samples = align_measurements(toolhead, Position(10.0, 20.0), [(1.0, 100.0)])
@@ -138,22 +136,20 @@ def test_samples_in_box_filters_xy():
 
 
 def test_speed_clamp_for_min_samples_caps_when_too_fast():
-    cap = speed_clamp_for_min_samples(
+    cap = get_clamped_speed_for_min_samples_over_span(
         requested_mm_min=3000.0,
         span_mm=2.0,
         min_samples=20,
-        bulk_rate_hz=400.0,
     )
     assert cap == 2400.0
 
 
 def test_speed_clamp_for_min_samples_leaves_slow_request():
     assert (
-        speed_clamp_for_min_samples(
+        get_clamped_speed_for_min_samples_over_span(
             requested_mm_min=1200.0,
             span_mm=2.0,
             min_samples=20,
-            bulk_rate_hz=400.0,
         )
         == 1200.0
     )

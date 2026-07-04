@@ -25,8 +25,8 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from .common import Offset, Position, session_artifact_filename
 from .config import SeekConfig
 from .kconsole import KConsole, console_for_gcmd
-from .motion_guard import KnownKinematicLimits, clear_gcode_offset_xy
-from .motion_handler import MotionHandler
+from .movement.guard import KnownKinematicLimits, clear_gcode_offset_xy
+from .movement.handler import MotionHandler
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer

@@ -14,7 +14,7 @@ import math
 from typing import Literal
 
 from .common import Offset
-from .motion_handler import MotionSample
+from .movement.handler import MotionSample
 
 
 def frequency_weight(

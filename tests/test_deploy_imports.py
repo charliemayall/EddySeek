@@ -54,9 +54,9 @@ def klippy_extras(tmp_path):
 
 def test_install_script(tmp_path):
     install_dir = tmp_path / "klippy" / "extras"
-    cache = ROOT / "src" / "_eddy_seek" / "__pycache__"
+    cache = ROOT / "src" / "_eddy_seek" / "movement" / "__pycache__"
     cache.mkdir(parents=True, exist_ok=True)
-    (cache / "motion_guard.cpython-311.pyc").write_bytes(b"stale")
+    (cache / "guard.cpython-311.pyc").write_bytes(b"stale")
 
     result = subprocess.run(
         ["./install.sh", str(install_dir)],
