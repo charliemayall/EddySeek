@@ -71,7 +71,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 suffix=ctx.artifact_suffix(self.name),
                 run_id=ctx.run_id,
             )
-        logger.debug(
+        logger.info(
             f"eddy_seek: circle_harmonic coarse={cfg.sweep_coarse_speed / 60.0:.2f} mm/s "
             f"circle={cfg.circle_speed / 60.0:.2f} mm/s "
             f"arc_res={cfg.circle_arc_resolution} "
@@ -101,7 +101,7 @@ class CircleHarmonicStrategy(SeekStrategy):
 
         for pass_num in range(1, cfg.max_passes + 1):
             passes_run = pass_num
-            logger.debug(
+            logger.info(
                 f"eddy_seek: {self.name} pass {pass_num} start "
                 f"best=({best.x:.4f}, {best.y:.4f})"
             )
@@ -117,7 +117,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             best = new
 
             if self._frozen is not None:
-                logger.debug(
+                logger.info(
                     f"eddy_seek: {self.name} finished after pass {pass_num} "
                     f"(frozen at {best.x:.4f}, {best.y:.4f})"
                 )
@@ -125,24 +125,24 @@ class CircleHarmonicStrategy(SeekStrategy):
 
             if moved.x < cfg.tolerance and moved.y < cfg.tolerance:
                 if self._last_pass_rejected:
-                    logger.debug(
+                    logger.info(
                         f"eddy_seek: {self.name} pass {pass_num} rejected "
                         f"- retrying with smaller circle if passes remain"
                     )
                     continue
                 if cfg.circle_bootstrap_slope_only and pass_num == 1:
-                    logger.debug(
+                    logger.info(
                         f"eddy_seek: {self.name} slope-only bootstrap done "
                         f"- continuing to circle passes"
                     )
                     continue
-                logger.debug(
+                logger.info(
                     f"eddy_seek: {self.name} converged after pass {pass_num} "
                     f"(moved {moved.x:.4f}, {moved.y:.4f})"
                 )
                 break
         else:
-            logger.debug(
+            logger.info(
                 f"eddy_seek: {self.name} hit max_passes={cfg.max_passes} "
                 "without convergence"
             )
@@ -222,7 +222,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 else None
             )
             if centroid is not None:
-                logger.debug(
+                logger.info(
                     f"eddy_seek: circle_harmonic slope-only: "
                     f"centroid=({centroid.x:.4f}, {centroid.y:.4f}) ignored, "
                     f"holding ({best.x:.4f}, {best.y:.4f}) for circle passes"
@@ -266,7 +266,7 @@ class CircleHarmonicStrategy(SeekStrategy):
 
         result = result_or_none.clamp(cfg.max_jog_x, cfg.max_jog_y)
         self._bootstrap = result
-        logger.debug(
+        logger.info(
             f"eddy_seek: circle_harmonic bootstrap -> ({result.x:.4f}, {result.y:.4f})"
         )
         self._record_bootstrap_plot(
@@ -334,7 +334,7 @@ class CircleHarmonicStrategy(SeekStrategy):
 
         samples = get_samples_from_capture_legs(ctx, legs, clamped_speed)
         logger.info(
-            f"eddy_seek: circle_harmonic pass {pass_num} collected {len(samples)} --> {len(samples) / len(legs):.2f} samples per segment"
+            f"eddy_seek: circle_harmonic pass {pass_num} collected {len(samples)} samples --> {len(samples) / len(legs):.2f} samples per segment"
         )
 
         if len(samples) < 3:
@@ -344,7 +344,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             )
 
         binned = bin_samples_by_angle(samples, trace_center, len(legs))
-        logger.debug(f"eddy_seek: circle_harmonic pass {pass_num} bins = {len(binned)}")
+        logger.info(f"eddy_seek: circle_harmonic pass {pass_num} bins = {len(binned)}")
         fit_samples = binned_to_motion_samples(trace_center, trace_radius, binned)
         fit = fit_first_harmonic(fit_samples, trace_center)
         if fit is None:
@@ -448,7 +448,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             return best
 
         if harmonic_converged(fit, step, cfg.tolerance, cfg.noise_k):
-            logger.debug(f"eddy_seek: circle_harmonic converged at pass {pass_num}")
+            logger.info(f"eddy_seek: circle_harmonic converged at pass {pass_num}")
             self._frozen = result
 
         self._record_circle_plot(

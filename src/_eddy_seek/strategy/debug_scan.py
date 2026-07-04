@@ -46,7 +46,7 @@ class DebugScanStrategy(SeekStrategy):
             "debug_scan is for diagnostic use only; "
             "use any other strategy for alignment."
         )
-        logger.debug(
+        logger.info(
             f"eddy_seek: debug_scan tolerance={cfg.tolerance:.4f} mm "
             f"speed={cfg.sweep_coarse_speed / 60.0:.2f} mm/s"
         )
@@ -107,7 +107,7 @@ class DebugScanStrategy(SeekStrategy):
 
         result = peak.clamp(cfg.max_jog_x, cfg.max_jog_y)
         freqs = [sample.freq for sample in samples]
-        logger.debug(
+        logger.info(
             f"eddy_seek: debug_scan -> ({result.x:.4f}, {result.y:.4f}) "
             f"freq_range=[{min(freqs):.2f}, {max(freqs):.2f}] Hz ({len(samples)} samples)"
         )
@@ -138,7 +138,7 @@ class DebugScanStrategy(SeekStrategy):
         moved: Offset,
         ctx: SeekSession,
     ) -> str:
-        logger.debug(
+        logger.info(
             f"eddy_seek: debug_scan pass {pass_num} moved=({moved.x:.4f}, {moved.y:.4f})"
         )
         return f"Pass {pass_num}: {new.to_delta_str()}"

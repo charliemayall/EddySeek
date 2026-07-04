@@ -39,7 +39,7 @@ class CentroidStrategy(SeekStrategy):
                 suffix=ctx.artifact_suffix(self.name),
                 run_id=ctx.run_id,
             )
-        logger.debug(
+        logger.info(
             f"eddy_seek: centroid grid_step=({cfg.grid_step_x:.4f}, {cfg.grid_step_y:.4f}) mm"
         )
 
@@ -74,7 +74,7 @@ class CentroidStrategy(SeekStrategy):
         shrink = 0.5 ** (pass_num - 1)
         step_x = cfg.grid_step_x * shrink
         step_y = cfg.grid_step_y * shrink
-        logger.debug(
+        logger.info(
             f"eddy_seek: centroid pass {pass_num} moved=({moved.x:.4f}, {moved.y:.4f}) "
             f"grid_step=({step_x:.4f}, {step_y:.4f})"
         )
@@ -117,7 +117,7 @@ class CentroidStrategy(SeekStrategy):
 
         freqs = [freq for _, freq in probes]
         clamped = result.clamp(cfg.max_jog_x, cfg.max_jog_y)
-        logger.debug(
+        logger.info(
             f"eddy_seek: centroid pass centre=({center.x:.4f}, {center.y:.4f}) "
             f"-> ({clamped.x:.4f}, {clamped.y:.4f}) "
             f"freq_range=[{min(freqs):.2f}, {max(freqs):.2f}] Hz"

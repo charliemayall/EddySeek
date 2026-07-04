@@ -69,7 +69,7 @@ def move_to_seek_start_pos(
     ``EDDY_SEEK_TOOLS`` does not rely on the caller's current position.
     """
     sensor = tools.sensor_position()
-    logger.debug(f"eddy_seek: moving tool 0 to sensor position {sensor.to_gcode()}")
+    logger.info(f"eddy_seek: moving tool 0 to sensor position {sensor.to_gcode()}")
     toolhead = host.printer.lookup_object("toolhead")
     move_to_xy(toolhead, sensor, host.seek_config.jog_speed, wait=True)
     return Position.from_toolhead(host.printer)
@@ -150,7 +150,7 @@ def align_tool_number(
     ``EDDY_SEEK_TOOL`` leaves ``load_tool`` false so the caller loads the tool.
     """
     if tool_number < 0 or tool_number >= tools.tool_count:
-        logger.debug(
+        logger.info(
             f"eddy_seek: align_tool_number rejected tool {tool_number} (range 0..{tools.tool_count - 1})",
         )
         return (
@@ -167,7 +167,7 @@ def align_tool_number(
     }
 
     if tool_number == 0:
-        logger.debug("eddy_seek: aligning tool 0 (reference)")
+        logger.info("eddy_seek: aligning tool 0 (reference)")
         clear_gcode_offset_xy(host.printer)
         start = move_to_seek_start_pos(host, tools)
         result = align_tool(host, gcmd, **seek_kw)
@@ -177,7 +177,7 @@ def align_tool_number(
 
         center = start + result.offset
         tool = tools.get_tool(0).mark_calibrated()
-        logger.debug(
+        logger.info(
             f"eddy_seek: tool 0 centered at ({center.x:.4f}, {center.y:.4f}) "
             f"seek_offset=({result.offset.x:.4f}, {result.offset.y:.4f})"
         )
@@ -187,7 +187,7 @@ def align_tool_number(
         return tool, center, None
 
     if tool0_center is None:
-        logger.debug(
+        logger.info(
             f"eddy_seek: align_tool_number tool {tool_number} skipped "
             "(no tool 0 centre)"
         )
@@ -195,7 +195,7 @@ def align_tool_number(
 
     if load_tool:
         macro = tools.format_load_macro(tool_number)
-        logger.debug(f"eddy_seek: loading tool {tool_number} via {macro}")
+        logger.info(f"eddy_seek: loading tool {tool_number} via {macro}")
         tools.run_load_macro(tool_number)
     clear_gcode_offset_xy(host.printer)
 
@@ -205,7 +205,7 @@ def align_tool_number(
         return None, tool0_center, error
 
     tool = tools.get_tool(tool_number).mark_calibrated(result.offset)
-    logger.debug(
+    logger.info(
         f"eddy_seek: tool {tool_number} offset from tool 0 "
         f"({result.offset.x:.4f}, {result.offset.y:.4f})"
     )
@@ -226,7 +226,7 @@ def align_all_tools(
     gcode = printer.lookup_object("gcode")
     count = tool_count or tools.tool_count
 
-    logger.debug(f"eddy_seek: align_all_tools starting {count} tool(s)")
+    logger.info(f"eddy_seek: align_all_tools starting {count} tool(s)")
     gcode.run_script_from_command(f"SAVE_GCODE_STATE NAME={_GCODE_STATE}")
 
     tool0_center: Position | None = None
@@ -251,7 +251,7 @@ def align_all_tools(
                 batch=True,
             )
             if error is not None:
-                logger.debug(
+                logger.info(
                     f"eddy_seek: align_all_tools failed on tool {tool_number}: {error}"
                 )
                 console.error(f"Tool {tool_number} alignment failed: {error}")
@@ -259,7 +259,7 @@ def align_all_tools(
             if tool is not None:
                 tools.update_tool(tool)
 
-        logger.debug(f"eddy_seek: align_all_tools done {count} tool(s)")
+        logger.info(f"eddy_seek: align_all_tools done {count} tool(s)")
         console.exit(f"{count} tools aligned - run SAVE_CONFIG to persist")
         return ToolAlignResult("ok", tool0_center, None)
 

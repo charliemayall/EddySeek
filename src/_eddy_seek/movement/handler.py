@@ -38,7 +38,7 @@ def move_to_xy(
     wait: bool = False,
 ) -> None:
     """Queue a move to absolute machine XY (mm); feedrate in mm/min."""
-    logger.debug(
+    logger.info(
         f"eddy_seek: move_to ({position.x:.4f}, {position.y:.4f}) feedrate={feedrate:.1f}"
     )
     toolhead.manual_move([position.x, position.y], feedrate / 60.0)
@@ -58,7 +58,7 @@ def get_clamped_speed_for_min_samples_over_span(
     cap = span_mm * _LDC1612_BULK_HZ * 60.0 / min_samples
     result_speed_mm_min = min(requested_mm_min, cap)
     if result_speed_mm_min != requested_mm_min:
-        logger.debug(
+        logger.info(
             f"eddy_seek: speed clamped {requested_mm_min:.1f} -> {result_speed_mm_min:.1f} mm/min "
             f"(span={span_mm:.3f} mm, min_samples={min_samples}, bulk_rate_hz={_LDC1612_BULK_HZ:.0f} Hz)"
         )
@@ -102,7 +102,7 @@ class _SessionMotionBase:
         if delta.x == 0.0 and delta.y == 0.0:
             return
 
-        logger.debug(
+        logger.info(
             f"eddy_seek: jog delta=({delta.x:.4f}, {delta.y:.4f}) "
             f"-> offset=({offset.x:.4f}, {offset.y:.4f})"
         )
@@ -224,7 +224,7 @@ class MotionHandler(_SessionMotionBase):
 
         mean = self._host.get_capture_mean(min_samples=3)
         if mean is None:
-            logger.debug(
+            logger.info(
                 f"eddy_seek: measure_at ({offset.x:.4f}, {offset.y:.4f}) failed "
                 f"({self._host.capture_count} samples)"
             )
@@ -234,7 +234,7 @@ class MotionHandler(_SessionMotionBase):
                 f"{self._config.dwell_time:.2f} s dwell. "
                 "Check sensor connection, dwell_time, and i2c settings."
             )
-        logger.debug(
+        logger.info(
             f"eddy_seek: measure_at ({offset.x:.4f}, {offset.y:.4f}) -> {mean:.2f} Hz "
             f"({self._host.capture_count} samples)"
         )

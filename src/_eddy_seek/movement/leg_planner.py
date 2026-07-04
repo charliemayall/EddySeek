@@ -152,7 +152,7 @@ def sweep_axis(
     samples = get_samples_from_capture_legs(ctx, legs, speed)
     points = axis_profile(samples, axis, lo, hi)
 
-    logger.debug(
+    logger.info(
         f"eddy_seek: sweep_axis {axis.value} pass {pass_num} {phase.value} "
         f"cross_passes={len(cross_offsets)} -> {len(points)} points"
     )
@@ -187,7 +187,7 @@ def sweep_grid(
     samples = get_samples_from_capture_legs(ctx, legs, speed)
     in_box = samples_in_box(samples, box)
     rows = len(y_lines(y_lo, y_hi, step_size))
-    logger.debug(
+    logger.info(
         f"eddy_seek: sweep_grid rows={rows} legs={len(legs)} "
         f"samples={len(samples)} in_box={len(in_box)}"
     )

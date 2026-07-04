@@ -83,7 +83,7 @@ class KConsole:
         if self.verbose:
             self._emit("echo: ", msg)
         else:
-            logger.debug(f"eddy_seek: {msg}")
+            logger.info(f"eddy_seek: {msg}")
 
     def fail(self, msg: str) -> NoReturn:
         raise self._gcmd.error(msg)

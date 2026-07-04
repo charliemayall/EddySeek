@@ -61,7 +61,7 @@ class SeekStrategy(ABC):
 
         for pass_num in range(1, cfg.max_passes + 1):
             passes_run = pass_num
-            logger.debug(
+            logger.info(
                 f"eddy_seek: {self.name} pass {pass_num} start "
                 f"best=({best.x:.4f}, {best.y:.4f})"
             )
@@ -75,13 +75,13 @@ class SeekStrategy(ABC):
             best = new
 
             if moved.x < cfg.tolerance and moved.y < cfg.tolerance:
-                logger.debug(
+                logger.info(
                     f"eddy_seek: {self.name} converged after pass {pass_num} "
                     f"(moved {moved.x:.4f}, {moved.y:.4f})"
                 )
                 break
         else:
-            logger.debug(
+            logger.info(
                 f"eddy_seek: {self.name} hit max_passes={cfg.max_passes} "
                 "without convergence"
             )

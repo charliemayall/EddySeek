@@ -86,7 +86,7 @@ class TernaryStrategy(SeekStrategy):
         moved: Offset,
         ctx: SeekSession,
     ) -> str:
-        logger.debug(
+        logger.info(
             f"eddy_seek: ternary pass {pass_num} moved=({moved.x:.4f}, {moved.y:.4f}) Moved: {moved.to_delta_str()}"
         )
         return f"Pass {pass_num}: {new.to_delta_str()}"
@@ -125,7 +125,7 @@ class TernaryStrategy(SeekStrategy):
             better = (
                 "m1" if frequency_is_better(f1, f2, ctx.config.search_for) else "m2"
             )
-            logger.debug(
+            logger.info(
                 f"eddy_seek: ternary {axis.value} lo={lo:.4f} hi={hi:.4f} "
                 f"m1={m1:.4f}({f1:.2f} Hz) m2={m2:.4f}({f2:.2f} Hz) better={better}"
             )

@@ -128,13 +128,13 @@ class KnownKinematicLimits:
                 square_corner_velocity=self._saved_scv,
                 min_cruise_ratio=self._saved_mcr,
             )
-            logger.debug(
+            logger.info(
                 f"EDDY_SEEK: restored toolhead limits: scv: {self._saved_scv}, mcr: {self._saved_mcr}, accel: {self._saved_accel}"
             )
 
         input_shaper = self._printer.lookup_object("input_shaper", None)
         if input_shaper is not None:
             input_shaper.enable_shaping()  # type: ignore
-            logger.debug("EDDY_SEEK: enabled input shaping")
+            logger.info("EDDY_SEEK: enabled input shaping")
 
         return None

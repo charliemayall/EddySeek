@@ -204,7 +204,7 @@ class SeekConfig:
         except ValueError as exc:
             raise gcmd.error(f"EDDY_SEEK_SET: {exc}") from exc
         if changes:
-            logger.debug(f"eddy_seek: runtime config updated: {', '.join(changes)}")
+            logger.info(f"eddy_seek: runtime config updated: {', '.join(changes)}")
         return changes
 
 
@@ -342,7 +342,7 @@ def load_seek_config(config: ConfigWrapper) -> SeekConfig:
         ):
             values["save_plots"] = True  # legacy key; save_plots wins if both set
         cfg = SeekConfig(**values)
-        logger.debug(f"eddy_seek: loaded config {cfg.format_seek_config()}")
+        logger.info(f"eddy_seek: loaded config {cfg.format_seek_config()}")
         return cfg
     except ValueError as exc:
         raise config.error(f"eddy_seek: {exc}") from exc

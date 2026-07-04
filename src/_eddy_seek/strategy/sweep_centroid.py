@@ -45,7 +45,7 @@ class SweepCentroidStrategy(SeekStrategy):
                 suffix=ctx.artifact_suffix(self.name),
                 run_id=ctx.run_id,
             )
-        logger.debug(
+        logger.info(
             f"eddy_seek: sweep_centroid coarse={cfg.sweep_coarse_speed / 60.0:.2f} mm/s "
             f"fine={cfg.sweep_fine_speed / 60.0:.2f} mm/s "
             f"cross_passes={cfg.sweep_cross_passes}"
@@ -131,7 +131,7 @@ class SweepCentroidStrategy(SeekStrategy):
 
         result = result_or_none.clamp(cfg.max_jog_x, cfg.max_jog_y)
         freqs = [freq for _, freq in x_profile + y_profile]
-        logger.debug(
+        logger.info(
             f"eddy_seek: sweep_centroid pass {pass_num} {phase.value} "
             f"-> ({result.x:.4f}, {result.y:.4f}) "
             f"freq_range=[{min(freqs):.2f}, {max(freqs):.2f}] Hz ({len(in_box)} samples)"
@@ -166,7 +166,7 @@ class SweepCentroidStrategy(SeekStrategy):
         ctx: SeekSession,
     ) -> str:
         phase = self._phase_for_pass(pass_num).value
-        logger.debug(
+        logger.info(
             f"eddy_seek: sweep_centroid pass {pass_num} ({phase}) "
             f"moved=({moved.x:.4f}, {moved.y:.4f})"
         )

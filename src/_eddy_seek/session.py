@@ -151,7 +151,7 @@ class SeekSession:
         cfg = self.config
         console = console_for_gcmd(gcmd, self._host.seek_config)
         self._host.console = console
-        logger.debug(
+        logger.info(
             f"eddy_seek: session {self.session_id} start "
             f"strategy={strategy.name} search_for={cfg.search_for}"
         )
@@ -182,7 +182,7 @@ class SeekSession:
                 )
                 best, passes_run = strategy.search(self, console)
                 self._motion.jog(best)
-            logger.debug(
+            logger.info(
                 f"eddy_seek: session {self.session_id} ok "
                 f"offset=({best.x:.4f}, {best.y:.4f}) passes={passes_run}"
             )
@@ -252,7 +252,7 @@ class SeekSession:
             )
             if path is not None:
                 logger.info(f"eddy_seek: session trace saved to {path}")
-        logger.debug(
+        logger.info(
             f"eddy_seek: session {self.session_id} finished "
             f"status={result.status} probes={len(self._probes)}"
         )
@@ -379,7 +379,7 @@ def report_accuracy_stats(console: KConsole, offsets: list[Offset]) -> None:
     console.info(
         f"Max scatter {stats.max_radial:.3f} mm - max pairwise {stats.max_pair:.3f} mm"
     )
-    logger.debug(
+    logger.info(
         f"eddy_seek: accuracy report n={n} mean=({stats.mean.x:.4f}, {stats.mean.y:.4f}) "
         f"stdev=({stats.std_x:.4f}, {stats.std_y:.4f}) "
         f"max_radial={stats.max_radial:.4f} max_pair={stats.max_pair:.4f}"
