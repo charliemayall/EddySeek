@@ -27,7 +27,7 @@ from ..harmonic import (
     radial_slope,
 )
 from ..kconsole import KConsole
-from ..movement.handler import MotionSample
+from ..movement.handler import MotionSample, get_clamped_speed_for_min_samples_over_span
 from ..movement.leg_planner import iter_cross_offsets, sweep_axis
 from ..optimizer import decoupled_centroid
 from ..plotting import PlotWriter
@@ -234,11 +234,18 @@ class CircleHarmonicStrategy(SeekStrategy):
         if not legs:
             self._frozen = bootstrap
             return bootstrap
+        clamped_speed = get_clamped_speed_for_min_samples_over_span(
+            requested_mm_min=cfg.circle_speed,
+            span_mm=sum(leg_end.distance_to(leg_start) for leg_start, leg_end in legs),
+            min_samples=max(
+                cfg.min_sweep_samples, len(legs)
+            ),  # try to get a sample per segment
+        )
 
         self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
         handler = ctx.motion
-        handler.run_capture_legs(legs, cfg.circle_speed)
+        handler.run_capture_legs(legs, clamped_speed, clamp=False)
         ctx.sync_offset(handler.position)
         samples = handler.collect_samples()
 
