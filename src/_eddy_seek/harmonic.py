@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from statistics import median
 
 from .common import Offset
 from .movement.handler import MotionSample
@@ -76,11 +77,10 @@ def bin_samples_by_angle(
     center: Offset,
     bins: int,
 ) -> list[tuple[float, float]]:
-    """Mean frequency per equal-angle bin (centre = ``center``)."""
+    """Median frequency per equal-angle bin (centre = ``center``)."""
     if bins < 1 or not samples:
         return []
-    sums = [0.0] * bins
-    counts = [0] * bins
+    bucket_freqs: list[list[float]] = [[] for _ in range(bins)]
     for sample in samples:
         dx = sample.offset.x - center.x
         dy = sample.offset.y - center.y
@@ -88,13 +88,12 @@ def bin_samples_by_angle(
         if theta < 0.0:
             theta += _TWO_PI
         index = min(int(theta / _TWO_PI * bins), bins - 1)
-        sums[index] += sample.freq
-        counts[index] += 1
+        bucket_freqs[index].append(sample.freq)
     result: list[tuple[float, float]] = []
-    for index in range(bins):
-        if counts[index]:
+    for index, freqs in enumerate(bucket_freqs):
+        if freqs:
             theta = _TWO_PI * (index + 0.5) / bins
-            result.append((theta, sums[index] / counts[index]))
+            result.append((theta, median(freqs)))
     return result
 
 
