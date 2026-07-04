@@ -13,10 +13,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Protocol, TypeVar, overload
+from typing import TYPE_CHECKING, overload
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer
+
+    from _eddy_seek.movement.handler import MotionSample
 
 _ROUND_PRECISION = 4
 CHAR_DELTA = "\u0394"
@@ -218,17 +220,10 @@ def search_box(
     return x_lo, x_hi, y_lo, y_hi
 
 
-class _OffsetSample(Protocol):
-    offset: Offset
-
-
-_T = TypeVar("_T", bound=_OffsetSample)
-
-
 def samples_in_box(
-    samples: list[_T],
+    samples: list[MotionSample],
     box: tuple[float, float, float, float],
-) -> list[_T]:
+) -> list[MotionSample]:
     x_lo, x_hi, y_lo, y_hi = box
     return [
         sample
@@ -246,7 +241,7 @@ def session_artifact_run_dir(
     """``HH_MM_DD_MM_YY_{run_id}`` — one folder per seek run under ``result_folder``."""
     t = when or datetime.now()
     rid = (run_id or session_id)[:8]
-    return f"{t.hour:02d}_{t.minute:02d}_{t.day:02d}_{t.month:02d}_{t.year % 100:02d}_{rid}"
+    return f"{t.isoformat(timespec='minutes')}_{rid}"
 
 
 def session_artifact_basename(*, suffix: str = "", ext: str = "html") -> str:
