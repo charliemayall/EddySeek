@@ -14,8 +14,8 @@ from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from typing import Any, TypeAlias
 
-from _eddy_seek.common import Axis, Offset
-from _eddy_seek.harmonic import HarmonicFit
+from ..common import Axis, Offset
+from ..harmonic import HarmonicFit
 
 PASS_COLORS = (
     "#636EFA",
