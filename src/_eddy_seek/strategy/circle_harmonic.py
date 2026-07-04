@@ -271,7 +271,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
         handler = ctx.motion
-        handler.run_capture_legs(legs, clamped_speed, clamp=False)
+        handler.run_capture_legs(legs, clamped_speed)
         ctx.sync_offset(handler.position)
         samples = handler.collect_samples()
 
