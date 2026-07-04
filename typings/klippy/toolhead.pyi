@@ -61,6 +61,13 @@ class ToolHead:
 
     def get_max_velocity(self) -> tuple[float, float]: ...
     def _calc_junction_deviation(self) -> None: ...
+    def set_max_velocities(
+        self,
+        max_velocity: float | None,
+        max_accel: float | None,
+        square_corner_velocity: float | None,
+        min_cruise_ratio: float | None,
+    ) -> tuple[float, float, float, float]: ...
 
 class ToolHeadCommandHelper:
     def __init__(self, config: ConfigWrapper) -> None: ...

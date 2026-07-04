@@ -1,9 +1,9 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 
 Optional HTML debug plots for alignment strategies.
 """
@@ -15,8 +15,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from ..common import Phase, Position, session_artifact_filename
-from ..continuous_motion import MotionSample
+from ..common import Offset, Phase, session_artifact_filename
+from ..motion_handler import MotionSample
 from ._plotly import plotly_available, write_html
 from .accuracy import AccuracyRepeatRecord, write_accuracy_plot
 from .centroid import CentroidPassRecord, write_centroid_session_plot
@@ -35,10 +35,16 @@ __all__ = [
 
 
 def plot_filename(
-    session_id: str, when: datetime | None = None, *, suffix: str = ""
+    session_id: str,
+    when: datetime | None = None,
+    *,
+    suffix: str = "",
+    run_id: str | None = None,
 ) -> str:
-    """``HH_MM_DD_MM_YY_{id}[_{suffix}].html`` under ``result_folder`` (no subfolder)."""
-    return session_artifact_filename(session_id, when, suffix=suffix, ext="html")
+    """``{run_dir}/{label}.html`` under ``result_folder``."""
+    return session_artifact_filename(
+        session_id, when, suffix=suffix, run_id=run_id, ext="html"
+    )
 
 
 class PlotWriter:
@@ -55,11 +61,17 @@ class PlotWriter:
         session_id: str,
         *,
         write_at: datetime | None = None,
+        suffix: str = "",
+        run_id: str | None = None,
     ) -> None:
         self._results_dir = Path(results_dir)
         self._session_id = session_id
         self._write_at = write_at
+        self._suffix = suffix
+        self._run_id = run_id
         self._results_dir.mkdir(parents=True, exist_ok=True)
+        if not plotly_available():
+            logger.warning("eddy_seek: save_plots enabled but plotly is not installed")
         self._centroid_passes: list[CentroidPassRecord] = []
         self._sweep_centroid_passes: list[SweepCentroidPassRecord] = []
         self._ternary_passes: list[TernaryPassRecord] = []
@@ -86,26 +98,30 @@ class PlotWriter:
     def debug_scan_count(self) -> int:
         return len(self._debug_scan_records)
 
-    def write(self, fig: Any, *, suffix: str = "") -> str | None:
+    def write(self, fig: Any, *, suffix: str | None = None) -> str | None:
         if not plotly_available():
-            logger.warning("eddy_seek: save_plots enabled but plotly is not installed")
             return None
         out_path = self._results_dir / plot_filename(
-            self._session_id, self._write_at, suffix=suffix
+            self._session_id,
+            self._write_at,
+            suffix=suffix if suffix is not None else self._suffix,
+            run_id=self._run_id,
         )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         if not write_html(str(out_path), fig):
+            logger.warning(f"eddy_seek: failed to write plot to {out_path}")
             return None
-        logger.info("eddy_seek: debug plot saved to %s", out_path)
+        logger.info(f"eddy_seek: debug plot saved to {out_path}")
         return str(out_path)
 
     def record_centroid_pass(
         self,
         *,
         pass_num: int,
-        center: Position,
-        result: Position,
-        moved: Position,
-        probes: list[tuple[Position, float]],
+        center: Offset,
+        result: Offset,
+        moved: Offset,
+        probes: list[tuple[Offset, float]],
     ) -> None:
         self._centroid_passes.append(
             CentroidPassRecord(
@@ -133,9 +149,9 @@ class PlotWriter:
         *,
         pass_num: int,
         phase: Phase,
-        center: Position,
-        result: Position,
-        moved: Position,
+        center: Offset,
+        result: Offset,
+        moved: Offset,
         samples: list[MotionSample],
         box: tuple[float, float, float, float],
     ) -> None:
@@ -168,11 +184,11 @@ class PlotWriter:
         self,
         *,
         pass_num: int,
-        result: Position,
-        moved: Position,
+        result: Offset,
+        moved: Offset,
         x_steps: list[TernaryStep],
         y_steps: list[TernaryStep],
-        probes: list[tuple[Position, float]],
+        probes: list[tuple[Offset, float]],
     ) -> None:
         self._ternary_passes.append(
             TernaryPassRecord(
@@ -200,7 +216,7 @@ class PlotWriter:
         self,
         *,
         repeat_num: int,
-        offset: Position,
+        offset: Offset,
         session_plot_path: str | None = None,
     ) -> None:
         self._accuracy_repeats.append(
@@ -222,8 +238,8 @@ class PlotWriter:
     def record_debug_scan(
         self,
         *,
-        center: Position,
-        result: Position,
+        center: Offset,
+        result: Offset,
         samples: list[MotionSample],
         box: tuple[float, float, float, float],
         z: list[list[float | None]],

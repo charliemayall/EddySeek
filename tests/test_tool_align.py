@@ -1,45 +1,32 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 """
 
-from _eddy_seek.config import SeekConfig
-from _eddy_seek.common import Position
-from _eddy_seek.tools import (
-    Tool,
-    ToolAlignConfig,
-    apply_tool_offset,
+from unittest.mock import patch
+
+from fakes import (
+    FakeGcmd,
+    FakeKlipperConfig,
+    FakePrinter,
+    RecordingToolhead,
+    ok_seek_result,
 )
+from pytest import raises
+
+from _eddy_seek.common import Offset, Position
+from _eddy_seek.config import SeekConfig
+from _eddy_seek.kconsole import KConsole
 from _eddy_seek.tool_align import (
+    _TARGET_SENSOR_OFFSET_FROM_REF,
+    align_all_tools,
     align_tool_number,
     move_to_seek_start_pos,
 )
-from _eddy_seek.session import SeekSessionResult
-
-
-from pytest import raises
-from unittest.mock import patch
-
-
-class _FakeGcode:
-    def __init__(self) -> None:
-        self.scripts: list[str] = []
-
-    def run_script_from_command(self, script: str) -> None:
-        self.scripts.append(script)
-
-
-class _FakePrinter:
-    def __init__(self) -> None:
-        self.gcode = _FakeGcode()
-
-    def lookup_object(self, name: str):
-        if name == "gcode":
-            return self.gcode
-        raise KeyError(name)
+from _eddy_seek.tools import Tool, ToolAlignConfig, apply_tool_offset
 
 
 class _FakeTools:
@@ -51,25 +38,25 @@ class _FakeTools:
         return self.tools[tool_number]
 
 
-def test_position_offset_applies():
-    center = Position(10.0, 20.0) + Position(1.5, -0.5)
+def test_position_plus_offset():
+    center = Position(10.0, 20.0) + Offset(1.5, -0.5)
     assert center == Position(11.5, 19.5)
 
 
 def test_apply_tool_offset_sets_gcode_offset():
-    printer = _FakePrinter()
+    printer = FakePrinter()
     tools = _FakeTools(
         [
             Tool(
                 tool_number=0,
-                offset=Position(0.0, 0.0),
-                manual_offset=Position(0.0, 0.0),
+                offset=Offset(0.0, 0.0),
+                manual_offset=Offset(0.0, 0.0),
                 is_calibrated=True,
             ),
             Tool(
                 tool_number=1,
-                offset=Position(1.5, -0.5),
-                manual_offset=Position(0.0, 0.0),
+                offset=Offset(1.5, -0.5),
+                manual_offset=Offset(0.0, 0.0),
                 is_calibrated=True,
             ),
         ]
@@ -80,13 +67,13 @@ def test_apply_tool_offset_sets_gcode_offset():
 
 
 def test_apply_tool_offset_includes_manual_adjust():
-    printer = _FakePrinter()
+    printer = FakePrinter()
     tools = _FakeTools(
         [
             Tool(
                 tool_number=0,
-                offset=Position(1.0, 2.0),
-                manual_offset=Position(0.1, -0.2),
+                offset=Offset(1.0, 2.0),
+                manual_offset=Offset(0.1, -0.2),
                 is_calibrated=True,
             ),
         ]
@@ -96,13 +83,13 @@ def test_apply_tool_offset_includes_manual_adjust():
 
 
 def test_apply_tool_offset_rejects_uncalibrated():
-    printer = _FakePrinter()
+    printer = FakePrinter()
     tools = _FakeTools(
         [
             Tool(
                 tool_number=0,
-                offset=Position(0.0, 0.0),
-                manual_offset=Position(0.0, 0.0),
+                offset=Offset(0.0, 0.0),
+                manual_offset=Offset(0.0, 0.0),
                 is_calibrated=False,
             ),
         ]
@@ -111,66 +98,40 @@ def test_apply_tool_offset_rejects_uncalibrated():
         apply_tool_offset(tools, printer, 0)
 
 
-class _RecordingToolhead:
-    def __init__(self, start: tuple[float, float]) -> None:
-        self.pos = [start[0], start[1], 0.0, 0.0]
-        self.moves: list[list[float | None]] = []
-
-    def manual_move(self, coord, speed) -> None:
-        self.moves.append(coord)
-        for i, v in enumerate(coord):
-            if v is not None:
-                self.pos[i] = v
-
-    def wait_moves(self) -> None:
-        pass
-
-    def get_position(self) -> list[float]:
-        return list(self.pos)
-
-
-class _MovePrinter:
-    def __init__(self, toolhead: _RecordingToolhead) -> None:
-        self._toolhead = toolhead
-        self.gcode = _FakeGcode()
-
-    def lookup_object(self, name: str):
-        if name == "toolhead":
-            return self._toolhead
-        if name == "gcode":
-            return self.gcode
-        raise KeyError(name)
-
-
-class _FakeGcmd:
-    def respond_info(self, msg: str) -> None:
-        pass
+def _console(gcmd: FakeGcmd | None = None) -> KConsole:
+    return KConsole(gcmd or FakeGcmd())
 
 
 class _SensorTools:
+    tool_count = 1
+
     def __init__(self, sensor_position: Position) -> None:
         self._sensor_position = sensor_position
+        self.sensor_x = sensor_position.x
+        self.sensor_y = sensor_position.y
 
     def sensor_position(self) -> Position:
         return self._sensor_position
 
+    def get_tool(self, tool_number: int) -> Tool:
+        return Tool.create_default(tool_number)
+
 
 class _FakeSeekHost:
     def __init__(
-        self, printer: _MovePrinter, seek_config: SeekConfig | None = None
+        self, printer: FakePrinter, seek_config: SeekConfig | None = None
     ) -> None:
         self.printer = printer
         self.seek_config = seek_config or SeekConfig()
+        self.console: KConsole | None = None
 
 
 def test_move_to_seek_start_pos_moves_to_sensor_position():
-    toolhead = _RecordingToolhead(start=(1.0, 2.0))
-    host = _FakeSeekHost(_MovePrinter(toolhead))  # type: ignore[arg-type]
+    toolhead = RecordingToolhead(start=(1.0, 2.0))
+    host = _FakeSeekHost(FakePrinter(toolhead=toolhead))  # type: ignore[arg-type]
     start = move_to_seek_start_pos(
         host,  # type: ignore[arg-type]
         _SensorTools(Position(10.0, 20.0)),  # type: ignore[arg-type]
-        _FakeGcmd(),
-        label="EDDY_SEEK_TOOLS",
     )
     assert start == Position(10.0, 20.0)
     assert toolhead.moves == [[10.0, 20.0]]
@@ -193,44 +154,31 @@ class _ConfigfilePrinter:
         raise KeyError(name)
 
 
-class _ToolConfig:
-    def __init__(self, **opts) -> None:
-        self._opts = opts
-
-    def get_printer(self) -> _ConfigfilePrinter:
+def test_sensor_position_is_required():
+    def configfile_printer():
         return _ConfigfilePrinter()
 
-    def getint(self, key: str, default: int, **kwargs) -> int:
-        return int(self._opts.get(key, default))
-
-    def get(self, key: str, default: str = "") -> str:
-        return self._opts.get(key, default)
-
-    def getfloat(self, key: str, default: float | None = None, **kwargs):
-        if key in self._opts:
-            return self._opts[key]
-        if default is not None:
-            return default
-        raise self.error(f"Option '{key}' is required")
-
-    def error(self, msg: str) -> ValueError:
-        return ValueError(msg)
-
-
-def test_sensor_position_is_required():
     with raises(ValueError, match="sensor_x"):
-        ToolAlignConfig(_ToolConfig())  # type: ignore[arg-type]
+        ToolAlignConfig(FakeKlipperConfig(get_printer=configfile_printer))  # type: ignore[arg-type]
 
     with raises(ValueError, match="sensor_y"):
-        ToolAlignConfig(_ToolConfig(sensor_x=10.0))  # type: ignore[arg-type]
+        ToolAlignConfig(
+            FakeKlipperConfig(sensor_x=10.0, get_printer=configfile_printer)
+        )  # type: ignore[arg-type]
 
-    cfg = ToolAlignConfig(_ToolConfig(sensor_x=10.0, sensor_y=20.0))  # type: ignore[arg-type]
+    cfg = ToolAlignConfig(
+        FakeKlipperConfig(sensor_x=10.0, sensor_y=20.0, get_printer=configfile_printer)
+    )  # type: ignore[arg-type]
     assert cfg.sensor_position() == Position(10.0, 20.0)
 
 
 class _LoadMacroTools:
     tool_count = 4
-    load_calls: list[int] = []
+    sensor_x = 10.0
+    sensor_y = 20.0
+
+    def __init__(self) -> None:
+        self.load_calls: list[int] = []
 
     def format_load_macro(self, tool_number: int) -> str:
         return f"T{tool_number}"
@@ -241,31 +189,27 @@ class _LoadMacroTools:
     def get_tool(self, tool_number: int) -> Tool:
         return Tool.create_default(tool_number)
 
+    def update_tool(self, tool: Tool) -> None:
+        pass
 
-class _OffsetClearPrinter(_FakePrinter):
-    def __init__(self) -> None:
-        super().__init__()
-        self._toolhead = _RecordingToolhead(start=(0.0, 0.0))
-
-    def lookup_object(self, name: str):
-        if name == "toolhead":
-            return self._toolhead
-        return super().lookup_object(name)
+    def sensor_position(self) -> Position:
+        return Position(self.sensor_x, self.sensor_y)
 
 
 def test_align_tool_number_load_macro_only_when_requested():
     tools = _LoadMacroTools()
-    host = _FakeSeekHost(_MovePrinter(_RecordingToolhead(start=(0.0, 0.0))))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
     center = Position(10.0, 20.0)
-    ok = SeekSessionResult("s", 0.0, 1.0, "ok", Position(0.1, -0.2), 1, None)
+    ok = ok_seek_result()
 
     with patch("_eddy_seek.tool_align.align_tool_at", return_value=ok):
         align_tool_number(
             host,  # type: ignore[arg-type]
             tools,  # type: ignore[arg-type]
-            _FakeGcmd(),
+            FakeGcmd(),
             1,
             center,
+            console=_console(),
             load_tool=False,
         )
         assert tools.load_calls == []
@@ -273,28 +217,181 @@ def test_align_tool_number_load_macro_only_when_requested():
         align_tool_number(
             host,  # type: ignore[arg-type]
             tools,  # type: ignore[arg-type]
-            _FakeGcmd(),
+            FakeGcmd(),
             1,
             center,
+            console=_console(),
             load_tool=True,
         )
         assert tools.load_calls == [1]
 
 
+def test_align_all_tools_milestone_console_messages():
+    tools = _LoadMacroTools()
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    gcmd = FakeGcmd()
+    ok = ok_seek_result()
+
+    with (
+        patch(
+            "_eddy_seek.tool_align.move_to_seek_start_pos",
+            return_value=Position(10.0, 20.0),
+        ),
+        patch("_eddy_seek.tool_align.align_tool", return_value=ok),
+    ):
+        result = align_all_tools(host, tools, gcmd, tool_count=2)  # type: ignore[arg-type]
+
+    assert result.status == "ok"
+    assert gcmd.raw == [
+        "echo: ES: Aligning tool 1 of 2…",
+        "echo: Tool 0 reference - X=10.1000 Y=19.8000 mm",
+        "echo: Aligning tool 2 of 2…",
+        "echo: Tool 1 offset - X=0.1 Y=-0.2 mm",
+        "echo: ES: 2 tools aligned - run SAVE_CONFIG to persist",
+    ]
+
+
+def test_align_all_tools_shares_artifact_run_context():
+    tools = _LoadMacroTools()
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    gcmd = FakeGcmd()
+    ok = ok_seek_result()
+    captured: list[dict] = []
+
+    def capture_align_tool(host, gcmd, **kwargs):
+        captured.append(kwargs)
+        return ok
+
+    with (
+        patch(
+            "_eddy_seek.tool_align.move_to_seek_start_pos",
+            return_value=Position(10.0, 20.0),
+        ),
+        patch("_eddy_seek.tool_align.align_tool", side_effect=capture_align_tool),
+    ):
+        result = align_all_tools(host, tools, gcmd, tool_count=2)  # type: ignore[arg-type]
+
+    assert result.status == "ok"
+    assert len(captured) == 2
+    assert captured[0]["run_id"] == captured[1]["run_id"]
+    assert captured[0]["artifact_write_at"] == captured[1]["artifact_write_at"]
+    assert captured[0]["artifact_label"] == "tools_t0"
+    assert captured[1]["artifact_label"] == "tools_t1"
+
+
+def test_align_all_tools_clears_gcode_offset_after_restore():
+    tools = _LoadMacroTools()
+    printer = FakePrinter(toolhead=RecordingToolhead())
+    host = _FakeSeekHost(printer)  # type: ignore[arg-type]
+    gcmd = FakeGcmd()
+    ok = ok_seek_result()
+
+    with (
+        patch(
+            "_eddy_seek.tool_align.move_to_seek_start_pos",
+            return_value=Position(10.0, 20.0),
+        ),
+        patch("_eddy_seek.tool_align.align_tool", return_value=ok),
+    ):
+        align_all_tools(host, tools, gcmd, tool_count=1)  # type: ignore[arg-type]
+
+    assert printer.gcode.scripts[-2].startswith("RESTORE_GCODE_STATE")
+    assert printer.gcode.scripts[-1] == "SET_GCODE_OFFSET X=0.0 Y=0.0"
+
+
 def test_align_tool_number_clears_gcode_offset_after_load():
     tools = _LoadMacroTools()
-    printer = _OffsetClearPrinter()
+    printer = FakePrinter(toolhead=RecordingToolhead())
     host = _FakeSeekHost(printer)  # type: ignore[arg-type]
     center = Position(10.0, 20.0)
-    ok = SeekSessionResult("s", 0.0, 1.0, "ok", Position(0.1, -0.2), 1, None)
 
-    with patch("_eddy_seek.tool_align.align_tool_at", return_value=ok):
+    with patch("_eddy_seek.tool_align.align_tool_at", return_value=ok_seek_result()):
         align_tool_number(
             host,  # type: ignore[arg-type]
             tools,  # type: ignore[arg-type]
-            _FakeGcmd(),
+            FakeGcmd(),
             1,
             center,
+            console=_console(),
             load_tool=True,
         )
-    assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=0.000000 Y=0.000000"]
+    assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=0.0 Y=0.0"]
+
+
+def test_align_tool0_warns_when_seek_offset_exceeds_sensor_threshold():
+    tools = _SensorTools(Position(150.0, 150.0))
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    gcmd = FakeGcmd()
+    large_offset = Offset(1.5, 0.0)
+    assert (
+        max(abs(large_offset.x), abs(large_offset.y)) > _TARGET_SENSOR_OFFSET_FROM_REF
+    )
+
+    with patch(
+        "_eddy_seek.tool_align.align_tool",
+        return_value=ok_seek_result(offset=large_offset),
+    ):
+        tool, center, error = align_tool_number(
+            host,  # type: ignore[arg-type]
+            tools,  # type: ignore[arg-type]
+            gcmd,
+            0,
+            None,
+            console=_console(gcmd),
+        )
+
+    assert error is None
+    assert center == Position(151.5, 150.0)
+    assert tool is not None
+    assert any("WARNING" in line and "sensor_x" in line for line in gcmd.raw)
+
+
+def test_align_tool0_warns_for_reported_centre_vs_sensor_position():
+    """Regression: ~1 mm Y miss (150,150 -> 150.44, 149.04) must warn."""
+    tools = _SensorTools(Position(150.0, 150.0))
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    gcmd = FakeGcmd()
+    offset = Offset(0.4356, -0.9580)
+
+    with patch(
+        "_eddy_seek.tool_align.align_tool",
+        return_value=ok_seek_result(offset=offset),
+    ):
+        _, center, error = align_tool_number(
+            host,  # type: ignore[arg-type]
+            tools,  # type: ignore[arg-type]
+            gcmd,
+            0,
+            None,
+            console=_console(gcmd),
+        )
+
+    assert error is None
+    assert center == Position(150.4356, 149.0420)
+    assert any("WARNING" in line and "149.0420" in line for line in gcmd.raw)
+
+
+def test_align_tool0_no_sensor_warning_when_offset_within_threshold():
+    tools = _SensorTools(Position(150.0, 150.0))
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    gcmd = FakeGcmd()
+    small_offset = Offset(0.5, 0.3)
+    assert (
+        max(abs(small_offset.x), abs(small_offset.y)) <= _TARGET_SENSOR_OFFSET_FROM_REF
+    )
+
+    with patch(
+        "_eddy_seek.tool_align.align_tool",
+        return_value=ok_seek_result(offset=small_offset),
+    ):
+        _, _, error = align_tool_number(
+            host,  # type: ignore[arg-type]
+            tools,  # type: ignore[arg-type]
+            gcmd,
+            0,
+            None,
+            console=_console(gcmd),
+        )
+
+    assert error is None
+    assert not any("sensor_x" in line for line in gcmd.raw)

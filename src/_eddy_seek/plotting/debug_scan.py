@@ -1,9 +1,9 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 
 Heatmap debug plots for DebugScanStrategy.
 """
@@ -14,14 +14,18 @@ import math
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from ..common import Position
-from ..continuous_motion import MotionSample
+from ..common import Offset
+from ..motion_handler import MotionSample
 from ._plotly import (
+    _DEBUG_ROW_HEIGHT_PX,
+    COLORSCALE,
+    THEME_COLORS,
+    apply_axes_theme,
     go,
+    header_table,
     make_subplots,
+    multi_panel_layout,
     plotly_available,
-    session_stats_annotation,
-    square_xy_plot_layout,
 )
 
 ALT_BIN_SCALES = (2, 4, 8)
@@ -36,8 +40,8 @@ _ESTIMATOR_STYLES: dict[str, dict[str, Any]] = {
 
 @dataclass(frozen=True, slots=True)
 class DebugScanRecord:
-    center: Position
-    result: Position
+    center: Offset
+    result: Offset
     samples: list[MotionSample]
     box: tuple[float, float, float, float]
     z: list[list[float | None]]
@@ -47,10 +51,10 @@ class DebugScanRecord:
 
 @dataclass(frozen=True, slots=True)
 class DebugScanAnalysis:
-    bin_peak: Position
-    centroid: Position | None
-    axis: Position | None
-    parabolic: Position | None
+    bin_peak: Offset
+    centroid: Offset | None
+    axis: Offset | None
+    parabolic: Offset | None
     prominence: float | None
     fwhm_x: float | None
     fwhm_y: float | None
@@ -217,7 +221,7 @@ def _bin_sample_counts(
     samples: list[MotionSample],
     box: tuple[float, float, float, float],
     tolerance: float,
-    center: Position,
+    center: Offset,
 ) -> list[list[int]]:
     x_lo, x_hi, y_lo, y_hi = box
     n_x_min = math.ceil((x_lo - center.x) / tolerance - 0.5)
@@ -243,7 +247,7 @@ def analyze_debug_scan(
     record: DebugScanRecord,
     search_for: Literal["min", "max"],
 ) -> DebugScanAnalysis:
-    from ..strategy.centroid import axis_weighted_centroid, weighted_centroid
+    from ..optimizer import axis_weighted_centroid, weighted_centroid
 
     tolerance = _grid_tolerance(record.x_centers, record.y_centers, record.box)
     z = record.z
@@ -285,22 +289,20 @@ def analyze_debug_scan(
     centroid = weighted_centroid(probes, search_for)
     axis_x = axis_weighted_centroid(x_marginal, search_for)
     axis_y = axis_weighted_centroid(y_marginal, search_for)
-    axis = (
-        Position(axis_x, axis_y) if axis_x is not None and axis_y is not None else None
-    )
+    axis = Offset(axis_x, axis_y) if axis_x is not None and axis_y is not None else None
 
     x_peak_index = peak_ix
     y_peak_index = peak_iy
     parabolic_x = _parabolic_peak(record.x_centers, x_profile, x_peak_index)
     parabolic_y = _parabolic_peak(record.y_centers, y_profile, y_peak_index)
     parabolic = (
-        Position(parabolic_x, parabolic_y)
+        Offset(parabolic_x, parabolic_y)
         if parabolic_x is not None and parabolic_y is not None
         else None
     )
 
     return DebugScanAnalysis(
-        bin_peak=Position(record.x_centers[peak_ix], record.y_centers[peak_iy]),
+        bin_peak=Offset(record.x_centers[peak_ix], record.y_centers[peak_iy]),
         centroid=centroid,
         axis=axis,
         parabolic=parabolic,
@@ -317,7 +319,7 @@ def analyze_debug_scan(
     )
 
 
-def _format_position(position: Position | None) -> str:
+def _format_position(position: Offset | None) -> str:
     if position is None:
         return "n/a"
     return f"({position.x:+.4f}, {position.y:+.4f}) mm"
@@ -333,8 +335,8 @@ def _scaled_bin_result(
     record: DebugScanRecord,
     tolerance: float,
     search_for: Literal["min", "max"],
-) -> tuple[list[list[float | None]], list[float], list[float], Position]:
-    from ..strategy.debug_scan import bin_frequencies, peak_bin_center
+) -> tuple[list[list[float | None]], list[float], list[float], Offset]:
+    from ..optimizer import bin_frequencies, peak_bin_center
 
     z, x_centers, y_centers = bin_frequencies(
         record.samples, record.box, tolerance, record.center, search_for
@@ -351,7 +353,7 @@ def _add_estimator_markers(
     analysis: DebugScanAnalysis,
     show_legend: bool,
 ) -> None:
-    estimators: list[tuple[str, Position | None]] = [
+    estimators: list[tuple[str, Offset | None]] = [
         ("bin", analysis.bin_peak),
         ("centroid", analysis.centroid),
         ("axis", analysis.axis),
@@ -390,8 +392,8 @@ def _add_heatmap_panel(
     x_centers: list[float],
     y_centers: list[float],
     box: tuple[float, float, float, float],
-    center: Position,
-    result: Position | None,
+    center: Offset,
+    result: Offset | None,
     tolerance: float,
     show_colorbar: bool,
     show_samples: bool,
@@ -416,7 +418,17 @@ def _add_heatmap_panel(
             z=display_z,
             colorscale=colorscale,
             colorbar=(
-                {"title": colorbar_title, "x": 1.02, "xanchor": "left", "len": 0.35}
+                {
+                    "title": {
+                        "text": colorbar_title,
+                        "font": {"color": THEME_COLORS.text, "size": 10},
+                    },
+                    "tickfont": {"color": THEME_COLORS.text, "size": 9},
+                    "x": 1.02,
+                    "xanchor": "left",
+                    "len": 0.35,
+                    "thickness": 12,
+                }
                 if show_colorbar
                 else None
             ),
@@ -550,7 +562,7 @@ def _add_marginal_panel(
             xanchor="right",
             yanchor="top",
             showarrow=False,
-            font={"size": 10, "color": "#CCCCCC"},
+            font={"size": 9, "color": THEME_COLORS.muted},
             row=row,
             col=col,
         )
@@ -578,7 +590,7 @@ def write_debug_scan_plot(
     analysis = analyze_debug_scan(record, search_for)
     base_tolerance = _grid_tolerance(record.x_centers, record.y_centers, record.box)
     panels: list[
-        tuple[int, float, list[list[float | None]], list[float], list[float], Position]
+        tuple[int, float, list[list[float | None]], list[float], list[float], Offset]
     ] = [
         (
             1,
@@ -597,52 +609,83 @@ def write_debug_scan_plot(
         panels.append((scale, tolerance, z, x_centers, y_centers, result))
 
     freqs = [sample.freq for sample in record.samples]
-    freq_range = (
-        f"freq=[{min(freqs):.0f}, {max(freqs):.0f}] Hz" if freqs else "freq=n/a"
-    )
-    pass_lines = [
-        f"@{scale}× ({tol:.4g} mm): ({result.x:+.4f}, {result.y:+.4f}) mm"
+    scale_rows = [
+        {
+            "scale": f"@{scale}×",
+            "tolerance": f"{tol:.4g}",
+            "result": f"({result.x:+.4f}, {result.y:+.4f})",
+        }
         for scale, tol, _, _, _, result in panels
     ]
-    pass_lines.append(f"{len(record.samples)} samples  {freq_range}")
-    pass_lines.append(
-        "bin="
-        f"{_format_position(analysis.bin_peak)}  "
-        f"centroid={_format_position(analysis.centroid)}  "
-        f"axis={_format_position(analysis.axis)}  "
-        f"parabolic={_format_position(analysis.parabolic)}"
-    )
-    pass_lines.append(
-        f"prominence={_format_optional(analysis.prominence)}  "
-        f"FWHM X={_format_optional(analysis.fwhm_x, unit=' mm')}  "
-        f"FWHM Y={_format_optional(analysis.fwhm_y, unit=' mm')}"
-    )
+    summary_rows = [
+        {
+            "metric": "samples",
+            "value": str(len(record.samples)),
+        },
+        {
+            "metric": "freq",
+            "value": (f"[{min(freqs):.0f}, {max(freqs):.0f}] Hz" if freqs else "n/a"),
+        },
+        {
+            "metric": "bin",
+            "value": _format_position(analysis.bin_peak),
+        },
+        {
+            "metric": "centroid",
+            "value": _format_position(analysis.centroid),
+        },
+        {
+            "metric": "axis",
+            "value": _format_position(analysis.axis),
+        },
+        {
+            "metric": "parabolic",
+            "value": _format_position(analysis.parabolic),
+        },
+        {
+            "metric": "prominence",
+            "value": _format_optional(analysis.prominence),
+        },
+        {
+            "metric": "FWHM X",
+            "value": _format_optional(analysis.fwhm_x, unit=" mm"),
+        },
+        {
+            "metric": "FWHM Y",
+            "value": _format_optional(analysis.fwhm_y, unit=" mm"),
+        },
+    ]
     final = f"Final (1×): ({record.result.x:+.4f}, {record.result.y:+.4f}) mm"
 
     peak_y = record.y_centers[analysis.peak_iy]
     peak_x = record.x_centers[analysis.peak_ix]
+    n_rows = 5
+    n_cols = 2
 
     fig = make_subplots(
-        rows=3,
-        cols=3,
+        rows=n_rows,
+        cols=n_cols,
+        specs=[
+            [{"colspan": 2}, None],
+            [{"colspan": 2}, None],
+            [{}, {}],
+            [{}, {}],
+            [{"colspan": 2}, None],
+        ],
         subplot_titles=[
             "1× weight",
             "sample density",
             f"X slice @ Y={peak_y:+.3g} mm",
+            f"Y slice @ X={peak_x:+.3g} mm",
             "2× bin",
             "4× bin",
-            f"Y slice @ X={peak_x:+.3g} mm",
             "8× bin",
             "",
             "",
-        ],
-        specs=[
-            [{}, {}, {}],
-            [{}, {}, {}],
-            [{"colspan": 1}, None, None],
+            "",
         ],
         horizontal_spacing=0.06,
-        vertical_spacing=0.1,
+        vertical_spacing=0.05,
         shared_xaxes=False,
         shared_yaxes=False,
     )
@@ -661,7 +704,7 @@ def write_debug_scan_plot(
         show_colorbar=True,
         show_samples=True,
         samples=record.samples,
-        colorscale="Viridis",
+        colorscale=COLORSCALE,
         colorbar_title="weight",
         analysis=analysis,
         show_estimators=True,
@@ -669,8 +712,8 @@ def write_debug_scan_plot(
     )
     _add_heatmap_panel(
         fig,
-        row=1,
-        col=2,
+        row=2,
+        col=1,
         z=analysis.density,
         x_centers=record.x_centers,
         y_centers=record.y_centers,
@@ -687,8 +730,8 @@ def write_debug_scan_plot(
     )
     _add_marginal_panel(
         fig,
-        row=1,
-        col=3,
+        row=3,
+        col=1,
         profile=analysis.x_marginal,
         axis_label="X slice",
         estimators={
@@ -700,10 +743,26 @@ def write_debug_scan_plot(
         fwhm=analysis.fwhm_x,
         show_legend=False,
     )
+    _add_marginal_panel(
+        fig,
+        row=3,
+        col=2,
+        profile=analysis.y_marginal,
+        axis_label="Y slice",
+        estimators={
+            "bin": analysis.bin_peak.y,
+            "centroid": analysis.centroid.y if analysis.centroid else None,
+            "axis": analysis.axis.y if analysis.axis else None,
+            "parabolic": analysis.parabolic.y if analysis.parabolic else None,
+        },
+        fwhm=analysis.fwhm_y,
+        show_legend=False,
+    )
 
-    scale_positions = ((2, 1), (2, 2), (3, 1))
     for (row, col), (scale, tolerance, z, x_centers, y_centers, result) in zip(
-        scale_positions, panels[1:], strict=True
+        ((4, 1), (4, 2), (5, 1)),
+        panels[1:],
+        strict=True,
     ):
         _add_heatmap_panel(
             fig,
@@ -719,57 +778,41 @@ def write_debug_scan_plot(
             show_colorbar=False,
             show_samples=False,
             samples=record.samples,
-            colorscale="Viridis",
+            colorscale=COLORSCALE,
             colorbar_title="weight",
             show_legend=False,
         )
 
-    _add_marginal_panel(
-        fig,
-        row=2,
-        col=3,
-        profile=analysis.y_marginal,
-        axis_label="Y slice",
-        estimators={
-            "bin": analysis.bin_peak.y,
-            "centroid": analysis.centroid.y if analysis.centroid else None,
-            "axis": analysis.axis.y if analysis.axis else None,
-            "parabolic": analysis.parabolic.y if analysis.parabolic else None,
-        },
-        fwhm=analysis.fwhm_y,
-        show_legend=False,
-    )
-
-    stats_lines = 1 + len(pass_lines) + 1
-    layout = square_xy_plot_layout(stats_lines=stats_lines)
-    layout["width"] = layout["width"] * 3 - layout["margin"]["l"] * 2
-    layout["height"] = layout["height"] * 3 - layout["margin"]["t"]
-    layout["annotations"] = [
-        session_stats_annotation(
-            f"Debug scan  search={search_for}",
-            pass_lines,
-            final=final,
-        )
-    ]
     fig.update_layout(
-        **layout,
+        **multi_panel_layout(
+            rows=n_rows,
+            cols=n_cols,
+            title=f"Debug scan  search={search_for}",
+            tables=[
+                header_table(
+                    [
+                        ("scale", "Scale"),
+                        ("tolerance", "Tol (mm)"),
+                        ("result", "Result (mm)"),
+                    ],
+                    scale_rows,
+                ),
+                header_table(
+                    [("metric", "Metric"), ("value", "Value")],
+                    summary_rows,
+                ),
+            ],
+            final=final,
+            row_height_px=_DEBUG_ROW_HEIGHT_PX,
+        ),
     )
-    fig.update_xaxes(title_text="X offset (mm)", row=1, col=1)
-    fig.update_yaxes(title_text="Y offset (mm)", row=1, col=1)
-    fig.update_xaxes(title_text="X offset (mm)", row=1, col=2)
-    fig.update_yaxes(title_text="Y offset (mm)", row=1, col=2)
-    fig.update_xaxes(title_text="X offset (mm)", row=1, col=3)
-    fig.update_yaxes(title_text="weight", row=1, col=3)
-    fig.update_xaxes(title_text="X offset (mm)", row=2, col=1)
-    fig.update_yaxes(title_text="Y offset (mm)", row=2, col=1)
-    fig.update_xaxes(title_text="X offset (mm)", row=2, col=2)
-    fig.update_yaxes(title_text="Y offset (mm)", row=2, col=2)
-    fig.update_xaxes(title_text="Y offset (mm)", row=2, col=3)
-    fig.update_yaxes(title_text="weight", row=2, col=3)
+    for row, col in ((1, 1), (2, 1), (4, 1), (4, 2), (5, 1)):
+        fig.update_xaxes(title_text="X offset (mm)", row=row, col=col)
+        fig.update_yaxes(title_text="Y offset (mm)", row=row, col=col)
+        fig.update_yaxes(scaleanchor="x", scaleratio=1, row=row, col=col)
     fig.update_xaxes(title_text="X offset (mm)", row=3, col=1)
-    fig.update_yaxes(title_text="Y offset (mm)", row=3, col=1)
-    square_panels = ((1, 1), (1, 2), (2, 1), (2, 2), (3, 1))
-    axis_ids = ("", "2", "4", "5", "7")
-    for (row, col), suffix in zip(square_panels, axis_ids, strict=True):
-        fig.update_yaxes(scaleanchor=f"x{suffix}", scaleratio=1, row=row, col=col)
+    fig.update_yaxes(title_text="weight", row=3, col=1)
+    fig.update_xaxes(title_text="Y offset (mm)", row=3, col=2)
+    fig.update_yaxes(title_text="weight", row=3, col=2)
+    apply_axes_theme(fig)
     return fig

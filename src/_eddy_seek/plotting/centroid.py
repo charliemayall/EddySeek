@@ -1,11 +1,11 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
 
-3×3 grid debug plots for CentroidStrategy.
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
+
+3x3 grid debug plots for CentroidStrategy.
 """
 
 from __future__ import annotations
@@ -13,17 +13,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from ..common import Position
-from ._plotly import freq_marker, go, pass_color, plotly_available, xy_session_layout
+from ..common import Offset
+from ._plotly import (
+    apply_axes_theme,
+    freq_marker,
+    go,
+    marker_outline,
+    pass_color,
+    plotly_available,
+    xy_session_layout,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class CentroidPassRecord:
     pass_num: int
-    center: Position
-    result: Position
-    moved: Position
-    probes: list[tuple[Position, float]]
+    center: Offset
+    result: Offset
+    moved: Offset
+    probes: list[tuple[Offset, float]]
 
 
 def write_centroid_session_plot(
@@ -78,22 +86,22 @@ def write_centroid_session_plot(
                     "size": 14 if record is passes[-1] else 11,
                     "symbol": "star",
                     "color": color,
-                    "line": {"width": 1, "color": "white"},
+                    "line": {"width": 1, "color": marker_outline()},
                 },
                 legendgroup=label,
             )
         )
 
-    pass_lines = []
+    pass_rows: list[dict[str, str]] = []
     for record in passes:
         freqs = [freq for _, freq in record.probes]
-        freq_range = (
-            f"freq=[{min(freqs):.0f}, {max(freqs):.0f}] Hz" if freqs else "freq=n/a"
-        )
-        pass_lines.append(
-            f"Pass {record.pass_num}: result=({record.result.x:+.4f}, "
-            f"{record.result.y:+.4f}) mm  moved=({record.moved.x:.4f}, "
-            f"{record.moved.y:.4f})  {freq_range}"
+        pass_rows.append(
+            {
+                "pass": str(record.pass_num),
+                "result": f"({record.result.x:+.4f}, {record.result.y:+.4f})",
+                "moved": f"({record.moved.x:.4f}, {record.moved.y:.4f})",
+                "freq": (f"[{min(freqs):.0f}, {max(freqs):.0f}]" if freqs else "n/a"),
+            }
         )
     final = passes[-1].result
     fig.update_layout(
@@ -102,8 +110,15 @@ def write_centroid_session_plot(
         **xy_session_layout(
             f"Centroid alignment ({len(passes)} pass"
             f"{'' if len(passes) == 1 else 'es'})  search={search_for}",
-            pass_lines,
+            columns=[
+                ("pass", "Pass"),
+                ("result", "Result (mm)"),
+                ("moved", "Moved (mm)"),
+                ("freq", "Freq (Hz)"),
+            ],
+            rows=pass_rows,
             final=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
         ),
     )
+    apply_axes_theme(fig)
     return fig

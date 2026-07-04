@@ -1,9 +1,9 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 
 Repeatability scatter plot for EDDY_SEEK_ACCURACY.
 """
@@ -11,17 +11,26 @@ Repeatability scatter plot for EDDY_SEEK_ACCURACY.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from ..common import Position
+from ..common import Offset
 from ..session import compute_accuracy_stats
-from ._plotly import go, pass_color, plotly_available, xy_session_layout
+from ._plotly import (
+    THEME_COLORS,
+    apply_axes_theme,
+    go,
+    marker_outline,
+    pass_color,
+    plotly_available,
+    xy_session_layout,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class AccuracyRepeatRecord:
     repeat_num: int
-    offset: Position
+    offset: Offset
     session_plot_path: str | None = None
 
 
@@ -39,7 +48,7 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
             y=[0.0],
             mode="markers",
             name="session start",
-            marker={"size": 10, "symbol": "circle-open", "color": "#888"},
+            marker={"size": 10, "symbol": "circle-open", "color": THEME_COLORS.muted},
         )
     )
     fig.add_trace(
@@ -51,8 +60,8 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
             marker={
                 "size": 14,
                 "symbol": "star",
-                "color": "#111",
-                "line": {"width": 1, "color": "white"},
+                "color": THEME_COLORS.text,
+                "line": {"width": 1, "color": marker_outline()},
             },
         )
     )
@@ -65,7 +74,7 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
             y=repeat_ys,
             mode="lines+markers",
             name="repeat order",
-            line={"color": "#AAA", "width": 1, "dash": "dot"},
+            line={"color": THEME_COLORS.muted, "width": 1, "dash": "dot"},
             marker={"size": 11, "opacity": 0.0},
             showlegend=False,
             hoverinfo="skip",
@@ -91,22 +100,27 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
                 marker={
                     "size": 13,
                     "color": color,
-                    "line": {"width": 1, "color": "white"},
+                    "line": {"width": 1, "color": marker_outline()},
                 },
                 hovertemplate=hover + "<extra></extra>",
                 legendgroup=f"repeat {record.repeat_num}",
             )
         )
 
-    repeat_lines = []
+    repeat_rows: list[dict[str, str]] = []
     for record, radial in zip(repeats, stats.radial):
-        line = (
-            f"Repeat {record.repeat_num}: ({record.offset.x:+.4f}, "
-            f"{record.offset.y:+.4f}) mm  radial={radial:.4f} mm"
+        repeat_rows.append(
+            {
+                "repeat": str(record.repeat_num),
+                "offset": f"({record.offset.x:+.4f}, {record.offset.y:+.4f})",
+                "radial": f"{radial:.4f}",
+                "plot": (
+                    Path(record.session_plot_path).name
+                    if record.session_plot_path
+                    else ""
+                ),
+            }
         )
-        if record.session_plot_path:
-            line += f"  plot={record.session_plot_path}"
-        repeat_lines.append(line)
 
     x_lo, x_hi = stats.xs_range
     y_lo, y_hi = stats.ys_range
@@ -118,12 +132,18 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
         x1=x_hi,
         y0=y_lo,
         y1=y_hi,
-        line={"color": "#666", "width": 1.5, "dash": "dash"},
-        fillcolor="rgba(100,100,100,0.08)",
+        line={"color": THEME_COLORS.muted, "width": 1.5, "dash": "dash"},
+        fillcolor="rgba(148,163,184,0.12)",
     )
     layout = xy_session_layout(
         f"EDDY_SEEK_ACCURACY ({len(repeats)} repeats)",
-        repeat_lines,
+        columns=[
+            ("repeat", "Repeat"),
+            ("offset", "Offset (mm)"),
+            ("radial", "Radial (mm)"),
+            ("plot", "Session plot"),
+        ],
+        rows=repeat_rows,
         final=(
             f"Mean: ({stats.mean.x:+.4f}, {stats.mean.y:+.4f}) mm  "
             f"stdev: ({stats.std_x:.4f}, {stats.std_y:.4f}) mm  "
@@ -131,30 +151,29 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
             f"max pair={stats.max_pair:.4f} mm"
         ),
     )
-    layout["annotations"].extend(
-        [
-            {
-                "x": (x_lo + x_hi) / 2,
-                "y": y_lo,
-                "text": f"ΔX = {x_span:.4f} mm",
-                "showarrow": False,
-                "yshift": -18,
-                "font": {"size": 11, "color": "#444"},
-            },
-            {
-                "x": x_lo,
-                "y": (y_lo + y_hi) / 2,
-                "text": f"ΔY = {y_span:.4f} mm",
-                "showarrow": False,
-                "xshift": -52,
-                "textangle": -90,
-                "font": {"size": 11, "color": "#444"},
-            },
-        ]
-    )
+    layout["annotations"] = [
+        {
+            "x": (x_lo + x_hi) / 2,
+            "y": y_lo,
+            "text": f"ΔX = {x_span:.4f} mm",
+            "showarrow": False,
+            "yshift": -18,
+            "font": {"size": 9, "color": THEME_COLORS.muted},
+        },
+        {
+            "x": x_lo,
+            "y": (y_lo + y_hi) / 2,
+            "text": f"ΔY = {y_span:.4f} mm",
+            "showarrow": False,
+            "xshift": -52,
+            "textangle": -90,
+            "font": {"size": 9, "color": THEME_COLORS.muted},
+        },
+    ]
     fig.update_layout(
         xaxis_title="X offset from session start (mm)",
         yaxis_title="Y offset from session start (mm)",
         **layout,
     )
+    apply_axes_theme(fig)
     return fig

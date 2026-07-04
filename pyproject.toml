@@ -36,3 +36,7 @@ testpaths = ["tests"]
 
 [tool.ruff]
 exclude = ["typings"]
+
+[tool.ruff.lint]
+select = ["UP030", "UP031", "UP032", "F", "I", "UP", "RUF"]
+ignore = ["RUF001"]

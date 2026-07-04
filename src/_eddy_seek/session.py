@@ -1,80 +1,46 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 
 Per-tool seek session: sensor sampling, jogging, and convergence.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, Protocol
-
-if TYPE_CHECKING:
-    from klippy.gcode import GCodeCommand
-    from klippy.klippy import Printer
-    from .strategy.base import SeekStrategy
-
 import json
 import logging
 import math
 import time
 import uuid
+from collections.abc import Callable
+from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
-from .common import Position, session_artifact_filename
+from .common import Offset, Position, session_artifact_filename
 from .config import SeekConfig
-from .motion_guard import MotionGuard
+from .kconsole import KConsole, console_for_gcmd
+from .motion_guard import KnownKinematicLimits, clear_gcode_offset_xy
+from .motion_handler import MotionHandler
+
+if TYPE_CHECKING:
+    from klippy.klippy import Printer
+
+    from .strategy.base import SeekStrategy
+
 
 logger = logging.getLogger(__name__)
-
-
-class SeekReporter(Protocol):
-    def info(self, msg: str) -> None: ...
-
-
-@dataclass(frozen=True, slots=True)
-class GcodeReporter:
-    """Wrap Klipper ``GCodeCommand.respond_info`` for strategy use."""
-
-    _gcmd: Any
-
-    def info(self, msg: str) -> None:
-        self._gcmd.respond_info(msg)
-
-
-class SeekContext(Protocol):
-    config: SeekConfig
-
-    @property
-    def session_id(self) -> str: ...
-
-    @property
-    def session_start(self) -> Position: ...
-
-    def measure_at(self, offset: Position) -> float: ...
-
-    def append_trace(self, probe: dict[str, Any]) -> None: ...
-
-    def append_plot_trace(self, entry: dict[str, Any]) -> None: ...
-
-    def sync_offset(self, offset: Position) -> None:
-        """Update tracked session-relative nozzle position after continuous motion."""
-        ...
-
-
-class SweepContext(SeekContext, Protocol):
-    host: SeekHost
 
 
 class SeekHost(Protocol):
     printer: Printer
     seek_config: SeekConfig
+    console: KConsole | None
 
     def reset_capture(self) -> None: ...
     def get_capture_mean(self, min_samples: int = 5) -> float | None: ...
@@ -83,8 +49,9 @@ class SeekHost(Protocol):
     def capture_count(self) -> int: ...
     def session_trace_config(self) -> dict[str, Any]: ...
     def add_sensor_client(self, callback: Callable[..., Any]) -> None: ...
-    def acquire_sensor_stream(self) -> None: ...
-    def release_sensor_stream(self) -> None: ...
+    def acquire_sensor_stream(self) -> AbstractContextManager[None]:
+        """Acquire a context manager that will release the sensor stream when exited."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,42 +60,58 @@ class SeekSessionResult:
     start_time: float
     end_time: float
     status: Literal["ok", "failed"]
-    offset: Position | None
+    offset: Offset | None
     passes_run: int
     error_message: str | None
     plot_path: str | None = None
 
 
-class SeekSession(SeekContext):
+class SeekSession:
     """Locate the eddy-sensor centre by searching for frequency minima / maxima."""
 
     _GCODE_STATE_MOVE = "eddy_seek_move"
 
-    def __init__(self, host: SeekHost) -> None:
+    def __init__(
+        self,
+        host: SeekHost,
+        *,
+        run_id: str | None = None,
+        artifact_label: str = "",
+        artifact_write_at: datetime | None = None,
+    ) -> None:
         self._host = host
         self.config = host.seek_config
         self._printer = host.printer
         self._gcode = self._printer.lookup_object("gcode")
-        self._session_id = str(uuid.uuid4())
+        self.session_id = str(uuid.uuid4())
+        self.run_id = run_id
+        self.artifact_label = artifact_label
+        self._artifact_write_at = artifact_write_at
         self.start_time = time.time()
-        self._offset = Position.zero()
+        self._motion: MotionHandler | None = None
         self._save_trace = host.seek_config.save_session_trace
         self._probes: list[dict[str, Any]] = []
         self._plot_traces: list[dict[str, Any]] = []
         self._session_start: Position | None = None
 
     @property
-    def host(self) -> SeekHost:
-        return self._host
+    def artifact_write_at(self) -> datetime:
+        if self._artifact_write_at is None:
+            raise RuntimeError("eddy_seek: artifact write at not set")
+        return self._artifact_write_at
 
-    @property
-    def session_id(self) -> str:
-        return self._session_id
+    def artifact_suffix(self, strategy: str) -> str:
+        if self.artifact_label:
+            return f"{self.artifact_label}_{strategy}"
+        return strategy
 
     @property
     def session_start(self) -> Position:
         if self._session_start is None:
-            raise RuntimeError("eddy_seek: session start XY not recorded")
+            raise RuntimeError(
+                """eddy_seek: session start XY not recorded
+                 when session_start was accessed"""
+            )
         return self._session_start
 
     def append_trace(self, probe: dict[str, Any]) -> None:
@@ -138,63 +121,82 @@ class SeekSession(SeekContext):
     def append_plot_trace(self, entry: dict[str, Any]) -> None:
         self._plot_traces.append(entry)
 
-    def sync_offset(self, offset: Position) -> None:
-        self._offset = offset
+    @property
+    def motion(self) -> MotionHandler:
+        if self._motion is None:
+            raise RuntimeError("eddy_seek: motion handler requested before init")
+        return self._motion
 
-    def run(self, gcmd, strategy: SeekStrategy) -> SeekSessionResult:
+    def sync_offset(self, offset: Offset) -> None:
+        self.motion.sync_offset(offset)
+
+    @property
+    def console(self) -> KConsole | None:
+        return self._host.console
+
+    def run(
+        self,
+        gcmd,
+        strategy: SeekStrategy,
+        *,
+        boundaries: bool = True,
+        announce_plot: bool | None = None,
+    ) -> SeekSessionResult:
         cfg = self.config
-        reporter = GcodeReporter(gcmd)
+        console = console_for_gcmd(gcmd, self._host.seek_config)
+        self._host.console = console
         logger.debug(
-            "eddy_seek: session %s start strategy=%s search_for=%s",
-            self.session_id,
-            strategy.name,
-            cfg.search_for,
+            f"eddy_seek: session {self.session_id} start "
+            f"strategy={strategy.name} search_for={cfg.search_for}"
         )
-        gcmd.respond_info(
-            f"EDDY_SEEK_START: strategy={strategy.name}  "
-            f"search_for={cfg.search_for}  "
-            f"max_jog=({cfg.max_jog_x},{cfg.max_jog_y}) mm  "
-            f"tolerance={cfg.tolerance} mm  "
-            f"dwell={cfg.dwell_time} s  "
-            f"max_passes={cfg.max_passes}"
-        )
-        strategy.announce_start(self, reporter)
+
+        strategy.announce_start(self, console)
         self._gcode.run_script_from_command(
             f"SAVE_GCODE_STATE NAME={self._GCODE_STATE_MOVE}"
         )
-        best = Position.zero()
+        clear_gcode_offset_xy(self._printer)
+        best = Offset.zero()
         passes_run = 0
         error_message = None
-
+        session_plot_path: str | None = None
+        show_plot_saved = announce_plot if announce_plot is not None else boundaries
+        status: Literal["ok", "failed"] = "ok"
         try:
-            self._host.acquire_sensor_stream()
-            with MotionGuard(self._printer, gcmd):
+            with (
+                KnownKinematicLimits(self._printer),
+                self._host.acquire_sensor_stream(),
+            ):
                 self._session_start = Position.from_toolhead(self._printer)
-                best, passes_run = strategy.search(self, reporter)
-                self._move_to(best)
+                self._motion = MotionHandler(
+                    self._printer,
+                    self._host,
+                    self.config,
+                    self._session_start,
+                    self.append_trace if self._save_trace else None,
+                )
+                best, passes_run = strategy.search(self, console)
+                self._motion.jog(best)
             logger.debug(
-                "eddy_seek: session %s ok offset=(%.4f, %.4f) passes=%d",
-                self.session_id,
-                best.x,
-                best.y,
-                passes_run,
+                f"eddy_seek: session {self.session_id} ok "
+                f"offset=({best.x:.4f}, {best.y:.4f}) passes={passes_run}"
             )
-            gcmd.respond_info(
-                f"EDDY_SEEK: done - nozzle offset from start: "
-                f"X={best.x:+.4f} mm  Y={best.y:+.4f} mm  "
-                f"(passes={passes_run})"
-            )
-            status: Literal["ok", "failed"] = "ok"
+            if boundaries:
+                console.exit(
+                    f"Done - offset X={best.x:+.4f} Y={best.y:+.4f} mm "
+                    f"({passes_run} passes)"
+                )
+            status = "ok"
             offset = best
 
         except Exception as exc:
             error_message = str(exc)
             logger.exception("eddy_seek: search failed")
-            gcmd.respond_info(f"EDDY_SEEK ERROR: {error_message}")
+            console.error(f"Seek failed: {error_message}")
             status = "failed"
             offset = None
             try:
-                self._move_to(Position.zero())
+                if self._motion is not None:
+                    self._motion.jog(Offset.zero())
             except Exception:
                 logger.warning(
                     "eddy_seek: failed to return to session start after error",
@@ -211,8 +213,15 @@ class SeekSession(SeekContext):
                         "path": session_plot_path,
                     }
                 )
-                gcmd.respond_info(f"EDDY_SEEK: debug plot saved to {session_plot_path}")
-            self._host.release_sensor_stream()
+                if show_plot_saved:
+                    console.plot_saved(session_plot_path)
+            elif cfg.save_plots and status == "ok":
+                console.warn(
+                    "save_plots is enabled but no plot was written (is plotly installed?)"
+                )
+                logger.warning("eddy_seek: save_plots enabled but no plot was written")
+            if self._motion is not None:
+                self._motion.close()
             self._gcode.run_script_from_command(
                 f"RESTORE_GCODE_STATE NAME={self._GCODE_STATE_MOVE}"
             )
@@ -228,78 +237,24 @@ class SeekSession(SeekContext):
         )
         if self._save_trace:
             path = _write_seek_trace(
-                self._host, result, self._probes, self._plot_traces
+                self._host,
+                result,
+                self._probes,
+                self._plot_traces,
+                run_id=self.run_id,
+                suffix=self.artifact_suffix(strategy.name),
+                write_at=self.artifact_write_at,
             )
             if path is not None:
-                gcmd.respond_info(f"EDDY_SEEK: session trace saved to {path}")
+                logger.info(f"eddy_seek: session trace saved to {path}")
         logger.debug(
-            "eddy_seek: session %s finished status=%s probes=%d",
-            self.session_id,
-            result.status,
-            len(self._probes),
+            f"eddy_seek: session {self.session_id} finished "
+            f"status={result.status} probes={len(self._probes)}"
         )
         return result
 
-    def measure_at(self, offset: Position) -> float:
-        toolhead = self._printer.lookup_object("toolhead")
-        self._move_to(offset)
-        toolhead.wait_moves()
-
-        self._host.reset_capture()
-        toolhead.dwell(self.config.dwell_time)
-        toolhead.wait_moves()
-
-        mean = self._host.get_capture_mean(min_samples=3)
-        if mean is None:
-            logger.debug(
-                "eddy_seek: measure_at (%.4f, %.4f) failed (%d samples)",
-                offset.x,
-                offset.y,
-                self._host.capture_count,
-            )
-            raise RuntimeError(
-                f"eddy_seek: no samples at offset "
-                f"({offset.x:.3f}, {offset.y:.3f}) mm after "
-                f"{self.config.dwell_time:.2f} s dwell. "
-                "Check sensor connection, dwell_time, and i2c settings."
-            )
-        logger.debug(
-            "eddy_seek: measure_at (%.4f, %.4f) -> %.2f Hz (%d samples)",
-            offset.x,
-            offset.y,
-            mean,
-            self._host.capture_count,
-        )
-        if self._save_trace:
-            self.append_trace(
-                {
-                    "x": offset.x,
-                    "y": offset.y,
-                    "mean_hz": mean,
-                    "samples_hz": self._host.peek_capture_samples(),
-                }
-            )
-        return mean
-
-    def _move_to(self, offset: Position) -> None:
-        delta = offset - self._offset
-        if delta.x == 0.0 and delta.y == 0.0:
-            return
-
-        logger.debug(
-            "eddy_seek: jog delta=(%.4f, %.4f) -> offset=(%.4f, %.4f)",
-            delta.x,
-            delta.y,
-            offset.x,
-            offset.y,
-        )
-        toolhead = self._printer.lookup_object("toolhead")
-        pos = toolhead.get_position()
-        toolhead.manual_move(
-            [pos[0] + delta.x, pos[1] + delta.y],
-            self.config.jog_speed / 60.0,
-        )
-        self._offset = offset
+    def measure_at(self, offset: Offset) -> float:
+        return self.motion.sample(offset)
 
 
 def _write_seek_trace(
@@ -307,17 +262,21 @@ def _write_seek_trace(
     result: SeekSessionResult,
     probes: list[dict[str, Any]],
     plot_traces: list[dict[str, Any]],
+    *,
+    run_id: str | None = None,
+    suffix: str = "",
+    write_at: datetime | None = None,
 ) -> str | None:
     results_dir = Path(host.seek_config.result_folder)
     results_dir.mkdir(parents=True, exist_ok=True)
-    path = str(
-        results_dir
-        / session_artifact_filename(
-            result.session_id,
-            datetime.fromtimestamp(result.start_time),
-            ext="json",
-        )
+    out = results_dir / session_artifact_filename(
+        result.session_id,
+        write_at or datetime.now(),
+        suffix=suffix,
+        run_id=run_id,
+        ext="json",
     )
+    path = str(out)
     payload = {
         "metadata": {
             "session_id": result.session_id,
@@ -336,13 +295,14 @@ def _write_seek_trace(
         "probes": probes + plot_traces,
     }
     try:
+        out.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as trace_file:
             json.dump(payload, trace_file, indent=2)
             trace_file.write("\n")
-        logger.info("eddy_seek: session trace saved to %s", path)
+        logger.info(f"eddy_seek: session trace saved to {path}")
         return path
     except OSError as exc:
-        logger.warning("eddy_seek: failed to write session trace to %s: %s", path, exc)
+        logger.warning(f"eddy_seek: failed to write session trace to {path}: {exc}")
         return None
 
 
@@ -355,7 +315,7 @@ def _sample_stdev(values: list[float], mean: float) -> float:
 
 @dataclass(frozen=True, slots=True)
 class AccuracyStats:
-    mean: Position
+    mean: Offset
     std_x: float
     std_y: float
     radial: tuple[float, ...]
@@ -366,7 +326,7 @@ class AccuracyStats:
     ys_range: tuple[float, float]
 
 
-def compute_accuracy_stats(offsets: list[Position]) -> AccuracyStats:
+def compute_accuracy_stats(offsets: list[Offset]) -> AccuracyStats:
     n = len(offsets)
     xs = [p.x for p in offsets]
     ys = [p.y for p in offsets]
@@ -375,7 +335,7 @@ def compute_accuracy_stats(offsets: list[Position]) -> AccuracyStats:
     std_x = _sample_stdev(xs, mean_x)
     std_y = _sample_stdev(ys, mean_y)
 
-    mean = Position(mean_x, mean_y)
+    mean = Offset(mean_x, mean_y)
     radial = tuple(offset.distance_to(mean) for offset in offsets)
     max_radial = max(radial)
     mean_radial = sum(radial) / n
@@ -398,44 +358,24 @@ def compute_accuracy_stats(offsets: list[Position]) -> AccuracyStats:
     )
 
 
-def report_accuracy_stats(gcmd: GCodeCommand, offsets: list[Position]) -> None:
+def report_accuracy_stats(console: KConsole, offsets: list[Offset]) -> None:
     n = len(offsets)
     stats = compute_accuracy_stats(offsets)
 
-    gcmd.respond_info("EDDY_SEEK_ACCURACY: --- repeatability report ---")
     for i, offset in enumerate(offsets, start=1):
-        gcmd.respond_info(
-            f"EDDY_SEEK_ACCURACY:   #{i}  X={offset.x:+.4f} mm  "
-            f"Y={offset.y:+.4f} mm  "
+        console.detail(
+            f"  #{i}  X={offset.x:+.4f} mm  Y={offset.y:+.4f} mm  "
             f"radial={stats.radial[i - 1]:.4f} mm"
         )
-    gcmd.respond_info(
-        f"EDDY_SEEK_ACCURACY: mean   X={stats.mean.x:+.4f} mm  Y={stats.mean.y:+.4f} mm"
+    console.info(
+        f"Repeatability ({n} runs): mean X={stats.mean.x:+.4f} "
+        f"Y={stats.mean.y:+.4f} mm, σ X={stats.std_x:.3f} Y={stats.std_y:.3f} mm"
     )
-    gcmd.respond_info(
-        f"EDDY_SEEK_ACCURACY: stdev  X={stats.std_x:.4f} mm  Y={stats.std_y:.4f} mm"
-    )
-    gcmd.respond_info(
-        f"EDDY_SEEK_ACCURACY: range  X=[{stats.xs_range[0]:+.4f}, "
-        f"{stats.xs_range[1]:+.4f}] mm  "
-        f"Y=[{stats.ys_range[0]:+.4f}, {stats.ys_range[1]:+.4f}] mm"
-    )
-    gcmd.respond_info(
-        f"EDDY_SEEK_ACCURACY: radial from mean  "
-        f"max={stats.max_radial:.4f} mm  mean={stats.mean_radial:.4f} mm"
-    )
-    gcmd.respond_info(
-        f"EDDY_SEEK_ACCURACY: max pairwise distance = {stats.max_pair:.4f} mm  "
-        f"({n} repeats)"
+    console.info(
+        f"Max scatter {stats.max_radial:.3f} mm - max pairwise {stats.max_pair:.3f} mm"
     )
     logger.debug(
-        "eddy_seek: accuracy report n=%d mean=(%.4f, %.4f) stdev=(%.4f, %.4f) "
-        "max_radial=%.4f max_pair=%.4f",
-        n,
-        stats.mean.x,
-        stats.mean.y,
-        stats.std_x,
-        stats.std_y,
-        stats.max_radial,
-        stats.max_pair,
+        f"eddy_seek: accuracy report n={n} mean=({stats.mean.x:.4f}, {stats.mean.y:.4f}) "
+        f"stdev=({stats.std_x:.4f}, {stats.std_y:.4f}) "
+        f"max_radial={stats.max_radial:.4f} max_pair={stats.max_pair:.4f}"
     )

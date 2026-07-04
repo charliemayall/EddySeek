@@ -1,20 +1,43 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 """
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import logging
+from abc import ABC, abstractmethod
 
-from ..common import Position
-from ..session import SeekContext, SeekReporter
+from ..common import Offset
+from ..kconsole import KConsole
+from ..session import SeekSession
 
 logger = logging.getLogger(__name__)
+
+_DIVERGE_TOL = 1.25
+
+
+def _check_pass_divergence(
+    positions: list[Offset],
+    *,
+    tolerance: float,
+    pass_num: int,
+) -> None:
+    if len(positions) < 3:
+        return
+    prev, cur, nxt = positions[-3], positions[-2], positions[-1]
+    d1 = prev.distance_to(cur)
+    if d1 < tolerance:
+        return
+    d2 = cur.distance_to(nxt)
+    if d2 > _DIVERGE_TOL * d1:
+        raise RuntimeError(
+            f"eddy_seek: pass corrections diverging at pass {pass_num}: "
+            f"correction {d2:.4f} mm > {_DIVERGE_TOL} × {d1:.4f} mm"
+        )
 
 
 class SeekStrategy(ABC):
@@ -24,62 +47,55 @@ class SeekStrategy(ABC):
     @abstractmethod
     def name(self) -> str: ...
 
-    def announce_start(self, ctx: SeekContext, reporter: SeekReporter) -> None:
+    def announce_start(self, ctx: SeekSession, console: KConsole) -> None:
         pass
 
-    def on_session_end(self, ctx: SeekContext) -> str | None:
+    def on_session_end(self, ctx: SeekSession) -> str | None:
         return None
 
-    def search(self, ctx: SeekContext, reporter: SeekReporter) -> tuple[Position, int]:
+    def search(self, ctx: SeekSession, console: KConsole) -> tuple[Offset, int]:
         cfg = ctx.config
-        best = Position.zero()
+        best = Offset.zero()
+        positions = [best]
         passes_run = 0
 
         for pass_num in range(1, cfg.max_passes + 1):
             passes_run = pass_num
             logger.debug(
-                "eddy_seek: %s pass %d start best=(%.4f, %.4f)",
-                self.name,
-                pass_num,
-                best.x,
-                best.y,
+                f"eddy_seek: {self.name} pass {pass_num} start "
+                f"best=({best.x:.4f}, {best.y:.4f})"
             )
             new = self._step(ctx, pass_num, best)
             moved = (new - best).abs_components()
-            reporter.info(self._pass_message(pass_num, new, moved, ctx))
+            console.info(self._pass_message(pass_num, new, moved, ctx))
+            positions.append(new)
+            _check_pass_divergence(
+                positions, tolerance=cfg.tolerance, pass_num=pass_num
+            )
             best = new
 
             if moved.x < cfg.tolerance and moved.y < cfg.tolerance:
                 logger.debug(
-                    "eddy_seek: %s converged after pass %d (moved %.4f, %.4f)",
-                    self.name,
-                    pass_num,
-                    moved.x,
-                    moved.y,
+                    f"eddy_seek: {self.name} converged after pass {pass_num} "
+                    f"(moved {moved.x:.4f}, {moved.y:.4f})"
                 )
-                reporter.info(f"EDDY_SEEK: converged after {pass_num} pass(es).")
                 break
         else:
             logger.debug(
-                "eddy_seek: %s hit max_passes=%d without convergence",
-                self.name,
-                cfg.max_passes,
-            )
-            reporter.info(
-                f"EDDY_SEEK: reached max_passes={cfg.max_passes} "
-                f"without full convergence - using best result."
+                f"eddy_seek: {self.name} hit max_passes={cfg.max_passes} "
+                "without convergence"
             )
 
         return best, passes_run
 
     @abstractmethod
-    def _step(self, ctx: SeekContext, pass_num: int, best: Position) -> Position: ...
+    def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset: ...
 
     @abstractmethod
     def _pass_message(
         self,
         pass_num: int,
-        new: Position,
-        moved: Position,
-        ctx: SeekContext,
+        new: Offset,
+        moved: Offset,
+        ctx: SeekSession,
     ) -> str: ...

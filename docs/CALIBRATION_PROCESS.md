@@ -1,14 +1,14 @@
 # EddySeek Calibration Process
 
-This document describes how EddySeek calibrates nozzle XY positions using the
-LDC1612 eddy-current sensor. It covers the user-facing workflow, the multi-tool
-sequence, and the internal XY search loop.
+EddySeek finds each nozzle's XY position relative to an LDC1612 eddy-current
+sensor: jog, sample coil frequency, repeat until the peak marks the coil centre.
+Below: toolchanger workflow, multi-tool sequence, and the internal XY search loop.
 
 For install, configuration, and G-code reference, see the [User Guide](USER_GUIDE.md).
 
 ---
 
-## Overview
+## What calibration measures
 
 Calibration finds where each nozzle sits relative to a **reference point** on the
 sensor coil. The coil frequency changes as the nozzle moves in XY; EddySeek jogs
@@ -54,7 +54,7 @@ the resulting offset is the XY difference from tool 0.
 ## Multi-tool alignment sequence
 
 `EDDY_SEEK_TOOLS` follows this logic (`EDDY_SEEK_TOOL` is the same seek steps but
-does not run load macros — load each tool before calling it):
+does not run load macros - load each tool before calling it):
 
 ```mermaid
 flowchart TD
@@ -175,9 +175,9 @@ peak is found with a frequency-weighted 2D centroid over in-range samples.
 
 ```mermaid
 flowchart TD
-  COARSE["Pass 1 coarse: bidirectional X/Y sweeps<br/>±max_jog, staggered cross offsets"] --> FINE
-  FINE["Pass 2+ fine: narrower sweeps<br/>range × fine_shrink"] --> CENT["2D weighted centroid"]
-  CENT --> CHECK{"converged?"}
+  COARSE["Coarse pass(es): bidirectional X/Y sweeps<br/>±max_jog, staggered cross offsets"] --> FINE
+  FINE["Fine pass(es): narrower sweeps<br/>range × fine_shrink"] --> CENT["2D weighted centroid"]
+  CENT --> CHECK{"Converged?"}
   CHECK -->|no| FINE
   CHECK -->|yes| DONE([Best offset])
 ```

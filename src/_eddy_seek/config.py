@@ -1,28 +1,29 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 
 SeekConfig and printer.cfg section parsing.
 
 Field ``metadata`` drives validation, ``EDDY_SEEK_SET`` parsing, and (mostly)
 ``load_seek_config``:
 
-- ``gcode`` — G-code param name; presence means runtime-settable
-- ``positive`` — float must be > 0
-- ``min`` — int must be >= this value
-- ``enum`` — allowed string values
-- ``bool`` — parse true/false/1/0 from G-code strings
+- ``gcode`` - G-code param name; presence means runtime-settable
+- ``positive`` - float must be > 0
+- ``speed`` - cfg/G-code value is mm/s; stored internally as mm/min
+- ``min`` - int must be >= this value
+- ``enum`` - allowed string values
+- ``bool`` - parse true/false/1/0 from G-code strings
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import Field, asdict, dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
-import logging
 
 if TYPE_CHECKING:
     from klippy.extras.configfile import ConfigWrapper
@@ -33,12 +34,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass(kw_only=True)
 class SeekConfig:
-    window_size: int = field(default=20, metadata={"gcode": "WINDOW_SIZE", "min": 1})
     max_jog_x: float = field(
-        default=5.0, metadata={"gcode": "MAX_JOG_X", "positive": True}
+        default=2.5, metadata={"gcode": "MAX_JOG_X", "positive": True}
     )
     max_jog_y: float = field(
-        default=5.0, metadata={"gcode": "MAX_JOG_Y", "positive": True}
+        default=2.5, metadata={"gcode": "MAX_JOG_Y", "positive": True}
     )
     tolerance: float = field(
         default=0.1, metadata={"gcode": "TOLERANCE", "positive": True}
@@ -47,7 +47,8 @@ class SeekConfig:
         default=0.5, metadata={"gcode": "DWELL_TIME", "positive": True}
     )
     jog_speed: float = field(
-        default=600.0, metadata={"gcode": "JOG_SPEED", "positive": True}
+        default=600.0,
+        metadata={"gcode": "JOG_SPEED", "positive": True, "speed": True},
     )
     search_for: Literal["min", "max"] = field(
         default="max",
@@ -61,10 +62,10 @@ class SeekConfig:
         },
     )
     grid_step_x: float = field(
-        default=2.5, metadata={"gcode": "GRID_STEP_X", "positive": True}
+        default=1.25, metadata={"gcode": "GRID_STEP_X", "positive": True}
     )
     grid_step_y: float = field(
-        default=2.5, metadata={"gcode": "GRID_STEP_Y", "positive": True}
+        default=1.25, metadata={"gcode": "GRID_STEP_Y", "positive": True}
     )
     max_iter: int = field(default=10, metadata={"gcode": "MAX_ITER", "min": 1})
     max_passes: int = field(default=6, metadata={"gcode": "MAX_PASSES", "min": 1})
@@ -77,10 +78,12 @@ class SeekConfig:
     result_folder: str = field(default="~/printer_data/config/eddy_seek_results")
 
     sweep_coarse_speed: float = field(
-        default=20.0, metadata={"gcode": "SWEEP_COARSE_SPEED", "positive": True}
+        default=1200.0,
+        metadata={"gcode": "SWEEP_COARSE_SPEED", "positive": True, "speed": True},
     )
     sweep_fine_speed: float = field(
-        default=10.0, metadata={"gcode": "SWEEP_FINE_SPEED", "positive": True}
+        default=600.0,
+        metadata={"gcode": "SWEEP_FINE_SPEED", "positive": True, "speed": True},
     )
     sweep_overscan: float = field(
         default=1.0, metadata={"gcode": "SWEEP_OVERSCAN", "positive": True}
@@ -97,14 +100,20 @@ class SeekConfig:
     min_sweep_samples: int = field(
         default=20, metadata={"gcode": "MIN_SWEEP_SAMPLES", "min": 3}
     )
+    debug: bool = field(default=False, metadata={"bool": True})
 
     def __post_init__(self) -> None:
-        self.result_folder = str(Path(self.result_folder).expanduser().resolve())
         _validate(self)
+        self.result_folder = str(Path(self.result_folder).expanduser().resolve())
 
     def format_seek_config(self) -> str:
-        """One-line summary of effective alignment settings."""
-        return ", ".join(f"{key}={value}" for key, value in self.to_dict().items())
+        """One-line summary of effective alignment settings (speeds in mm/s)."""
+        parts: list[str] = []
+        for key, value in self.to_dict().items():
+            if _is_speed_field(key):
+                value = value / 60.0
+            parts.append(f"{key}={value}")
+        return ", ".join(parts)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -145,13 +154,14 @@ class SeekConfig:
                     f"EDDY_SEEK_SET: invalid {key}={raw!r} ({exc})"
                 ) from exc
             setattr(self, field_name, value)
-            changes.append(f"{field_name}={value}")
+            display = value / 60.0 if _is_speed_field(field_name) else value
+            changes.append(f"{field_name}={display}")
         try:
             _validate(self)
         except ValueError as exc:
             raise gcmd.error(f"EDDY_SEEK_SET: {exc}") from exc
         if changes:
-            logger.debug("eddy_seek: runtime config updated: %s", ", ".join(changes))
+            logger.debug(f"eddy_seek: runtime config updated: {', '.join(changes)}")
         return changes
 
 
@@ -160,6 +170,14 @@ def _seek_field(name: str) -> Field[Any]:
         if spec.name == name:
             return spec
     raise KeyError(name)
+
+
+def _is_speed_field(name: str) -> bool:
+    return _seek_field(name).metadata.get("speed") is True
+
+
+def _mm_s_to_mm_min(mm_s: float) -> float:
+    return mm_s * 60.0
 
 
 def _gcode_to_field() -> dict[str, str]:
@@ -200,6 +218,8 @@ def _parse_runtime_value(field_name: str, label: str, raw: Any) -> Any:
         parsed = float(raw)
         if parsed <= 0.0:
             raise ValueError(f"{label} must be > 0")
+        if meta.get("speed"):
+            return _mm_s_to_mm_min(parsed)
         return parsed
     raise ValueError(f"EDDY_SEEK_SET: invalid {label}={raw!r}")
 
@@ -258,6 +278,9 @@ def load_seek_config(config: ConfigWrapper) -> SeekConfig:
                 values[name] = config.get(name, default).lower()  # type: ignore[union-attr]
             elif isinstance(default, int):
                 values[name] = config.getint(name, default)
+            elif spec.metadata.get("speed"):
+                default_mm_s = default / 60.0
+                values[name] = _mm_s_to_mm_min(config.getfloat(name, default_mm_s))
             elif isinstance(default, float):
                 values[name] = config.getfloat(name, default)
             else:
@@ -267,7 +290,7 @@ def load_seek_config(config: ConfigWrapper) -> SeekConfig:
         ):
             values["save_plots"] = True  # legacy key; save_plots wins if both set
         cfg = SeekConfig(**values)
-        logger.debug("eddy_seek: loaded config %s", cfg.format_seek_config())
+        logger.debug(f"eddy_seek: loaded config {cfg.format_seek_config()}")
         return cfg
     except ValueError as exc:
         raise config.error(f"eddy_seek: {exc}") from exc

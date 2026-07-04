@@ -1,81 +1,98 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
 
-Align LDC1612 (print_time, frequency) samples to session-relative XY during continuous motion.
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
+
+Session-relative motion: discrete dwell probes and continuous sweep capture.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-import logging
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any
 
-from .common import Axis, Position
+from .common import Axis, Offset, Position
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer
     from klippy.toolhead import ToolHead
 
+    from .config import SeekConfig
+    from .session import SeekHost
+
 
 logger = logging.getLogger(__name__)
+
+
+def move_to_xy(
+    toolhead: ToolHead,
+    position: Position,
+    feedrate: float,
+    *,
+    wait: bool = False,
+) -> None:
+    """Queue a move to absolute machine XY (mm); feedrate in mm/min."""
+    logger.debug(
+        f"eddy_seek: move_to ({position.x:.4f}, {position.y:.4f}) feedrate={feedrate:.1f}"
+    )
+    toolhead.manual_move([position.x, position.y], feedrate / 60.0)
+    if wait:
+        toolhead.wait_moves()
 
 
 @dataclass(frozen=True, slots=True)
 class MotionSample:
     """One sensor reading correlated to session-relative XY."""
 
-    offset: Position
+    offset: Offset
     freq: float
     print_time: float
 
 
-SweepSample = MotionSample
+class _SessionMotionBase:
+    """Track session origin and session-relative nozzle offset."""
 
-
-@runtime_checkable
-class ContinuousMotion(Protocol):
-    """Record sensor batches during continuous moves and align time to XY."""
-
-    _MAX_SCV: float
-
-    @property
-    def origin(self) -> Position: ...
+    def __init__(self, printer: Printer, origin: Position, jog_speed: float) -> None:
+        self._printer = printer
+        self._origin = origin
+        self._offset = Offset.zero()
+        self._position = Offset.zero()
+        self._jog_speed = jog_speed
 
     @property
-    def position(self) -> Position:
-        """Session-relative nozzle position after the last capture leg."""
-        ...
+    def origin(self) -> Position:
+        return self._origin
 
-    def begin(self, origin: Position) -> None:
-        """Reset buffers and set machine XY at seek session start."""
-        ...
+    @property
+    def position(self) -> Offset:
+        return self._position
 
-    def close(self) -> None:
-        """Stop sensor capture for the seek session."""
-        ...
+    def sync_offset(self, offset: Offset) -> None:
+        self._offset = offset
+        self._position = offset
 
-    def capture_leg(
-        self, line_start: Position, line_end: Position, speed: float
-    ) -> None:
-        """Reposition to ``line_start`` (not sampled), then sample ``line_start``→``line_end``."""
-        ...
+    def jog_to(self, offset: Offset) -> None:
+        """Queue a jog to session-relative offset."""
+        delta = offset - self._offset
+        if delta.x == 0.0 and delta.y == 0.0:
+            return
 
-    def run_capture_legs(
-        self,
-        legs: Sequence[tuple[Position, Position]],
-        speed: float,
-    ) -> None:
-        """Queue many capture legs, then wait for the toolhead to finish."""
-        ...
-
-    def collect_samples(self) -> list[MotionSample]:
-        """Wait for pending move windows, then return aligned samples."""
-        ...
+        logger.debug(
+            f"eddy_seek: jog delta=({delta.x:.4f}, {delta.y:.4f}) "
+            f"-> offset=({offset.x:.4f}, {offset.y:.4f})"
+        )
+        toolhead = self._printer.lookup_object("toolhead")
+        pos = toolhead.get_position()
+        toolhead.manual_move(
+            [pos[0] + delta.x, pos[1] + delta.y],
+            self._jog_speed / 60.0,
+        )
+        self._offset = offset
+        self._position = offset
 
 
 def lookup_toolhead_position(toolhead: ToolHead, print_time: float) -> Position:
@@ -122,37 +139,94 @@ def axis_profile(
     return points
 
 
-class ContinuousMotionHandler:
-    """Record LDC1612 batches and correlate each sample to XY via stepper history."""
+class MotionHandler(_SessionMotionBase):
+    """
 
-    def __init__(self, printer: Printer, sensor_add_client: Callable[..., Any]) -> None:
-        self._printer = printer
-        self._sensor_add_client = sensor_add_client
+    Handle motion <---> sensor capture for continuous and discrete motion.
+
+    Discrete dwell probes and continuous LDC1612 sweep capture.
+
+    """
+
+    _MAX_SCV = 10.0
+
+    def __init__(
+        self,
+        printer: Printer,
+        host: SeekHost,
+        config: SeekConfig,
+        origin: Position,
+        trace_cb: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
+        super().__init__(printer, origin, config.jog_speed)
+        self._host = host
+        self._config = config
+        self._trace_cb = trace_cb
         self._sensor_messages: list[dict] = []
         self._capture_windows: list[tuple[float, float]] = []
         self._results: list[list[MotionSample]] = []
-        self._origin = Position.zero()
-        self._position = Position.zero()
         self._active = False
         self._need_stop = False
         self._client_registered = False
         self._th: ToolHead | None = None
-        self._last_move_end: Position | None = None
-        self._MAX_SCV = 10
-
-    @property
-    def origin(self) -> Position:
-        return self._origin
-
-    @property
-    def position(self) -> Position:
-        return self._position
+        self._last_move_end: Offset | None = None
 
     @property
     def th(self) -> ToolHead:
         if self._th is None:
             return self._printer.lookup_object("toolhead")
         return self._th
+
+    def jog(self, offset: Offset) -> None:
+        """Jog to session-relative offset and wait for the move to finish."""
+        self.jog_to(offset)
+        self.th.wait_moves()
+
+    def move_to(self, position: Position) -> None:
+        """Queue a move to absolute machine XY (mm)."""
+        offset = position - self._origin
+        if offset.x == self._offset.x and offset.y == self._offset.y:
+            return
+
+        move_to_xy(self.th, position, self._jog_speed)
+        self._offset = offset
+        self._position = offset
+
+    def sample(self, offset: Offset) -> float:
+        """Move to offset, dwell, and return mean LDC1612 frequency."""
+        self.jog(offset)
+        toolhead = self.th
+
+        self._host.reset_capture()
+        toolhead.dwell(self._config.dwell_time)
+        toolhead.wait_moves()
+
+        mean = self._host.get_capture_mean(min_samples=3)
+        if mean is None:
+            logger.debug(
+                f"eddy_seek: measure_at ({offset.x:.4f}, {offset.y:.4f}) failed "
+                f"({self._host.capture_count} samples)"
+            )
+            raise RuntimeError(
+                f"eddy_seek: no samples at offset "
+                f"({offset.x:.3f}, {offset.y:.3f}) mm after "
+                f"{self._config.dwell_time:.2f} s dwell. "
+                "Check sensor connection, dwell_time, and i2c settings."
+            )
+        logger.debug(
+            f"eddy_seek: measure_at ({offset.x:.4f}, {offset.y:.4f}) -> {mean:.2f} Hz "
+            f"({self._host.capture_count} samples)"
+        )
+        if self._trace_cb is not None:
+            self._trace_cb(
+                {
+                    "x": offset.x,
+                    "y": offset.y,
+                    "mean_hz": mean,
+                    "samples_hz": self._host.peek_capture_samples(),
+                }
+            )
+        return mean
 
     def begin(self, origin: Position) -> None:
         self._origin = origin
@@ -163,7 +237,7 @@ class ContinuousMotionHandler:
         self._active = True
         self._th = self._printer.lookup_object("toolhead")
         if not self._client_registered:
-            self._sensor_add_client(self._on_sensor_message)
+            self._host.add_sensor_client(self._on_sensor_message)
             self._client_registered = True
 
     def close(self) -> None:
@@ -171,9 +245,7 @@ class ContinuousMotionHandler:
         self._active = False
         self._th = None
 
-    def capture_leg(
-        self, line_start: Position, line_end: Position, speed: float
-    ) -> None:
+    def capture_leg(self, line_start: Offset, line_end: Offset, speed: float) -> None:
         if not self._active:
             raise RuntimeError("eddy_seek: continuous motion not active")
         if self._last_move_end is None or line_start != self._last_move_end:
@@ -188,7 +260,7 @@ class ContinuousMotionHandler:
 
     def run_capture_legs(
         self,
-        legs: Sequence[tuple[Position, Position]],
+        legs: Sequence[tuple[Offset, Offset]],
         speed: float,
     ) -> None:
         for line_start, line_end in legs:
@@ -196,13 +268,13 @@ class ContinuousMotionHandler:
         self.th.wait_moves()
         self.th.get_last_move_time()
 
-    def _manual_move(self, offset: Position, speed: float) -> None:
-
+    def _manual_move(self, offset: Offset, speed: float) -> None:
         machine = self._origin + offset
+        speed_mm_s = speed / 60.0
         self.th.limit_next_junction_speed(
-            min(speed, self._MAX_SCV)
+            min(speed_mm_s, self._MAX_SCV)
         )  # jerky cornering leeds to dwell like behaviour
-        self.th.manual_move([machine.x, machine.y], speed)
+        self.th.manual_move([machine.x, machine.y], speed_mm_s)
 
     def _register_capture_window(self, capture_start: float) -> None:
         def _end_cb(end_time: float) -> None:
@@ -292,13 +364,3 @@ class ContinuousMotionHandler:
             flat.extend(batch)
         self._results.clear()
         return flat
-
-
-def _assert_handler_implements_protocol() -> None:
-    assert isinstance(
-        ContinuousMotionHandler(object(), lambda _cb: None),  # type: ignore[arg-type]
-        ContinuousMotion,
-    )
-
-
-_assert_handler_implements_protocol()

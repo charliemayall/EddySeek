@@ -1,9 +1,9 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 
 Continuous sweep motion with frequency-weighted centroid peak finding.
 """
@@ -12,64 +12,61 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import cast
 
-from ..common import Axis, Phase, Position
-from ..continuous_motion import ContinuousMotionHandler, MotionSample
+from ..common import Axis, Offset, Phase, samples_in_box, search_box
+from ..kconsole import KConsole
+from ..motion_handler import MotionSample
+from ..optimizer import decoupled_centroid
 from ..plotting import PlotWriter
-from ..session import SeekContext, SeekReporter, SweepContext
+from ..session import SeekSession
 from .base import SeekStrategy
-from .centroid import axis_weighted_centroid
 from .sweep.axis import sweep_axis
 from .sweep.motion import iter_cross_offsets
 
 logger = logging.getLogger(__name__)
 
-_N_COARSE = 2
+_N_COARSE = 1
 
 
 class SweepCentroidStrategy(SeekStrategy):
     def __init__(self) -> None:
-        self._motion_handler: ContinuousMotionHandler | None = None
         self._plotter: PlotWriter | None = None
 
     @property
     def name(self) -> str:
         return "sweep_centroid"
 
-    def announce_start(self, ctx: SeekContext, reporter: SeekReporter) -> None:
-        sweep_ctx = cast(SweepContext, ctx)
-        cfg = sweep_ctx.config
-        self._motion_handler = ContinuousMotionHandler(
-            sweep_ctx.host.printer, sweep_ctx.host.add_sensor_client
-        )
+    def announce_start(self, ctx: SeekSession, console: KConsole) -> None:
+        cfg = ctx.config
         if cfg.save_plots:
-            self._plotter = PlotWriter(Path(cfg.result_folder), ctx.session_id)
-        reporter.info(
-            f"EDDY_SEEK: sweep_centroid coarse={cfg.sweep_coarse_speed} mm/s  "
-            f"fine={cfg.sweep_fine_speed} mm/s  "
+            self._plotter = PlotWriter(
+                Path(cfg.result_folder),
+                ctx.session_id,
+                write_at=ctx.artifact_write_at,
+                suffix=ctx.artifact_suffix(self.name),
+                run_id=ctx.run_id,
+            )
+        logger.debug(
+            f"eddy_seek: sweep_centroid coarse={cfg.sweep_coarse_speed / 60.0:.2f} mm/s "
+            f"fine={cfg.sweep_fine_speed / 60.0:.2f} mm/s "
             f"cross_passes={cfg.sweep_cross_passes}"
         )
 
-    def on_session_end(self, ctx: SeekContext) -> str | None:
+    def on_session_end(self, ctx: SeekSession) -> str | None:
         plotter = self._plotter
         self._plotter = None
-        if self._motion_handler is not None:
-            self._motion_handler.close()
-            self._recorder = None
         if plotter is None:
             self._last_plot_passes = 0
             return None
         self._last_plot_passes = plotter.sweep_centroid_pass_count
         return plotter.finalize_sweep_centroid(search_for=ctx.config.search_for)
 
-    def _phase(self, pass_num: int) -> Phase:
+    def _phase_for_pass(self, pass_num: int) -> Phase:
         return Phase.COARSE if pass_num <= _N_COARSE else Phase.FINE
 
-    def _step(self, ctx: SeekContext, pass_num: int, best: Position) -> Position:
-        sweep_ctx = cast(SweepContext, ctx)
-        cfg = sweep_ctx.config
-        phase = self._phase(pass_num)
+    def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
+        cfg = ctx.config
+        phase = self._phase_for_pass(pass_num)
         if phase is Phase.COARSE:
             shrink = 1.0
             speed = cfg.sweep_coarse_speed
@@ -81,7 +78,7 @@ class SweepCentroidStrategy(SeekStrategy):
         half_y = cfg.max_jog_y * shrink
 
         _, samples_x = self._sweep_axis(
-            sweep_ctx,
+            ctx,
             Axis.X,
             best.x,
             half_x,
@@ -91,7 +88,7 @@ class SweepCentroidStrategy(SeekStrategy):
             speed,
         )
         _, samples_y = self._sweep_axis(
-            sweep_ctx,
+            ctx,
             Axis.Y,
             best.y,
             half_y,
@@ -100,9 +97,9 @@ class SweepCentroidStrategy(SeekStrategy):
             phase,
             speed,
         )
-        box = _search_box(best, half_x, half_y, cfg.max_jog_x, cfg.max_jog_y)
-        in_box_x = _samples_in_box(samples_x, box)
-        in_box_y = _samples_in_box(samples_y, box)
+        box = search_box(best, half_x, half_y, cfg.max_jog_x, cfg.max_jog_y)
+        in_box_x = samples_in_box(samples_x, box)
+        in_box_y = samples_in_box(samples_y, box)
         in_box = in_box_x + in_box_y
 
         if len(in_box) < cfg.min_sweep_samples:
@@ -115,15 +112,11 @@ class SweepCentroidStrategy(SeekStrategy):
 
         x_profile = [(sample.offset.x, sample.freq) for sample in in_box_x]
         y_profile = [(sample.offset.y, sample.freq) for sample in in_box_y]
-        centroid_x = axis_weighted_centroid(x_profile, cfg.search_for)
-        centroid_y = axis_weighted_centroid(y_profile, cfg.search_for)
-        if centroid_x is None or centroid_y is None:
+        result_or_none = decoupled_centroid(x_profile, y_profile, cfg.search_for)
+        if result_or_none is None:
             logger.warning(
-                "eddy_seek: flat frequency response on sweep pass %d - "
-                "keeping centre (%.4f, %.4f)",
-                pass_num,
-                best.x,
-                best.y,
+                f"eddy_seek: flat frequency response on sweep pass {pass_num} - "
+                f"keeping centre ({best.x:.4f}, {best.y:.4f})"
             )
             if self._plotter is not None:
                 self._plotter.record_sweep_centroid_pass(
@@ -131,24 +124,18 @@ class SweepCentroidStrategy(SeekStrategy):
                     phase=phase,
                     center=best,
                     result=best,
-                    moved=Position.zero(),
+                    moved=Offset.zero(),
                     samples=in_box,
                     box=box,
                 )
             return best
 
-        result = Position(centroid_x, centroid_y).clamp(cfg.max_jog_x, cfg.max_jog_y)
+        result = result_or_none.clamp(cfg.max_jog_x, cfg.max_jog_y)
         freqs = [freq for _, freq in x_profile + y_profile]
         logger.debug(
-            "eddy_seek: sweep_centroid pass %d %s -> (%.4f, %.4f) "
-            "freq_range=[%.2f, %.2f] Hz (%d samples)",
-            pass_num,
-            phase.value,
-            result.x,
-            result.y,
-            min(freqs),
-            max(freqs),
-            len(in_box),
+            f"eddy_seek: sweep_centroid pass {pass_num} {phase.value} "
+            f"-> ({result.x:.4f}, {result.y:.4f}) "
+            f"freq_range=[{min(freqs):.2f}, {max(freqs):.2f}] Hz ({len(in_box)} samples)"
         )
         ctx.append_trace(
             {
@@ -175,19 +162,20 @@ class SweepCentroidStrategy(SeekStrategy):
     def _pass_message(
         self,
         pass_num: int,
-        new: Position,
-        moved: Position,
-        ctx: SeekContext,
+        new: Offset,
+        moved: Offset,
+        ctx: SeekSession,
     ) -> str:
-        return (
-            f"EDDY_SEEK pass {pass_num} ({self._phase(pass_num).value}): "
-            f"sweep_centroid ({new.x:+.4f}, {new.y:+.4f}) mm  "
-            f"(moved {moved.x:.4f}, {moved.y:.4f})"
+        phase = self._phase_for_pass(pass_num).value
+        logger.debug(
+            f"eddy_seek: sweep_centroid pass {pass_num} ({phase}) "
+            f"moved=({moved.x:.4f}, {moved.y:.4f})"
         )
+        return f"Pass {pass_num} ({phase}): X={new.x:+.4f} Y={new.y:+.4f} mm"
 
     def _sweep_axis(
         self,
-        ctx: SweepContext,
+        ctx: SeekSession,
         axis: Axis,
         center: float,
         half_range: float,
@@ -203,11 +191,8 @@ class SweepCentroidStrategy(SeekStrategy):
         cross_offsets = iter_cross_offsets(
             cfg.sweep_cross_passes, cfg.sweep_cross_offset
         )
-        if self._motion_handler is None:
-            raise RuntimeError("eddy_seek: continuous motion handler not started")
         points, samples = sweep_axis(
             ctx,
-            self._motion_handler,
             axis=axis,
             lo=lo,
             hi=hi,
@@ -224,29 +209,3 @@ class SweepCentroidStrategy(SeekStrategy):
                 "Check sensor and sweep speed."
             )
         return points, samples
-
-
-def _search_box(
-    center: Position,
-    half_x: float,
-    half_y: float,
-    max_jog_x: float,
-    max_jog_y: float,
-) -> tuple[float, float, float, float]:
-    x_lo = max(-max_jog_x, center.x - half_x)
-    x_hi = min(max_jog_x, center.x + half_x)
-    y_lo = max(-max_jog_y, center.y - half_y)
-    y_hi = min(max_jog_y, center.y + half_y)
-    return x_lo, x_hi, y_lo, y_hi
-
-
-def _samples_in_box(
-    samples: list[MotionSample],
-    box: tuple[float, float, float, float],
-) -> list[MotionSample]:
-    x_lo, x_hi, y_lo, y_hi = box
-    return [
-        sample
-        for sample in samples
-        if x_lo <= sample.offset.x <= x_hi and y_lo <= sample.offset.y <= y_hi
-    ]

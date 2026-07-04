@@ -1,16 +1,16 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 """
 
 import pytest
 
-from _eddy_seek.common import Axis, Position
-from _eddy_seek.continuous_motion import MotionSample
-from _eddy_seek.strategy.debug_scan import bin_frequencies, peak_bin_center
+from _eddy_seek.common import Axis, Offset
+from _eddy_seek.motion_handler import MotionSample
+from _eddy_seek.optimizer import bin_frequencies, peak_bin_center
 from _eddy_seek.strategy.sweep.grid import plan_grid_legs, y_lines
 
 
@@ -32,12 +32,12 @@ def test_plan_grid_legs_row_count():
 def test_bin_frequencies_finds_peak():
     tolerance = 0.1
     box = (-0.5, 0.5, -0.5, 0.5)
-    center = Position.zero()
+    center = Offset.zero()
     peak_x, peak_y = 0.05, -0.05
     samples = [
-        MotionSample(Position(peak_x, peak_y), 100.0, 0.0),
-        MotionSample(Position(peak_x + 0.01, peak_y), 100.0, 0.1),
-        MotionSample(Position(-0.2, 0.2), 10.0, 0.2),
+        MotionSample(Offset(peak_x, peak_y), 100.0, 0.0),
+        MotionSample(Offset(peak_x + 0.01, peak_y), 100.0, 0.1),
+        MotionSample(Offset(-0.2, 0.2), 10.0, 0.2),
     ]
     z, x_centers, y_centers = bin_frequencies(samples, box, tolerance, center, "max")
     peak = peak_bin_center(z, x_centers, y_centers)
@@ -49,7 +49,7 @@ def test_bin_frequencies_finds_peak():
 def test_bin_frequencies_grid_centered_on_search_center():
     tolerance = 0.1
     box = (-0.5, 0.5, -0.5, 0.5)
-    center = Position.zero()
+    center = Offset.zero()
     _, x_centers, y_centers = bin_frequencies([], box, tolerance, center, "max")
     assert any(abs(x) <= tolerance / 2 for x in x_centers)
     assert any(abs(y) <= tolerance / 2 for y in y_centers)
@@ -58,10 +58,10 @@ def test_bin_frequencies_grid_centered_on_search_center():
 def test_peak_bin_center_min_picks_lowest():
     tolerance = 0.1
     box = (-0.5, 0.5, -0.5, 0.5)
-    center = Position.zero()
+    center = Offset.zero()
     samples = [
-        MotionSample(Position(0.05, -0.05), 100.0, 0.0),
-        MotionSample(Position(-0.2, 0.2), 10.0, 0.1),
+        MotionSample(Offset(0.05, -0.05), 100.0, 0.0),
+        MotionSample(Offset(-0.2, 0.2), 10.0, 0.1),
     ]
     z_max, x_centers, y_centers = bin_frequencies(
         samples, box, tolerance, center, "max"

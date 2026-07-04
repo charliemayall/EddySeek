@@ -1,9 +1,9 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 
 Continuous axis sweep execution and profile extraction.
 """
@@ -12,17 +12,16 @@ from __future__ import annotations
 
 import logging
 
-from ...common import Axis, Phase, Position
-from ...session import SweepContext
-from ...continuous_motion import ContinuousMotionHandler, SweepSample, axis_profile
-from .motion import traversal_endpoints
+from ...common import Axis, Phase
+from ...motion_handler import MotionSample, axis_profile
+from ...session import SeekSession
+from .motion import capture_legs, plan_axis_legs, speed_clamp_for_min_samples
 
 logger = logging.getLogger(__name__)
 
 
 def sweep_axis(
-    ctx: SweepContext,
-    handler: ContinuousMotionHandler,
+    ctx: SeekSession,
     axis: Axis,
     lo: float,
     hi: float,
@@ -31,35 +30,33 @@ def sweep_axis(
     speed: float,
     phase: Phase,
     pass_num: int,
-) -> tuple[list[tuple[float, float]], list[SweepSample]]:
+) -> tuple[list[tuple[float, float]], list[MotionSample]]:
     """Continuous ± traverses on ``axis``; merged profile in session offsets."""
     cfg = ctx.config
-    handler.begin(ctx.session_start)
-
-    legs: list[tuple[Position, Position]] = []
-    # Parallel lines on the cross axis: each sweep is a 1D slice of a 2D
-    # field, so one line skews the peak if we're still off on the other axis.
-    for cross_delta in cross_offsets:
-        cross = cross_center + cross_delta
-        for reverse in (False, True):
-            legs.append(
-                traversal_endpoints(
-                    axis, lo, hi, cross, cfg.sweep_overscan, reverse=reverse
-                )
+    legs = plan_axis_legs(axis, lo, hi, cross_center, cross_offsets, cfg.sweep_overscan)
+    requested = speed
+    span = hi - lo
+    speed = speed_clamp_for_min_samples(
+        requested_mm_min=speed,
+        span_mm=span,
+        min_samples=cfg.min_sweep_samples,
+    )
+    if speed < requested:
+        if ctx.console is not None:
+            ctx.console.detail(
+                f"sweep speed clamped {requested / 60.0:.2f} -> {speed / 60.0:.2f} mm/s "
+                f"(span={span:.3f} mm, min_samples={cfg.min_sweep_samples})"
             )
-
-    handler.run_capture_legs(legs, speed)
-    ctx.sync_offset(handler.position)
-    samples = handler.collect_samples()
+        logger.debug(
+            f"eddy_seek: sweep speed clamped {requested / 60.0:.2f} -> {speed / 60.0:.2f} mm/s "
+            f"(span={span:.3f} mm, min_samples={cfg.min_sweep_samples})"
+        )
+    samples = capture_legs(ctx, legs, speed)
     points = axis_profile(samples, axis, lo, hi)
 
     logger.debug(
-        "eddy_seek: sweep_axis %s pass %d %s cross_passes=%d -> %d points",
-        axis.value,
-        pass_num,
-        phase.value,
-        len(cross_offsets),
-        len(points),
+        f"eddy_seek: sweep_axis {axis.value} pass {pass_num} {phase.value} "
+        f"cross_passes={len(cross_offsets)} -> {len(points)} points"
     )
     ctx.append_trace(
         {

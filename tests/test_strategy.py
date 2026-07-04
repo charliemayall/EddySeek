@@ -1,41 +1,27 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 """
 
 import math
 
+from fakes import CommandError, FakeGcmd
 from pytest import raises
 
-from _eddy_seek.common import Position
+from _eddy_seek.common import Offset
 from _eddy_seek.config import SeekConfig
-from _eddy_seek.session import SeekSession, _sample_stdev
-from _eddy_seek.strategy import TernaryStrategy, strategy_for
-from _eddy_seek.strategy.centroid import (
+from _eddy_seek.optimizer import (
     axis_weighted_centroid,
+    frequency_is_better,
     frequency_weight,
     weighted_centroid,
 )
-
-
-class CommandError(Exception):
-    """Matches ``klippy.gcode.CommandError`` for test doubles."""
-
-
-class _FakeGcmd:
-    error = CommandError
-
-    def __init__(self, params: dict[str, str] | None = None) -> None:
-        self._params = {k.upper(): v for k, v in (params or {}).items()}
-
-    def get_command_parameters(self) -> dict[str, str]:
-        return self._params
-
-    def respond_info(self, msg: str) -> None:
-        pass
+from _eddy_seek.session import SeekSession, _sample_stdev
+from _eddy_seek.strategy import TernaryStrategy, strategy_for
+from _eddy_seek.strategy.base import SeekStrategy, _check_pass_divergence
 
 
 def _test_cfg(**overrides) -> SeekConfig:
@@ -50,9 +36,9 @@ class _FakeReporter:
 class _RecordingSearchSession:
     def __init__(self) -> None:
         self.config = _test_cfg(max_iter=1, max_passes=1)
-        self.positions: list[Position] = []
+        self.positions: list[Offset] = []
 
-    def measure_at(self, offset: Position) -> float:
+    def measure_at(self, offset: Offset) -> float:
         self.positions.append(offset)
         return -((offset.x - 1.0) ** 2 + (offset.y + 1.0) ** 2)
 
@@ -61,10 +47,10 @@ def test_strategy_search_uses_positions():
     session = _RecordingSearchSession()
     best, passes_run = TernaryStrategy().search(session, _FakeReporter())  # type: ignore[arg-type]
 
-    assert isinstance(best, Position)
+    assert isinstance(best, Offset)
     assert passes_run == 1
     assert session.positions
-    assert all(isinstance(position, Position) for position in session.positions)
+    assert all(isinstance(position, Offset) for position in session.positions)
 
 
 def test_strategy_weights_and_runtime_set():
@@ -76,25 +62,24 @@ def test_strategy_weights_and_runtime_set():
     assert frequency_weight(50.0, 50.0, 100.0, "max") == 0.0
     assert frequency_weight(50.0, 50.0, 100.0, "min") == 50.0
 
-    ternary = TernaryStrategy()
-    assert ternary._is_better(session, 90.0, 80.0) is True
-    assert ternary._is_better(session, 70.0, 80.0) is False
+    assert frequency_is_better(90.0, 80.0, session.config.search_for) is True
+    assert frequency_is_better(70.0, 80.0, session.config.search_for) is False
     assert _sample_stdev([1.0, 3.0], 2.0) == math.sqrt(2.0)
 
     cfg = _test_cfg()
-    changed = cfg.apply_runtime_set(_FakeGcmd({"STRATEGY": "centroid"}))
+    changed = cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "centroid"}))
     assert changed == ["strategy=centroid"]
     assert cfg.strategy == "centroid"
     with raises(CommandError):
-        cfg.apply_runtime_set(_FakeGcmd({"STRATEGY": "bogus"}))
+        cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "bogus"}))
     with raises(CommandError, match="unknown parameter 'GRD_STEP_X'"):
-        cfg.apply_runtime_set(_FakeGcmd({"GRD_STEP_X": "2.5"}))
+        cfg.apply_runtime_set(FakeGcmd({"GRD_STEP_X": "2.5"}))
 
     assert strategy_for("ternary").name == "ternary"
     assert strategy_for("centroid").name == "centroid"
     assert strategy_for("sweep_centroid").name == "sweep_centroid"
     assert strategy_for("debug_scan").name == "debug_scan"
-    changed = cfg.apply_runtime_set(_FakeGcmd({"STRATEGY": "debug_scan"}))
+    changed = cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "debug_scan"}))
     assert changed == ["strategy=debug_scan"]
     assert cfg.strategy == "debug_scan"
     with raises(ValueError):
@@ -103,9 +88,9 @@ def test_strategy_weights_and_runtime_set():
 
 def test_weighted_centroid_finds_peak():
     probes = [
-        (Position(-1.0, 0.0), 100.0),
-        (Position(0.0, 0.0), 200.0),
-        (Position(1.0, 0.0), 100.0),
+        (Offset(-1.0, 0.0), 100.0),
+        (Offset(0.0, 0.0), 200.0),
+        (Offset(1.0, 0.0), 100.0),
     ]
     result = weighted_centroid(probes, "max")
     assert result is not None
@@ -116,12 +101,12 @@ def test_weighted_centroid_finds_peak():
 def test_merged_centroid_couples_axes():
     """Y sweeps at a wrong X slice pull a merged 2-D centroid off the true peak."""
     probes = [
-        (Position(-0.5, 0.0), 100.0),
-        (Position(0.0, 0.0), 200.0),
-        (Position(0.5, 0.0), 100.0),
-        (Position(0.06, -0.5), 180.0),
-        (Position(0.06, 0.0), 190.0),
-        (Position(0.06, 0.5), 180.0),
+        (Offset(-0.5, 0.0), 100.0),
+        (Offset(0.0, 0.0), 200.0),
+        (Offset(0.5, 0.0), 100.0),
+        (Offset(0.06, -0.5), 180.0),
+        (Offset(0.06, 0.0), 190.0),
+        (Offset(0.06, 0.5), 180.0),
     ]
     result = weighted_centroid(probes, "max")
     assert result is not None
@@ -137,3 +122,67 @@ def test_axis_weighted_centroid_decouples_axes():
     assert result_y is not None
     assert abs(result_x) < 0.01
     assert abs(result_y) < 0.01
+
+
+def test_check_pass_divergence_too_few_positions():
+    _check_pass_divergence(
+        [Offset.zero(), Offset(1.0, 0.0)],
+        tolerance=0.1,
+        pass_num=1,
+    )
+
+
+def test_check_pass_divergence_shrinking_corrections_ok():
+    positions = [Offset.zero(), Offset(2.0, 0.0), Offset(3.0, 0.0)]
+    _check_pass_divergence(positions, tolerance=0.1, pass_num=2)
+
+
+def test_check_pass_divergence_raises_when_corrections_grow():
+    positions = [Offset.zero(), Offset(1.0, 0.0), Offset(2.3, 0.0)]
+    with raises(RuntimeError, match="pass corrections diverging"):
+        _check_pass_divergence(positions, tolerance=0.1, pass_num=2)
+
+
+def test_check_pass_divergence_skips_when_prior_correction_below_tolerance():
+    positions = [Offset.zero(), Offset.zero(), Offset(1.0, 0.0)]
+    _check_pass_divergence(positions, tolerance=0.1, pass_num=2)
+
+
+def test_check_pass_divergence_raises_at_tolerance_boundary():
+    positions = [Offset.zero(), Offset(0.1, 0.0), Offset(0.226, 0.0)]
+    with raises(RuntimeError, match="pass corrections diverging"):
+        _check_pass_divergence(positions, tolerance=0.1, pass_num=2)
+
+
+class _ScriptedStrategy(SeekStrategy):
+    def __init__(self, steps: list[Offset]) -> None:
+        self._steps = steps
+
+    @property
+    def name(self) -> str:
+        return "scripted"
+
+    def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
+        return self._steps[pass_num - 1]
+
+    def _pass_message(
+        self,
+        pass_num: int,
+        new: Offset,
+        moved: Offset,
+        ctx: SeekSession,
+    ) -> str:
+        return f"pass {pass_num}"
+
+
+def test_search_aborts_on_pass_divergence():
+    session = SeekSession.__new__(SeekSession)
+    session.config = _test_cfg(max_passes=6, tolerance=0.1)
+    strategy = _ScriptedStrategy(
+        [
+            Offset(1.0, 0.0),
+            Offset(2.3, 0.0),
+        ]
+    )
+    with raises(RuntimeError, match="pass corrections diverging at pass 2"):
+        strategy.search(session, _FakeReporter())  # type: ignore[arg-type]

@@ -1,9 +1,9 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 
 Bracket-narrowing debug plots for TernaryStrategy.
 """
@@ -13,13 +13,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from ..common import Axis, Position
+from ..common import Axis, Offset
 from ._plotly import (
+    apply_axes_theme,
     go,
+    header_table,
     make_subplots,
+    marker_outline,
+    multi_panel_layout,
     pass_color,
     plotly_available,
-    session_stats_annotation,
 )
 
 
@@ -38,11 +41,11 @@ class TernaryStep:
 @dataclass(frozen=True, slots=True)
 class TernaryPassRecord:
     pass_num: int
-    result: Position
-    moved: Position
+    result: Offset
+    moved: Offset
     x_steps: list[TernaryStep]
     y_steps: list[TernaryStep]
-    probes: list[tuple[Position, float]]
+    probes: list[tuple[Offset, float]]
 
 
 def write_ternary_session_plot(
@@ -57,7 +60,7 @@ def write_ternary_session_plot(
         rows=3,
         cols=1,
         shared_xaxes=False,
-        vertical_spacing=0.08,
+        vertical_spacing=0.05,
         row_heights=[0.45, 0.275, 0.275],
         subplot_titles=(
             "Probe overview",
@@ -100,7 +103,7 @@ def write_ternary_session_plot(
                     "size": 14 if record is passes[-1] else 11,
                     "symbol": "star",
                     "color": color,
-                    "line": {"width": 1, "color": "white"},
+                    "line": {"width": 1, "color": marker_outline()},
                 },
                 legendgroup=label,
             ),
@@ -124,19 +127,18 @@ def write_ternary_session_plot(
             * (max(len(record.x_steps), len(record.y_steps), 1) + 1),
         )
 
-    pass_lines = []
+    pass_rows: list[dict[str, str]] = []
     for record in passes:
         freqs = [freq for _, freq in record.probes]
-        freq_range = (
-            f"freq=[{min(freqs):.0f}, {max(freqs):.0f}] Hz" if freqs else "freq=n/a"
-        )
-        pass_lines.append(
-            f"Pass {record.pass_num}: result=({record.result.x:+.4f}, "
-            f"{record.result.y:+.4f}) mm  moved=({record.moved.x:.4f}, "
-            f"{record.moved.y:.4f})  {freq_range}"
+        pass_rows.append(
+            {
+                "pass": str(record.pass_num),
+                "result": f"({record.result.x:+.4f}, {record.result.y:+.4f})",
+                "moved": f"({record.moved.x:.4f}, {record.moved.y:.4f})",
+                "freq": (f"[{min(freqs):.0f}, {max(freqs):.0f}]" if freqs else "n/a"),
+            }
         )
     final = passes[-1].result
-    stats_lines = 1 + len(pass_lines) + 1
     fig.update_xaxes(title_text="X offset (mm)", row=1, col=1)
     fig.update_yaxes(title_text="Y offset (mm)", row=1, col=1)
     fig.update_xaxes(title_text="Offset (mm)", row=2, col=1)
@@ -144,19 +146,28 @@ def write_ternary_session_plot(
     fig.update_yaxes(title_text="Iteration", row=2, col=1)
     fig.update_yaxes(title_text="Iteration", row=3, col=1)
     fig.update_layout(
-        annotations=[
-            session_stats_annotation(
+        **multi_panel_layout(
+            rows=3,
+            cols=1,
+            title=(
                 f"Ternary alignment ({len(passes)} pass"
-                f"{'' if len(passes) == 1 else 'es'})  search={search_for}",
-                pass_lines,
-                final=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
-            )
-        ],
-        title=None,
-        height=max(900, 220 + 15 * stats_lines + 40 * len(passes)),
-        margin={"t": stats_lines * 15 + 12 + 48, "b": 72, "l": 60, "r": 40},
-        legend={"orientation": "h", "y": -0.02, "x": 0, "xanchor": "left"},
+                f"{'' if len(passes) == 1 else 'es'})  search={search_for}"
+            ),
+            tables=[
+                header_table(
+                    [
+                        ("pass", "Pass"),
+                        ("result", "Result (mm)"),
+                        ("moved", "Moved (mm)"),
+                        ("freq", "Freq (Hz)"),
+                    ],
+                    pass_rows,
+                )
+            ],
+            final=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
+        ),
     )
+    apply_axes_theme(fig)
     return fig
 
 

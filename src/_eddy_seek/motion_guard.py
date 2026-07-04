@@ -1,123 +1,140 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
 
-Clear and restore XY gcode offset for the duration of a seek session.
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
+
+Toolhead kinematic settings and gcode offset helpers for seek sessions.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-from .common import Position
 from logging import getLogger
+from typing import TYPE_CHECKING
+
+from .common import Offset
+
+if TYPE_CHECKING:
+    from klippy.klippy import Printer
+    from klippy.toolhead import ToolHead
 
 logger = getLogger(__name__)
 
-if TYPE_CHECKING:
-    from klippy.gcode import GCodeCommand
-    from klippy.klippy import Printer
+SCV_CAP = 9.0
+MAX_ACCEL = 3000.0
+MCR_DEFAULT = 0.5
 
 
-def _get_gcode_offset_xy(printer: Printer) -> Position:
-    gcode_move = printer.lookup_object("gcode_move")
-    hp = gcode_move.homing_position
-    return Position.from_pair(hp)
-
-
-def _set_gcode_offset_xy(printer: Printer, pos: Position) -> None:
+def _set_gcode_offset_xy(printer: Printer, pos: Offset) -> None:
     gcode = printer.lookup_object("gcode")
     gcode.run_script_from_command(f"SET_GCODE_OFFSET {pos.to_gcode()}")
 
 
 def clear_gcode_offset_xy(printer: Printer) -> None:
     """Zero XY gcode offset so alignment moves use machine coordinates."""
-    _set_gcode_offset_xy(printer, Position.zero())
+    _set_gcode_offset_xy(printer, Offset.zero())
 
 
-def _apply_toolhead_limits(
-    toolhead: Any,
+def set_kinematic_limits(
+    toolhead: ToolHead,
     *,
-    square_corner_velocity: float | None,
-    min_cruise_ratio: float | None,
+    max_velocity: float | None = None,
+    max_accel: float | None = None,
+    square_corner_velocity: float | None = None,
+    min_cruise_ratio: float | None = None,
 ) -> None:
-    """Set square_corner_velocity / min_cruise_ratio and recalc junction deviation."""
+    """Set toolhead velocity limits (Klipper >= Aug 2025 or legacy fallback)."""
+    if hasattr(toolhead, "set_max_velocities"):
+        toolhead.set_max_velocities(
+            max_velocity, max_accel, square_corner_velocity, min_cruise_ratio
+        )
+        return
+    if max_velocity is not None:
+        toolhead.max_velocity = max_velocity
+    if max_accel is not None:
+        toolhead.max_accel = max_accel
     if square_corner_velocity is not None:
         toolhead.square_corner_velocity = square_corner_velocity
     if min_cruise_ratio is not None and hasattr(toolhead, "min_cruise_ratio"):
         toolhead.min_cruise_ratio = min_cruise_ratio
-    calc = getattr(toolhead, "_calc_junction_deviation", None)
-    if calc is not None:
-        calc()
+    if hasattr(toolhead, "_calc_junction_deviation"):
+        toolhead._calc_junction_deviation()
 
 
-class MotionGuard:
-    """Restore gcode-offset settings after a seek session."""
+def _read_max_accel(toolhead: ToolHead) -> float:
+    if hasattr(toolhead, "get_max_velocity"):
+        _, max_accel = toolhead.get_max_velocity()
+        return max_accel
+    return toolhead.max_accel
 
-    def __init__(self, printer: Printer, gcmd: GCodeCommand | None = None) -> None:
+
+class KnownKinematicLimits:
+    """Save and restore toolhead SCV/cruise limits and input shaper for seeks.
+
+    Gcode XY offset is not handled here — ``SAVE_GCODE_STATE`` / ``RESTORE`` and
+    ``clear_gcode_offset_xy()`` own that at the session boundary.
+    """
+
+    def __init__(self, printer: Printer) -> None:
         self._printer = printer
-        self._gcmd = gcmd
-        self._input_shaper: Any | None = None
         self._saved_scv: float | None = None
         self._saved_mcr: float | None = None
-        self._saved_gcode_offset: Position | None = None
+        self._saved_accel: float | None = None
 
-    def __enter__(self) -> MotionGuard:
-        self._saved_gcode_offset = _get_gcode_offset_xy(self._printer)
-        _set_gcode_offset_xy(self._printer, Position.zero())
-
+    def __enter__(self) -> KnownKinematicLimits:
         toolhead = self._printer.lookup_object("toolhead")
         self._saved_scv = toolhead.square_corner_velocity
-        self._saved_mcr = (
-            toolhead.min_cruise_ratio if hasattr(toolhead, "min_cruise_ratio") else None
-        )
-        applied_scv = min(9.0, self._saved_scv)
-        _apply_toolhead_limits(
-            toolhead,
-            square_corner_velocity=applied_scv,
-            min_cruise_ratio=0.0 if self._saved_mcr is not None else None,
-        )
-        logger.info(f"EDDY_SEEK: set square_corner_velocity to {applied_scv}")
+        self._saved_mcr = getattr(toolhead, "min_cruise_ratio", None)
+        self._saved_accel = _read_max_accel(toolhead)
+        applied_scv = min(SCV_CAP, self._saved_scv)
+        applied_accel = min(MAX_ACCEL, self._saved_accel)
 
-        self._input_shaper = self._printer.lookup_object("input_shaper", None)
-        if self._input_shaper is not None:
-            self._input_shaper.disable_shaping()
+        logger.info(
+            f"EDDY_SEEK: Requested kinematic: square_corner_velocity={applied_scv}, accel={applied_accel}"
+        )
+        logger.info(
+            f"EDDY_SEEK: scv: {self._saved_scv}, mcr: {self._saved_mcr} accel: {self._saved_accel}"
+        )
+        set_kinematic_limits(
+            toolhead,
+            max_velocity=None,
+            max_accel=applied_accel,
+            square_corner_velocity=applied_scv,
+            min_cruise_ratio=(
+                MCR_DEFAULT if self._saved_mcr is None else self._saved_mcr
+            ),
+        )
+        logger.info(
+            f"EDDY_SEEK: set scv: {applied_scv}, mcr: {MCR_DEFAULT if self._saved_mcr is None else self._saved_mcr}, accel: {applied_accel}"
+        )
+
+        input_shaper = self._printer.lookup_object("input_shaper", None)
+        if input_shaper is not None:
+            input_shaper.disable_shaping()  # type: ignore
             logger.info("EDDY_SEEK: disabled input shaping")
         else:
             logger.info("EDDY_SEEK: no input shaping found")
 
-        self._respond("EDDY_SEEK: cleared gcode offset")
         return self
 
     def __exit__(self, *exc: object) -> None:
-        if self._saved_gcode_offset is not None:
-            _set_gcode_offset_xy(self._printer, self._saved_gcode_offset)
-            logger.info(f"EDDY_SEEK: restored gcode offset: {self._saved_gcode_offset}")
         toolhead = self._printer.lookup_object("toolhead")
         if self._saved_scv is not None:
-            _apply_toolhead_limits(
+            set_kinematic_limits(
                 toolhead,
+                max_velocity=None,
+                max_accel=self._saved_accel,
                 square_corner_velocity=self._saved_scv,
                 min_cruise_ratio=self._saved_mcr,
             )
             logger.debug(
-                f"EDDY_SEEK: restored toolhead limits: square_corner_velocity={self._saved_scv}, min_cruise_ratio={self._saved_mcr}"
+                f"EDDY_SEEK: restored toolhead limits: scv: {self._saved_scv}, mcr: {self._saved_mcr}, accel: {self._saved_accel}"
             )
-        else:
-            logger.debug("EDDY_SEEK: no toolhead limits found")
 
-        if self._input_shaper is not None:
-            self._input_shaper.enable_shaping()
+        input_shaper = self._printer.lookup_object("input_shaper", None)
+        if input_shaper is not None:
+            input_shaper.enable_shaping()  # type: ignore
             logger.debug("EDDY_SEEK: enabled input shaping")
-        else:
-            logger.debug("EDDY_SEEK: no input shaping found")
 
-        self._respond("EDDY_SEEK: restored motion settings")
         return None
-
-    def _respond(self, msg: str) -> None:
-        if self._gcmd is not None:
-            self._gcmd.respond_info(msg)

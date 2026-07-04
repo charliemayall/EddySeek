@@ -1,9 +1,9 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 """
 
 from __future__ import annotations
@@ -11,9 +11,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from ..common import Axis, Position
+from ..common import Axis, Offset
+from ..kconsole import KConsole
+from ..optimizer import frequency_is_better
 from ..plotting import PlotWriter, TernaryStep
-from ..session import SeekContext, SeekReporter
+from ..session import SeekSession
 from .base import SeekStrategy
 
 logger = logging.getLogger(__name__)
@@ -27,11 +29,17 @@ class TernaryStrategy(SeekStrategy):
     def name(self) -> str:
         return "ternary"
 
-    def announce_start(self, ctx: SeekContext, reporter: SeekReporter) -> None:
+    def announce_start(self, ctx: SeekSession, console: KConsole) -> None:
         if ctx.config.save_plots:
-            self._plotter = PlotWriter(Path(ctx.config.result_folder), ctx.session_id)
+            self._plotter = PlotWriter(
+                Path(ctx.config.result_folder),
+                ctx.session_id,
+                write_at=ctx.artifact_write_at,
+                suffix=ctx.artifact_suffix(self.name),
+                run_id=ctx.run_id,
+            )
 
-    def on_session_end(self, ctx: SeekContext) -> str | None:
+    def on_session_end(self, ctx: SeekSession) -> str | None:
         plotter = self._plotter
         self._plotter = None
         if plotter is None:
@@ -40,9 +48,9 @@ class TernaryStrategy(SeekStrategy):
         self._last_plot_passes = plotter.ternary_pass_count
         return plotter.finalize_ternary(search_for=ctx.config.search_for)
 
-    def _step(self, ctx: SeekContext, pass_num: int, best: Position) -> Position:
+    def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         cfg = ctx.config
-        pass_probes: list[tuple[Position, float]] = []
+        pass_probes: list[tuple[Offset, float]] = []
         new_x, x_steps = self._ternary_search_1d(
             ctx,
             axis=Axis.X,
@@ -74,24 +82,23 @@ class TernaryStrategy(SeekStrategy):
     def _pass_message(
         self,
         pass_num: int,
-        new: Position,
-        moved: Position,
-        ctx: SeekContext,
+        new: Offset,
+        moved: Offset,
+        ctx: SeekSession,
     ) -> str:
-        return (
-            f"EDDY_SEEK pass {pass_num}: "
-            f"X offset {new.x:+.4f} mm (moved {moved.x:.4f})  "
-            f"Y offset {new.y:+.4f} mm (moved {moved.y:.4f})"
+        logger.debug(
+            f"eddy_seek: ternary pass {pass_num} moved=({moved.x:.4f}, {moved.y:.4f})"
         )
+        return f"Pass {pass_num}: X={new.x:+.4f} Y={new.y:+.4f} mm"
 
     def _ternary_search_1d(
         self,
-        ctx: SeekContext,
+        ctx: SeekSession,
         axis: Axis,
         center: float,
         half_range: float,
         fixed: float,
-        pass_probes: list[tuple[Position, float]],
+        pass_probes: list[tuple[Offset, float]],
     ) -> tuple[float, list[TernaryStep]]:
         cfg = ctx.config
         lo = max(-half_range, center - half_range)
@@ -107,7 +114,7 @@ class TernaryStrategy(SeekStrategy):
             m2 = hi - span / 3.0
 
             cross_axis = Axis.Y if axis is Axis.X else Axis.X
-            probe = Position.zero().with_axis(cross_axis, fixed)
+            probe = Offset.zero().with_axis(cross_axis, fixed)
             pos_m1 = probe.with_axis(axis, m1)
             pos_m2 = probe.with_axis(axis, m2)
             f1 = ctx.measure_at(pos_m1)
@@ -115,17 +122,12 @@ class TernaryStrategy(SeekStrategy):
             pass_probes.append((pos_m1, f1))
             pass_probes.append((pos_m2, f2))
 
+            better = (
+                "m1" if frequency_is_better(f1, f2, ctx.config.search_for) else "m2"
+            )
             logger.debug(
-                "eddy_seek: ternary %s lo=%.4f hi=%.4f m1=%.4f(%.2f Hz) "
-                "m2=%.4f(%.2f Hz) better=%s",
-                axis.value,
-                lo,
-                hi,
-                m1,
-                f1,
-                m2,
-                f2,
-                "m1" if self._is_better(ctx, f1, f2) else "m2",
+                f"eddy_seek: ternary {axis.value} lo={lo:.4f} hi={hi:.4f} "
+                f"m1={m1:.4f}({f1:.2f} Hz) m2={m2:.4f}({f2:.2f} Hz) better={better}"
             )
 
             steps.append(
@@ -141,14 +143,9 @@ class TernaryStrategy(SeekStrategy):
                 )
             )
 
-            if self._is_better(ctx, f1, f2):
+            if frequency_is_better(f1, f2, ctx.config.search_for):
                 hi = m2
             else:
                 lo = m1
 
         return (lo + hi) / 2.0, steps
-
-    def _is_better(self, ctx: SeekContext, f1: float, f2: float) -> bool:
-        if ctx.config.search_for == "min":
-            return f1 < f2
-        return f1 > f2

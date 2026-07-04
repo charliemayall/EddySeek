@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 
 Symlink EddySeek into Klipper's extras directory (optionally, user specified target)
 """
@@ -14,8 +14,8 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 from enum import Enum
+from pathlib import Path
 
 EDDY_SEEK_DIR = Path(__file__).resolve().parent
 DEFAULT_DEST = Path.home() / "klipper" / "klippy" / "extras"
@@ -90,6 +90,18 @@ def main() -> None:
     entry.unlink(missing_ok=True)
     entry.symlink_to((src_dir / "eddy_seek.py").resolve())
 
+    src_pkg = src_dir / "_eddy_seek"
+    if not src_pkg.is_dir() or not (src_pkg / "config.py").is_file():
+        print(
+            f"""
+            Error: missing {src_pkg},\
+            did you clone the repository?\n
+            Try removing and re-cloning the repository.
+            """,
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     pkg = dest / "_eddy_seek"
     if pkg.is_symlink() or pkg.is_file():
         pkg.unlink()
@@ -106,7 +118,7 @@ def main() -> None:
     print(f"{_c('-- ', COLORS.GRAY)}{dest / '_eddy_seek/'}")
     print(
         f"""\n{_c("Next steps:", COLORS.GREEN)}\n
-    1. Add [eddy_seek] to printer.cfg (set sensor_x/sensor_y for your coil)
+    1. Add [eddy_seek] to printer.cfg and set config options
     2. Restart Klipper: sudo systemctl restart klipper
 
     After git pull, re-run ./install.sh then restart Klipper.
