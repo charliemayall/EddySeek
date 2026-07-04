@@ -457,6 +457,13 @@ class CircleHarmonicStrategy(SeekStrategy):
     ) -> None:
         cfg = ctx.config
         speed = cfg.sweep_coarse_speed
+        length = abs(radius)
+
+        clamped_speed = get_clamped_speed_for_min_samples_over_span(
+            requested_mm_min=speed,
+            span_mm=length,
+            min_samples=cfg.min_sweep_samples,
+        )
         _, samples_x = self._sweep_axis(
             ctx,
             Axis.X,
@@ -465,7 +472,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             center.y,
             pass_num,
             Phase.FINE,
-            speed,
+            clamped_speed,
         )
         _, samples_y = self._sweep_axis(
             ctx,
@@ -475,7 +482,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             center.x,
             pass_num,
             Phase.FINE,
-            speed,
+            clamped_speed,
         )
         box = search_box(center, radius, radius, cfg.max_jog_x, cfg.max_jog_y)
         self._x_profile = [(s.offset.x, s.freq) for s in samples_in_box(samples_x, box)]
@@ -499,6 +506,12 @@ class CircleHarmonicStrategy(SeekStrategy):
         cross_offsets = iter_cross_offsets(
             cfg.sweep_cross_passes, cfg.sweep_cross_offset
         )
+        length_one_leg = abs(hi - lo)
+        clamped_speed = get_clamped_speed_for_min_samples_over_span(
+            requested_mm_min=speed,
+            span_mm=length_one_leg,
+            min_samples=cfg.min_sweep_samples,
+        )
         points, samples = sweep_axis(
             ctx,
             axis=axis,
@@ -506,7 +519,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             hi=hi,
             cross_center=cross_center,
             cross_offsets=cross_offsets,
-            speed=speed,
+            speed=clamped_speed,
             phase=phase,
             pass_num=pass_num,
         )
