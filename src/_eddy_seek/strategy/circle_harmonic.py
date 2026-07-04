@@ -40,7 +40,7 @@ from ..movement.leg_planner import (
 from ..optimizer import decoupled_centroid
 from ..plotting import PlotWriter
 from ..session import SeekSession
-from .base import SeekStrategy
+from .base import SeekStrategy, _check_pass_divergence
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,6 @@ class CircleHarmonicStrategy(SeekStrategy):
 
     def search(self, ctx: SeekSession, console: KConsole) -> tuple[Offset, int]:
         """Keep trying smaller circle radii after a rejected harmonic fit."""
-        from .base import _check_pass_divergence
 
         cfg = ctx.config
         best = Offset.zero()
@@ -111,9 +110,10 @@ class CircleHarmonicStrategy(SeekStrategy):
             moved = (new - best).abs_components()
             console.info(self._pass_message(pass_num, new, moved, ctx))
             positions.append(new)
-            _check_pass_divergence(
-                positions, tolerance=cfg.tolerance, pass_num=pass_num
-            )
+            if not self._last_pass_rejected:
+                _check_pass_divergence(
+                    positions, tolerance=cfg.tolerance, pass_num=pass_num
+                )
             best = new
 
             if self._frozen is not None:
@@ -309,13 +309,13 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"eddy_seek: circle_harmonic pass {pass_num} radius {trace_radius:.4f} "
                 f"< min {cfg.circle_radius_min} - holding bootstrap"
             )
-            self._frozen = bootstrap
-            return bootstrap
+            self._frozen = best
+            return best
 
         legs = circle_arc_legs(trace_center, trace_radius, cfg.circle_arc_resolution)
         if not legs:
-            self._frozen = bootstrap
-            return bootstrap
+            self._frozen = best
+            return best
         circumfrence = 2 * math.pi * radius
         clamped_speed = get_clamped_speed_for_min_samples_over_span(
             requested_mm_min=cfg.circle_speed,
@@ -361,7 +361,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 rejected=True,
                 reject_reasons="fit failed",
             )
-            return bootstrap
+            return best
 
         reject_reasons = harmonic_reject_reasons(
             fit,
@@ -388,7 +388,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 rejected=True,
                 reject_reasons=", ".join(reject_reasons),
             )
-            return bootstrap
+            return best
 
         f_prime = radial_slope(
             self._x_profile, self._y_profile, trace_radius, center=trace_center
@@ -441,7 +441,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                     f"diverged from bootstrap (Δ={divergence:.4f} > {divergence_limit:.4f})"
                 ),
             )
-            return bootstrap
+            return best
 
         if harmonic_converged(fit, step, cfg.tolerance, cfg.noise_k):
             logger.debug(f"eddy_seek: circle_harmonic converged at pass {pass_num}")

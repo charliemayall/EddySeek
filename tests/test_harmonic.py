@@ -366,6 +366,42 @@ def test_circle_harmonic_search_retries_after_rejected_pass():
     assert best.x == pytest.approx(0.96)
 
 
+def test_circle_harmonic_rejected_pass_holds_best():
+    """Rejected circle pass must not snap to bootstrap (false pass-divergence)."""
+    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
+
+    class _FakeReporter:
+        def info(self, msg: str) -> None:
+            pass
+
+    class _Session:
+        config = SeekConfig(max_passes=6, tolerance=0.01)
+
+    bootstrap = Offset(-0.0498, -0.3674)
+    refined = Offset(-0.1478, -0.7640)
+    strategy = CircleHarmonicStrategy()
+
+    def fake_step(_ctx, pass_num, best):
+        if pass_num == 1:
+            return bootstrap
+        if pass_num < 5:
+            t = (pass_num - 1) / 4.0
+            return Offset(
+                bootstrap.x + t * (refined.x - bootstrap.x),
+                bootstrap.y + t * (refined.y - bootstrap.y),
+            )
+        if pass_num == 5:
+            return refined
+        strategy._last_pass_rejected = True
+        return best
+
+    strategy._step = fake_step  # type: ignore[method-assign]
+    best, passes_run = strategy.search(_Session(), _FakeReporter())  # type: ignore[arg-type]
+    assert passes_run == 6
+    assert best.x == pytest.approx(refined.x)
+    assert best.y == pytest.approx(refined.y)
+
+
 def test_circle_harmonic_skips_refresh_sweeps_when_disabled():
     from unittest.mock import MagicMock, patch
 
