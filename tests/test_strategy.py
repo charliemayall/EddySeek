@@ -19,6 +19,7 @@ from _eddy_seek.optimizer import (
     frequency_weight,
     weighted_centroid,
 )
+from _eddy_seek.plotting.recorder import SessionRecorder
 from _eddy_seek.session import SeekSession, _sample_stdev
 from _eddy_seek.strategy import TernaryStrategy, strategy_for
 from _eddy_seek.strategy.base import SeekStrategy, _check_pass_divergence
@@ -37,6 +38,7 @@ class _RecordingSearchSession:
     def __init__(self) -> None:
         self.config = _test_cfg(max_iter=1, max_passes=1)
         self.positions: list[Offset] = []
+        self.recorder = SessionRecorder(trace=False, plots=False)
 
     def measure_at(self, offset: Offset) -> float:
         self.positions.append(offset)

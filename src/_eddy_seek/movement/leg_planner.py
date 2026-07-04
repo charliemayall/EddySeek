@@ -14,10 +14,12 @@ import logging
 from collections.abc import Sequence
 
 from ..common import Axis, Offset, Phase, samples_in_box, search_box
+from ..plotting.primitives import SweepGridTraceRecord, SweepTraceRecord
 from ..session import SeekSession
 from .handler import (
     MotionSample,
     axis_profile,
+    get_clamped_speed_for_min_samples_over_span,
 )
 
 logger = logging.getLogger(__name__)
@@ -156,19 +158,59 @@ def sweep_axis(
         f"eddy_seek: sweep_axis {axis.value} pass {pass_num} {phase.value} "
         f"cross_passes={len(cross_offsets)} -> {len(points)} points"
     )
-    ctx.append_trace(
-        {
-            "type": "sweep",
-            "pass": pass_num,
-            "phase": phase.value,
-            "axis": axis.value,
-            "cross_offsets": cross_offsets,
-            "cross_center": cross_center,
-            "lo": lo,
-            "hi": hi,
-            "samples": points,
-        }
+    if ctx.recorder.trace:
+        ctx.recorder.record(
+            SweepTraceRecord(
+                pass_num=pass_num,
+                phase=phase.value,
+                axis=axis.value,
+                cross_offsets=tuple(cross_offsets),
+                cross_center=cross_center,
+                lo=lo,
+                hi=hi,
+                samples=tuple(points),
+            )
+        )
+    return points, samples
+
+
+def clamped_sweep_axis(
+    ctx: SeekSession,
+    axis: Axis,
+    center: float,
+    half_range: float,
+    cross_center: float,
+    speed: float,
+    phase: Phase,
+    pass_num: int,
+) -> tuple[list[tuple[float, float]], list[MotionSample]]:
+    """Sweep one axis within jog limits, with speed clamped for min sample count."""
+    cfg = ctx.config
+    jog_limit = cfg.max_jog_x if axis is Axis.X else cfg.max_jog_y
+    lo = max(-jog_limit, center - half_range)
+    hi = min(jog_limit, center + half_range)
+    cross_offsets = iter_cross_offsets(cfg.sweep_cross_passes, cfg.sweep_cross_offset)
+    clamped_speed = get_clamped_speed_for_min_samples_over_span(
+        requested_mm_min=speed,
+        span_mm=abs(hi - lo),
+        min_samples=cfg.min_sweep_samples,
     )
+    points, samples = sweep_axis(
+        ctx,
+        axis=axis,
+        lo=lo,
+        hi=hi,
+        cross_center=cross_center,
+        cross_offsets=cross_offsets,
+        speed=clamped_speed,
+        phase=phase,
+        pass_num=pass_num,
+    )
+    if len(points) < cfg.min_sweep_samples:
+        raise RuntimeError(
+            f"eddy_seek: sweep on {axis.value} collected {len(points)} samples "
+            f"(need >= {cfg.min_sweep_samples})"
+        )
     return points, samples
 
 
@@ -191,17 +233,21 @@ def sweep_grid(
         f"eddy_seek: sweep_grid rows={rows} legs={len(legs)} "
         f"samples={len(samples)} in_box={len(in_box)}"
     )
-    ctx.append_trace(
-        {
-            "type": "sweep_grid",
-            "center": {"x": center.x, "y": center.y},
-            "box": {"x_lo": x_lo, "x_hi": x_hi, "y_lo": y_lo, "y_hi": y_hi},
-            "step_size": step_size,
-            "rows": rows,
-            "legs": len(legs),
-            "samples": len(in_box),
-        }
-    )
+    if ctx.recorder.trace:
+        ctx.recorder.record(
+            SweepGridTraceRecord(
+                center_x=center.x,
+                center_y=center.y,
+                x_lo=x_lo,
+                x_hi=x_hi,
+                y_lo=y_lo,
+                y_hi=y_hi,
+                step_size=step_size,
+                rows=rows,
+                legs=len(legs),
+                samples=len(in_box),
+            )
+        )
     return in_box, box
 
 

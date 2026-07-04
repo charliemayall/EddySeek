@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import logging
 import math
-from pathlib import Path
+from collections.abc import Sequence
+from typing import Any, Literal
 
 from ..common import Axis, Offset, Phase, samples_in_box, search_box
 from ..harmonic import (
@@ -33,12 +34,30 @@ from ..harmonic import (
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample, get_clamped_speed_for_min_samples_over_span
 from ..movement.leg_planner import (
+    clamped_sweep_axis,
     get_samples_from_capture_legs,
-    iter_cross_offsets,
-    sweep_axis,
 )
 from ..optimizer import decoupled_centroid
-from ..plotting import PlotWriter
+from ..plotting._plotly import (
+    apply_axes_theme,
+    freq_marker,
+    go,
+    header_table,
+    make_subplots,
+    marker_outline,
+    multi_panel_layout,
+    plotly_available,
+)
+from ..plotting.primitives import (
+    CircleBootstrapRecord,
+    CircleBootstrapTraceRecord,
+    CircleHarmonicPassRecord,
+    CircleHarmonicSlopeTraceRecord,
+    CircleHarmonicTraceRecord,
+    pass_color,
+)
+from ..plotting.registry import StrategyPlotter, register_plotter
+from ..plotting.renderer import finalize_strategy_plot
 from ..session import SeekSession
 from .base import SeekStrategy, _check_pass_divergence
 
@@ -49,13 +68,11 @@ class CircleHarmonicStrategy(SeekStrategy):
     """Sweep bootstrap, then circle harmonic nulling with model and bore gates."""
 
     def __init__(self) -> None:
-        self._plotter: PlotWriter | None = None
         self._bootstrap: Offset | None = None
         self._x_profile: list[tuple[float, float]] = []
         self._y_profile: list[tuple[float, float]] = []
         self._frozen: Offset | None = None
         self._last_pass_rejected = False
-        self._last_plot_passes = 0
 
     @property
     def name(self) -> str:
@@ -63,14 +80,6 @@ class CircleHarmonicStrategy(SeekStrategy):
 
     def announce_start(self, ctx: SeekSession, console: KConsole) -> None:
         cfg = ctx.config
-        if cfg.save_plots:
-            self._plotter = PlotWriter(
-                Path(cfg.result_folder),
-                ctx.session_id,
-                write_at=ctx.artifact_write_at,
-                suffix=ctx.artifact_suffix(self.name),
-                run_id=ctx.run_id,
-            )
         logger.info(
             f"eddy_seek: circle_harmonic coarse={cfg.sweep_coarse_speed / 60.0:.2f} mm/s "
             f"circle={cfg.circle_speed / 60.0:.2f} mm/s "
@@ -81,15 +90,10 @@ class CircleHarmonicStrategy(SeekStrategy):
         )
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
-        plotter = self._plotter
-        self._plotter = None
         self._bootstrap = None
         self._frozen = None
         self._last_pass_rejected = False
-        if plotter is None:
-            return None
-        self._last_plot_passes = plotter.circle_harmonic_pass_count
-        return plotter.finalize_circle_harmonic(search_for=ctx.config.search_for)
+        return finalize_strategy_plot(ctx, self.name)
 
     def search(self, ctx: SeekSession, console: KConsole) -> tuple[Offset, int]:
         """Keep trying smaller circle radii after a rejected harmonic fit."""
@@ -191,11 +195,11 @@ class CircleHarmonicStrategy(SeekStrategy):
         half_y = cfg.max_jog_y
         speed = cfg.sweep_coarse_speed
 
-        _, samples_x = self._sweep_axis(
-            ctx, Axis.X, best.x, half_x, best.y, pass_num, Phase.COARSE, speed
+        _, samples_x = clamped_sweep_axis(
+            ctx, Axis.X, best.x, half_x, best.y, speed, Phase.COARSE, pass_num
         )
-        _, samples_y = self._sweep_axis(
-            ctx, Axis.Y, best.y, half_y, best.x, pass_num, Phase.COARSE, speed
+        _, samples_y = clamped_sweep_axis(
+            ctx, Axis.Y, best.y, half_y, best.x, speed, Phase.COARSE, pass_num
         )
         box = search_box(best, half_x, half_y, cfg.max_jog_x, cfg.max_jog_y)
         in_box_x = samples_in_box(samples_x, box)
@@ -233,20 +237,23 @@ class CircleHarmonicStrategy(SeekStrategy):
                     f"holding ({best.x:.4f}, {best.y:.4f})"
                 )
             self._record_bootstrap_plot(
+                ctx,
                 pass_num,
                 best,
                 best,
                 [*in_box_x, *in_box_y],
                 box,
             )
-            trace: dict[str, object] = {
-                "type": "circle_harmonic_bootstrap_slope_only",
-                "pass": pass_num,
-                "result": {"x": best.x, "y": best.y},
-            }
-            if centroid is not None:
-                trace["centroid_skipped"] = {"x": centroid.x, "y": centroid.y}
-            ctx.append_trace(trace)
+            if ctx.recorder.trace:
+                ctx.recorder.record(
+                    CircleHarmonicSlopeTraceRecord(
+                        pass_num=pass_num,
+                        result_x=best.x,
+                        result_y=best.y,
+                        centroid_skipped_x=centroid.x if centroid is not None else None,
+                        centroid_skipped_y=centroid.y if centroid is not None else None,
+                    )
+                )
             return best
 
         if result_or_none is None:
@@ -256,6 +263,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             )
             self._bootstrap = best
             self._record_bootstrap_plot(
+                ctx,
                 pass_num,
                 best,
                 best,
@@ -270,19 +278,21 @@ class CircleHarmonicStrategy(SeekStrategy):
             f"eddy_seek: circle_harmonic bootstrap -> ({result.x:.4f}, {result.y:.4f})"
         )
         self._record_bootstrap_plot(
+            ctx,
             pass_num,
             best,
             result,
             [*in_box_x, *in_box_y],
             box,
         )
-        ctx.append_trace(
-            {
-                "type": "circle_harmonic_bootstrap",
-                "pass": pass_num,
-                "result": {"x": result.x, "y": result.y},
-            }
-        )
+        if ctx.recorder.trace:
+            ctx.recorder.record(
+                CircleBootstrapTraceRecord(
+                    pass_num=pass_num,
+                    result_x=result.x,
+                    result_y=result.y,
+                )
+            )
         return result
 
     def _circle_pass(
@@ -354,6 +364,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"(r={trace_radius:.3f}) - holding bootstrap"
             )
             self._record_circle_plot(
+                ctx,
                 pass_num,
                 best,
                 bootstrap,
@@ -381,6 +392,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"noise={fit.noise:.4f}): {', '.join(reject_reasons)}"
             )
             self._record_circle_plot(
+                ctx,
                 pass_num,
                 best,
                 bootstrap,
@@ -432,6 +444,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"({result.x:.4f}, {result.y:.4f}) vs ({bootstrap.x:.4f}, {bootstrap.y:.4f})"
             )
             self._record_circle_plot(
+                ctx,
                 pass_num,
                 best,
                 bootstrap,
@@ -452,6 +465,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             self._frozen = result
 
         self._record_circle_plot(
+            ctx,
             pass_num,
             best,
             result,
@@ -463,38 +477,56 @@ class CircleHarmonicStrategy(SeekStrategy):
             rejected=False,
         )
 
-        ctx.append_trace(
-            {
-                "type": "circle_harmonic",
-                "pass": pass_num,
-                "radius": trace_radius,
-                "result": {"x": result.x, "y": result.y},
-                "harmonic": {"a": fit.a, "b": fit.b, "amp": fit.amplitude},
-            }
-        )
+        if ctx.recorder.trace:
+            ctx.recorder.record(
+                CircleHarmonicTraceRecord(
+                    pass_num=pass_num,
+                    radius=trace_radius,
+                    result_x=result.x,
+                    result_y=result.y,
+                    harmonic_a=fit.a,
+                    harmonic_b=fit.b,
+                    harmonic_amp=fit.amplitude,
+                )
+            )
         return result
 
     def _record_bootstrap_plot(
         self,
+        ctx: SeekSession,
         pass_num: int,
         center: Offset,
         result: Offset,
         samples: list[MotionSample],
         box: tuple[float, float, float, float],
     ) -> None:
-        if self._plotter is None:
+        rec = ctx.recorder
+        if not rec.active:
             return
-        self._plotter.record_circle_harmonic_bootstrap(
-            pass_num=pass_num,
-            center=center,
-            result=result,
-            moved=(result - center).abs_components(),
-            samples=samples,
-            box=box,
+        moved = (result - center).abs_components()
+        x_lo, x_hi, y_lo, y_hi = box
+        rec.record(
+            CircleBootstrapRecord(
+                pass_num=pass_num,
+                center_x=center.x,
+                center_y=center.y,
+                result_x=result.x,
+                result_y=result.y,
+                moved_x=moved.x,
+                moved_y=moved.y,
+                sample_xs=tuple(sample.offset.x for sample in samples),
+                sample_ys=tuple(sample.offset.y for sample in samples),
+                sample_freqs=tuple(sample.freq for sample in samples),
+                x_lo=x_lo,
+                x_hi=x_hi,
+                y_lo=y_lo,
+                y_hi=y_hi,
+            )
         )
 
     def _record_circle_plot(
         self,
+        ctx: SeekSession,
         pass_num: int,
         best: Offset,
         result: Offset,
@@ -507,23 +539,33 @@ class CircleHarmonicStrategy(SeekStrategy):
         rejected: bool,
         reject_reasons: str = "",
     ) -> None:
-        if self._plotter is None:
+        rec = ctx.recorder
+        if not rec.active:
             return
-        self._plotter.record_circle_harmonic_circle(
-            pass_num=pass_num,
-            trace_center=trace_center,
-            radius=trace_radius,
-            result=result,
-            moved=(result - best).abs_components(),
-            samples=samples,
-            binned=binned,
-            fit_c0=fit.c0 if fit is not None else None,
-            fit_a=fit.a if fit is not None else None,
-            fit_b=fit.b if fit is not None else None,
-            fit_amp=fit.amplitude if fit is not None else None,
-            fit_noise=fit.noise if fit is not None else None,
-            rejected=rejected,
-            reject_reasons=reject_reasons,
+        moved = (result - best).abs_components()
+        rec.record(
+            CircleHarmonicPassRecord(
+                pass_num=pass_num,
+                trace_center_x=trace_center.x,
+                trace_center_y=trace_center.y,
+                radius=trace_radius,
+                result_x=result.x,
+                result_y=result.y,
+                moved_x=moved.x,
+                moved_y=moved.y,
+                sample_xs=tuple(sample.offset.x for sample in samples),
+                sample_ys=tuple(sample.offset.y for sample in samples),
+                sample_freqs=tuple(sample.freq for sample in samples),
+                binned_thetas=tuple(theta for theta, _ in binned),
+                binned_freqs=tuple(freq for _, freq in binned),
+                fit_c0=fit.c0 if fit is not None else None,
+                fit_a=fit.a if fit is not None else None,
+                fit_b=fit.b if fit is not None else None,
+                fit_amp=fit.amplitude if fit is not None else None,
+                fit_noise=fit.noise if fit is not None else None,
+                rejected=rejected,
+                reject_reasons=reject_reasons,
+            )
         )
 
     def _refresh_profiles(
@@ -542,68 +584,303 @@ class CircleHarmonicStrategy(SeekStrategy):
             span_mm=length,
             min_samples=cfg.min_sweep_samples,
         )
-        _, samples_x = self._sweep_axis(
+        _, samples_x = clamped_sweep_axis(
             ctx,
             Axis.X,
             center.x,
             radius,
             center.y,
-            pass_num,
-            Phase.FINE,
             clamped_speed,
+            Phase.FINE,
+            pass_num,
         )
-        _, samples_y = self._sweep_axis(
+        _, samples_y = clamped_sweep_axis(
             ctx,
             Axis.Y,
             center.y,
             radius,
             center.x,
-            pass_num,
-            Phase.FINE,
             clamped_speed,
+            Phase.FINE,
+            pass_num,
         )
         box = search_box(center, radius, radius, cfg.max_jog_x, cfg.max_jog_y)
         self._x_profile = [(s.offset.x, s.freq) for s in samples_in_box(samples_x, box)]
         self._y_profile = [(s.offset.y, s.freq) for s in samples_in_box(samples_y, box)]
 
-    def _sweep_axis(
+
+@register_plotter("circle_harmonic")
+class CircleHarmonicPlotter(StrategyPlotter):
+    def render(
         self,
-        ctx: SeekSession,
-        axis: Axis,
-        center: float,
-        half_range: float,
-        cross_center: float,
-        pass_num: int,
-        phase: Phase,
-        speed: float,
-    ) -> tuple[list[tuple[float, float]], list[MotionSample]]:
-        cfg = ctx.config
-        jog_limit = cfg.max_jog_x if axis is Axis.X else cfg.max_jog_y
-        lo = max(-jog_limit, center - half_range)
-        hi = min(jog_limit, center + half_range)
-        cross_offsets = iter_cross_offsets(
-            cfg.sweep_cross_passes, cfg.sweep_cross_offset
+        records: Sequence[Any],
+        *,
+        search_for: Literal["min", "max"],
+    ) -> Any | None:
+        if not plotly_available() or go is None or make_subplots is None:
+            return None
+
+        bootstrap = next(
+            (record for record in records if isinstance(record, CircleBootstrapRecord)),
+            None,
         )
-        length_one_leg = abs(hi - lo)
-        clamped_speed = get_clamped_speed_for_min_samples_over_span(
-            requested_mm_min=speed,
-            span_mm=length_one_leg,
-            min_samples=cfg.min_sweep_samples,
+        circles = [
+            record for record in records if isinstance(record, CircleHarmonicPassRecord)
+        ]
+        if bootstrap is None and not circles:
+            return None
+
+        fig = make_subplots(
+            rows=2,
+            cols=1,
+            shared_xaxes=False,
+            vertical_spacing=0.08,
+            row_heights=[0.55, 0.45],
+            subplot_titles=("XY samples", "Circle harmonic (θ vs Hz)"),
         )
-        points, samples = sweep_axis(
-            ctx,
-            axis=axis,
-            lo=lo,
-            hi=hi,
-            cross_center=cross_center,
-            cross_offsets=cross_offsets,
-            speed=clamped_speed,
-            phase=phase,
-            pass_num=pass_num,
-        )
-        if len(points) < cfg.min_sweep_samples:
-            raise RuntimeError(
-                f"eddy_seek: sweep on {axis.value} collected {len(points)} samples "
-                f"(need >= {cfg.min_sweep_samples})"
+        pass_rows: list[dict[str, str]] = []
+
+        if bootstrap is not None:
+            color = pass_color(bootstrap.pass_num)
+            label = f"pass {bootstrap.pass_num} (bootstrap)"
+            fig.add_trace(
+                go.Scatter(
+                    x=list(bootstrap.sample_xs),
+                    y=list(bootstrap.sample_ys),
+                    mode="markers",
+                    name=f"{label} sweeps",
+                    marker=freq_marker(
+                        list(bootstrap.sample_freqs), search_for, size=4, opacity=0.55
+                    ),
+                    text=[f"{freq:.1f} Hz" for freq in bootstrap.sample_freqs],
+                    hovertemplate=(
+                        f"{label}<br>x=%{{x:.4f}} y=%{{y:.4f}} %{{text}}<extra></extra>"
+                    ),
+                    legendgroup=label,
+                ),
+                row=1,
+                col=1,
             )
-        return points, samples
+            fig.add_shape(
+                type="rect",
+                x0=bootstrap.x_lo,
+                x1=bootstrap.x_hi,
+                y0=bootstrap.y_lo,
+                y1=bootstrap.y_hi,
+                line={"color": color, "width": 1, "dash": "dot"},
+                fillcolor="rgba(0,0,0,0)",
+                row=1,
+                col=1,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=[bootstrap.result_x],
+                    y=[bootstrap.result_y],
+                    mode="markers",
+                    name=f"{label} result",
+                    marker={
+                        "size": 12,
+                        "symbol": "star",
+                        "color": color,
+                        "line": {"width": 1, "color": marker_outline()},
+                    },
+                    legendgroup=label,
+                ),
+                row=1,
+                col=1,
+            )
+            pass_rows.append(
+                {
+                    "pass": str(bootstrap.pass_num),
+                    "kind": "bootstrap",
+                    "result": (
+                        f"({bootstrap.result_x:+.4f}, {bootstrap.result_y:+.4f})"
+                    ),
+                    "moved": Offset(
+                        bootstrap.moved_x, bootstrap.moved_y
+                    ).to_delta_str(),
+                    "radius": "n/a",
+                    "fit": "centroid",
+                    "status": "ok",
+                }
+            )
+
+        for record in circles:
+            color = pass_color(record.pass_num)
+            label = f"pass {record.pass_num} (circle r={record.radius:.2f})"
+            fig.add_trace(
+                go.Scatter(
+                    x=list(record.sample_xs),
+                    y=list(record.sample_ys),
+                    mode="markers",
+                    name=f"{label} trace",
+                    marker=freq_marker(
+                        list(record.sample_freqs), search_for, size=3, opacity=0.45
+                    ),
+                    text=[f"{freq:.1f} Hz" for freq in record.sample_freqs],
+                    hovertemplate=(
+                        f"{label}<br>x=%{{x:.4f}} y=%{{y:.4f}} %{{text}}<extra></extra>"
+                    ),
+                    legendgroup=label,
+                ),
+                row=1,
+                col=1,
+            )
+            _add_circle_shape(
+                fig,
+                Offset(record.trace_center_x, record.trace_center_y),
+                record.radius,
+                color,
+            )
+            thetas_deg = [math.degrees(theta) for theta in record.binned_thetas]
+            fig.add_trace(
+                go.Scatter(
+                    x=thetas_deg,
+                    y=list(record.binned_freqs),
+                    mode="markers",
+                    name=f"{label} binned",
+                    marker={"size": 7, "color": color, "symbol": "circle"},
+                    legendgroup=label,
+                ),
+                row=2,
+                col=1,
+            )
+            if (
+                record.fit_c0 is not None
+                and record.fit_a is not None
+                and record.fit_b is not None
+            ):
+                fit_x = [float(deg) for deg in range(361)]
+                fit_y = [
+                    record.fit_c0
+                    + record.fit_a * math.cos(math.radians(deg))
+                    + record.fit_b * math.sin(math.radians(deg))
+                    for deg in fit_x
+                ]
+                fig.add_trace(
+                    go.Scatter(
+                        x=fit_x,
+                        y=fit_y,
+                        mode="lines",
+                        name=f"{label} fit",
+                        line={
+                            "color": color,
+                            "width": 2,
+                            "dash": "dash" if record.rejected else "solid",
+                        },
+                        legendgroup=label,
+                        showlegend=True,
+                    ),
+                    row=2,
+                    col=1,
+                )
+            fig.add_trace(
+                go.Scatter(
+                    x=[record.result_x],
+                    y=[record.result_y],
+                    mode="markers",
+                    name=f"{label} result",
+                    marker={
+                        "size": 13 if record is circles[-1] else 10,
+                        "symbol": "star",
+                        "color": color,
+                        "line": {"width": 1, "color": marker_outline()},
+                    },
+                    legendgroup=label,
+                ),
+                row=1,
+                col=1,
+            )
+            fit_summary = "failed"
+            if record.fit_amp is not None and record.fit_noise is not None:
+                fit_summary = f"amp={record.fit_amp:.2f} noise={record.fit_noise:.2f}"
+            status = record.reject_reasons if record.rejected else "ok"
+            pass_rows.append(
+                {
+                    "pass": str(record.pass_num),
+                    "kind": "circle",
+                    "result": f"({record.result_x:+.4f}, {record.result_y:+.4f})",
+                    "moved": Offset(record.moved_x, record.moved_y).to_delta_str(),
+                    "radius": f"{record.radius:.3f}",
+                    "fit": fit_summary,
+                    "status": status,
+                }
+            )
+
+        final = (
+            Offset(circles[-1].result_x, circles[-1].result_y)
+            if circles
+            else Offset(bootstrap.result_x, bootstrap.result_y)
+            if bootstrap
+            else Offset.zero()
+        )
+        title = "Circle harmonic"
+        if bootstrap is not None and circles:
+            title = f"Circle harmonic ({1 + len(circles)} passes)"
+        elif bootstrap is not None:
+            title = "Circle harmonic (bootstrap only)"
+        elif circles:
+            title = (
+                f"Circle harmonic ({len(circles)} circle pass"
+                f"{'' if len(circles) == 1 else 'es'})"
+            )
+
+        fig.update_layout(
+            **multi_panel_layout(
+                rows=2,
+                cols=1,
+                title=title,
+                tables=[
+                    header_table(
+                        [
+                            ("pass", "Pass"),
+                            ("kind", "Kind"),
+                            ("result", "Result (mm)"),
+                            ("moved", "Moved"),
+                            ("radius", "Radius (mm)"),
+                            ("fit", "Harmonic fit"),
+                            ("status", "Status"),
+                        ],
+                        pass_rows,
+                    )
+                ],
+                final=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
+                row_height_px=320,
+            )
+        )
+        fig.update_xaxes(title_text="X offset (mm)", row=1, col=1)
+        fig.update_yaxes(
+            title_text="Y offset (mm)",
+            scaleanchor="x",
+            scaleratio=1,
+            row=1,
+            col=1,
+        )
+        fig.update_xaxes(title_text="θ (deg)", range=[0, 360], row=2, col=1)
+        fig.update_yaxes(title_text="Frequency (Hz)", row=2, col=1)
+        apply_axes_theme(fig)
+        return fig
+
+
+def _add_circle_shape(fig: Any, center: Offset, radius: float, color: str) -> None:
+    points = 72
+    xs = [
+        center.x + radius * math.cos(2.0 * math.pi * index / points)
+        for index in range(points + 1)
+    ]
+    ys = [
+        center.y + radius * math.sin(2.0 * math.pi * index / points)
+        for index in range(points + 1)
+    ]
+    fig.add_trace(
+        go.Scatter(
+            x=xs,
+            y=ys,
+            mode="lines",
+            line={"color": color, "width": 1, "dash": "dot"},
+            showlegend=False,
+            hoverinfo="skip",
+        ),
+        row=1,
+        col=1,
+    )

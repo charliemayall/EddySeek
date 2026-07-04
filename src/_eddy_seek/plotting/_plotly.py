@@ -26,19 +26,6 @@ except (ImportError, ModuleNotFoundError):
     make_subplots = None  # pyright: ignore[assignment,misc]
 
 
-PASS_COLORS = (
-    "#636EFA",
-    "#EF553B",
-    "#00CC96",
-    "#AB63FA",
-    "#FFA15A",
-    "#19D3F3",
-    "#FF6692",
-    "#B6E880",
-    "#FF97FF",
-    "#FECB52",
-)
-
 COLORSCALE = "sunsetdark"
 _EDDYSEEK_REPO = "https://github.com/charlie-mayall/EddySeek"
 _AXIS_TICK_SIZE = 9
@@ -166,10 +153,6 @@ body {{
 
 def plotly_available() -> bool:
     return go is not None and make_subplots is not None
-
-
-def pass_color(pass_num: int) -> str:
-    return PASS_COLORS[(pass_num - 1) % len(PASS_COLORS)]
 
 
 def marker_outline() -> str:

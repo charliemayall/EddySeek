@@ -271,8 +271,9 @@ def test_circle_harmonic_slope_only_bootstrap_holds_center_and_keeps_profiles():
         for y in [i * 0.1 for i in range(-10, 11)]
     ]
 
-    with patch.object(
-        strategy, "_sweep_axis", side_effect=[([], samples_x), ([], samples_y)]
+    with patch(
+        "_eddy_seek.strategy.circle_harmonic.clamped_sweep_axis",
+        side_effect=[([], samples_x), ([], samples_y)],
     ):
         result = strategy._bootstrap_pass(ctx, 1, Offset.zero())
 

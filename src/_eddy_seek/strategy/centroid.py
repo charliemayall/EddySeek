@@ -9,12 +9,28 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from collections import defaultdict
+from collections.abc import Sequence
+from typing import Any, Literal
 
 from ..common import Offset
 from ..kconsole import KConsole
 from ..optimizer import weighted_centroid
-from ..plotting import PlotWriter
+from ..plotting._plotly import go, plotly_available
+from ..plotting.primitives import (
+    MarkerRecord,
+    ScatterMode,
+    ScatterRecord,
+    StatsRecord,
+    pass_color,
+)
+from ..plotting.registry import StrategyPlotter, register_plotter
+from ..plotting.renderer import (
+    add_marker,
+    add_scatter,
+    finalize_strategy_plot,
+    layout_with_stats,
+)
 from ..session import SeekSession
 from .base import SeekStrategy
 
@@ -22,35 +38,18 @@ logger = logging.getLogger(__name__)
 
 
 class CentroidStrategy(SeekStrategy):
-    def __init__(self) -> None:
-        self._plotter: PlotWriter | None = None
-
     @property
     def name(self) -> str:
         return "centroid"
 
     def announce_start(self, ctx: SeekSession, console: KConsole) -> None:
         cfg = ctx.config
-        if cfg.save_plots:
-            self._plotter = PlotWriter(
-                Path(cfg.result_folder),
-                ctx.session_id,
-                write_at=ctx.artifact_write_at,
-                suffix=ctx.artifact_suffix(self.name),
-                run_id=ctx.run_id,
-            )
         logger.info(
             f"eddy_seek: centroid grid_step=({cfg.grid_step_x:.4f}, {cfg.grid_step_y:.4f}) mm"
         )
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
-        plotter = self._plotter
-        self._plotter = None
-        if plotter is None:
-            self._last_plot_passes = 0
-            return None
-        self._last_plot_passes = plotter.centroid_pass_count
-        return plotter.finalize_centroid(search_for=ctx.config.search_for)
+        return finalize_strategy_plot(ctx, self.name)
 
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         cfg = ctx.config
@@ -105,14 +104,7 @@ class CentroidStrategy(SeekStrategy):
                 f"eddy_seek: flat frequency response on centroid grid - "
                 f"keeping centre ({center.x:.4f}, {center.y:.4f})"
             )
-            if self._plotter is not None:
-                self._plotter.record_centroid_pass(
-                    pass_num=pass_num,
-                    center=center,
-                    result=center,
-                    moved=Offset.zero(),
-                    probes=probes,
-                )
+            _record_centroid_pass(ctx, pass_num, center, center, Offset.zero(), probes)
             return center
 
         freqs = [freq for _, freq in probes]
@@ -122,12 +114,148 @@ class CentroidStrategy(SeekStrategy):
             f"-> ({clamped.x:.4f}, {clamped.y:.4f}) "
             f"freq_range=[{min(freqs):.2f}, {max(freqs):.2f}] Hz"
         )
-        if self._plotter is not None:
-            self._plotter.record_centroid_pass(
-                pass_num=pass_num,
-                center=center,
-                result=clamped,
-                moved=(clamped - center).abs_components(),
-                probes=probes,
-            )
+        _record_centroid_pass(
+            ctx,
+            pass_num,
+            center,
+            clamped,
+            (clamped - center).abs_components(),
+            probes,
+        )
         return clamped
+
+
+def _record_centroid_pass(
+    ctx: SeekSession,
+    pass_num: int,
+    center: Offset,
+    result: Offset,
+    moved: Offset,
+    probes: list[tuple[Offset, float]],
+) -> None:
+    rec = ctx.recorder
+    if not rec.active:
+        return
+    label = f"pass {pass_num}"
+    rec.record(
+        ScatterRecord(
+            pass_num=pass_num,
+            label=f"{label} probes",
+            xs=tuple(position.x for position, _ in probes),
+            ys=tuple(position.y for position, _ in probes),
+            freqs=tuple(freq for _, freq in probes),
+            mode=ScatterMode.MARKERS_LINES,
+        )
+    )
+    rec.record(MarkerRecord(pass_num, f"{label} centre", center.x, center.y, "x"))
+    rec.record(MarkerRecord(pass_num, f"{label} result", result.x, result.y, "star"))
+
+
+@register_plotter("centroid")
+class CentroidPlotter(StrategyPlotter):
+    def render(
+        self,
+        records: Sequence[Any],
+        *,
+        search_for: Literal["min", "max"],
+    ) -> Any | None:
+        if not plotly_available() or go is None:
+            return None
+
+        passes: dict[int, list[Any]] = defaultdict(list)
+        for record in records:
+            pass_num = getattr(record, "pass_num", None)
+            if isinstance(pass_num, int):
+                passes[pass_num].append(record)
+        if not passes:
+            return None
+
+        fig = go.Figure()
+        pass_nums = sorted(passes)
+        pass_rows: list[dict[str, str]] = []
+        for pass_num in pass_nums:
+            color = pass_color(pass_num)
+            group = passes[pass_num]
+            for record in group:
+                if isinstance(record, ScatterRecord):
+                    add_scatter(fig, record, search_for, color)
+                elif isinstance(record, MarkerRecord):
+                    size = 11
+                    if record.symbol == "x":
+                        size = 10
+                    if record.symbol == "star":
+                        size = 14 if pass_num == pass_nums[-1] else 11
+                    add_marker(fig, record, color, size=size)
+
+            scatter = next(
+                (record for record in group if isinstance(record, ScatterRecord)),
+                None,
+            )
+            result = next(
+                (
+                    record
+                    for record in group
+                    if isinstance(record, MarkerRecord) and record.symbol == "star"
+                ),
+                None,
+            )
+            center = next(
+                (
+                    record
+                    for record in group
+                    if isinstance(record, MarkerRecord) and record.symbol == "x"
+                ),
+                None,
+            )
+            freqs = list(scatter.freqs) if scatter and scatter.freqs else []
+            moved = Offset.zero()
+            if result is not None and center is not None:
+                moved = Offset(
+                    result.x - center.x, result.y - center.y
+                ).abs_components()
+            pass_rows.append(
+                {
+                    "pass": str(pass_num),
+                    "result": (
+                        f"({result.x:+.4f}, {result.y:+.4f})"
+                        if result is not None
+                        else "n/a"
+                    ),
+                    "moved": f"({moved.x:.4f}, {moved.y:.4f})",
+                    "freq": (
+                        f"[{min(freqs):.0f}, {max(freqs):.0f}]" if freqs else "n/a"
+                    ),
+                }
+            )
+
+        final_marker = next(
+            (
+                record
+                for record in passes[pass_nums[-1]]
+                if isinstance(record, MarkerRecord) and record.symbol == "star"
+            ),
+            None,
+        )
+        final = (
+            Offset(final_marker.x, final_marker.y)
+            if final_marker is not None
+            else Offset.zero()
+        )
+        layout_with_stats(
+            fig,
+            StatsRecord(
+                title=(
+                    f"Centroid alignment ({len(pass_nums)} pass"
+                    f"{'' if len(pass_nums) == 1 else 'es'})  search={search_for}"
+                ),
+                columns=(
+                    ("pass", "Pass"),
+                    ("result", "Result (mm)"),
+                    ("moved", "Moved (mm)"),
+                    ("freq", "Freq (Hz)"),
+                ),
+                rows=tuple(pass_rows),
+                footer=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
+            ),
+        )
+        return fig

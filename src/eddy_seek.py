@@ -22,7 +22,12 @@ from ._eddy_seek.common import Offset, Position
 from ._eddy_seek.config import load_seek_config
 from ._eddy_seek.kconsole import KConsole, console_for_gcmd
 from ._eddy_seek.movement.guard import clear_gcode_offset_xy
-from ._eddy_seek.plotting import PlotWriter
+from ._eddy_seek.plotting import (
+    accuracy as _accuracy_plot,  # noqa: F401 — registers plotter
+)
+from ._eddy_seek.plotting import render_session_plot, write_figure
+from ._eddy_seek.plotting.primitives import AccuracyRepeatRecord
+from ._eddy_seek.plotting.recorder import SessionRecorder
 from ._eddy_seek.session import SeekHost, SeekSession, report_accuracy_stats
 from ._eddy_seek.strategy import strategy_for
 from ._eddy_seek.tool_align import align_all_tools, align_tool_number
@@ -391,14 +396,7 @@ class EddySeek(SeekHost):
         cfg = self.seek_config
         accuracy_run_id = uuid.uuid4().hex[:8]
         write_at = datetime.now()
-        plotter: PlotWriter | None = None
-        if cfg.save_plots:
-            plotter = PlotWriter(
-                Path(cfg.result_folder),
-                accuracy_run_id,
-                write_at=write_at,
-                run_id=accuracy_run_id,
-            )
+        accuracy_recorder = SessionRecorder(trace=False, plots=cfg.save_plots)
 
         offsets: list[Offset] = []
         try:
@@ -430,12 +428,14 @@ class EddySeek(SeekHost):
                     break
 
                 offsets.append(result.offset)
-                if plotter is not None:
-                    plotter.record_accuracy_repeat(
+                accuracy_recorder.record(
+                    AccuracyRepeatRecord(
                         repeat_num=repeat,
-                        offset=result.offset,
+                        offset_x=result.offset.x,
+                        offset_y=result.offset.y,
                         session_plot_path=result.plot_path,
                     )
+                )
                 console.info(
                     f"Repeat {repeat} - X={result.offset.x:+.4f} "
                     f"Y={result.offset.y:+.4f} mm"
@@ -446,13 +446,26 @@ class EddySeek(SeekHost):
                 return
 
             report_accuracy_stats(console, offsets)
-            if plotter is not None:
-                accuracy_plot_path = plotter.finalize_accuracy()
-                if accuracy_plot_path is not None:
-                    console.plot_saved(accuracy_plot_path)
-                    logger.info(
-                        f"eddy_seek: accuracy plot saved to {accuracy_plot_path}"
+            if cfg.save_plots and len(offsets) >= 2:
+                fig = render_session_plot(
+                    "accuracy",
+                    accuracy_recorder.records(),
+                    search_for=cfg.search_for,
+                )
+                if fig is not None:
+                    accuracy_plot_path = write_figure(
+                        Path(cfg.result_folder),
+                        accuracy_run_id,
+                        fig,
+                        write_at=write_at,
+                        suffix="accuracy",
+                        run_id=accuracy_run_id,
                     )
+                    if accuracy_plot_path is not None:
+                        console.plot_saved(accuracy_plot_path)
+                        logger.info(
+                            f"eddy_seek: accuracy plot saved to {accuracy_plot_path}"
+                        )
             console.exit(f"Accuracy test complete ({len(offsets)} repeats)")
         finally:
             gcode.run_script_from_command(

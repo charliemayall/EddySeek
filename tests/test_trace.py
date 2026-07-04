@@ -13,11 +13,9 @@ from pathlib import Path
 
 from _eddy_seek.common import Offset
 from _eddy_seek.config import SeekConfig
-from _eddy_seek.session import (
-    SeekSession,
-    SeekSessionResult,
-    _write_seek_trace,
-)
+from _eddy_seek.plotting.primitives import ProbeRecord
+from _eddy_seek.plotting.recorder import SessionRecorder
+from _eddy_seek.session import SeekSessionResult, _write_seek_trace
 
 
 class _TraceSensor:
@@ -49,7 +47,7 @@ def test_write_seek_trace(tmp_path):
     ]
 
     write_at = datetime(2026, 7, 2, 14, 30)
-    path = _write_seek_trace(host, result, probes, [], write_at=write_at)
+    path = _write_seek_trace(host, result, probes, write_at=write_at)
 
     assert path is not None
     assert Path(path).is_file()
@@ -58,7 +56,20 @@ def test_write_seek_trace(tmp_path):
     assert payload["metadata"]["config"]["seek"]["strategy"] == "sweep_centroid"
     assert payload["metadata"]["config"]["seek"]["save_session_trace"] is True
     assert payload["probes"][0]["samples_hz"] == [12340.0, 12350.0, 12346.0]
-    assert _write_seek_trace(host, result, probes, [], write_at=write_at) == path
+    assert _write_seek_trace(host, result, probes, write_at=write_at) == path
+
+
+def test_probe_record_round_trip():
+    probe = ProbeRecord(1.0, 2.0, 100.0, (99.0, 101.0))
+    assert probe.to_dict() == {
+        "x": 1.0,
+        "y": 2.0,
+        "mean_hz": 100.0,
+        "samples_hz": [99.0, 101.0],
+    }
+    recorder = SessionRecorder(trace=True, plots=False)
+    recorder.record(probe)
+    assert recorder.to_probe_dicts() == [probe.to_dict()]
 
 
 def test_write_seek_trace_labeled_filename(tmp_path):
@@ -77,7 +88,6 @@ def test_write_seek_trace_labeled_filename(tmp_path):
     path = _write_seek_trace(
         host,
         result,
-        [],
         [],
         run_id="batch123",
         suffix="tools_t0_ternary",
@@ -101,20 +111,15 @@ def test_seek_session_collects_probes_when_enabled():
         def get_capture_mean(self, min_samples: int = 5) -> float:
             return sum(self._buf) / len(self._buf)
 
-    session = SeekSession.__new__(SeekSession)
-    session._host = _Sensor()
-    session.config = SeekConfig()
-    session._save_trace = True
-    session._probes = []
-    session._plot_traces = []
-
-    session._probes.append(
-        {
-            "x": 1.0,
-            "y": 2.0,
-            "mean_hz": _Sensor().get_capture_mean(),
-            "samples_hz": _Sensor().peek_capture_samples(),
-        }
+    recorder = SessionRecorder(trace=True, plots=False)
+    recorder.record(
+        ProbeRecord(
+            x=1.0,
+            y=2.0,
+            mean_hz=_Sensor().get_capture_mean(),
+            samples_hz=tuple(_Sensor().peek_capture_samples()),
+        )
     )
-    assert session._probes[0]["mean_hz"] == 101.0
-    assert len(session._probes[0]["samples_hz"]) == 3
+    probes = recorder.to_probe_dicts()
+    assert probes[0]["mean_hz"] == 101.0
+    assert len(probes[0]["samples_hz"]) == 3

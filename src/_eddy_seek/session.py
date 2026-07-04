@@ -27,6 +27,8 @@ from .config import SeekConfig
 from .kconsole import KConsole, console_for_gcmd
 from .movement.guard import KnownKinematicLimits, clear_gcode_offset_xy
 from .movement.handler import MotionHandler
+from .plotting.primitives import PlotArtifactRecord, ProbeRecord
+from .plotting.recorder import SessionRecorder
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer
@@ -89,9 +91,12 @@ class SeekSession:
         self._artifact_write_at = artifact_write_at
         self.start_time = time.time()
         self._motion: MotionHandler | None = None
-        self._save_trace = host.seek_config.save_session_trace
-        self._probes: list[dict[str, Any]] = []
-        self._plot_traces: list[dict[str, Any]] = []
+        cfg = host.seek_config
+        self._save_trace = cfg.save_session_trace
+        self.recorder = SessionRecorder(
+            trace=cfg.save_session_trace,
+            plots=cfg.save_plots,
+        )
         self._session_start: Position | None = None
 
     @property
@@ -116,10 +121,24 @@ class SeekSession:
 
     def append_trace(self, probe: dict[str, Any]) -> None:
         if self._save_trace:
-            self._probes.append(probe)
+            self.recorder.record(
+                ProbeRecord(
+                    x=float(probe["x"]),
+                    y=float(probe["y"]),
+                    mean_hz=float(probe["mean_hz"]),
+                    samples_hz=tuple(probe["samples_hz"]),
+                )
+            )
 
     def append_plot_trace(self, entry: dict[str, Any]) -> None:
-        self._plot_traces.append(entry)
+        if entry.get("type") == "plot":
+            self.recorder.record(
+                PlotArtifactRecord(
+                    strategy=str(entry["strategy"]),
+                    passes=int(entry["passes"]),
+                    path=str(entry["path"]),
+                )
+            )
 
     @property
     def motion(self) -> MotionHandler:
@@ -178,7 +197,7 @@ class SeekSession:
                     self._host,
                     self.config,
                     self._session_start,
-                    self.append_trace if self._save_trace else None,
+                    self._record_probe if self.recorder.trace else None,
                 )
                 best, passes_run = strategy.search(self, console)
                 self._motion.jog(best)
@@ -210,13 +229,12 @@ class SeekSession:
         finally:
             session_plot_path = strategy.on_session_end(self)
             if session_plot_path is not None:
-                self.append_plot_trace(
-                    {
-                        "type": "plot",
-                        "strategy": strategy.name,
-                        "passes": getattr(strategy, "_last_plot_passes", 0),
-                        "path": session_plot_path,
-                    }
+                self.recorder.record(
+                    PlotArtifactRecord(
+                        strategy=strategy.name,
+                        passes=self.recorder.pass_count(),
+                        path=session_plot_path,
+                    )
                 )
                 if show_plot_saved:
                     console.plot_saved(session_plot_path)
@@ -244,8 +262,7 @@ class SeekSession:
             path = _write_seek_trace(
                 self._host,
                 result,
-                self._probes,
-                self._plot_traces,
+                self.recorder.to_probe_dicts(),
                 run_id=self.run_id,
                 suffix=self.artifact_suffix(strategy.name),
                 write_at=self.artifact_write_at,
@@ -254,9 +271,19 @@ class SeekSession:
                 logger.info(f"eddy_seek: session trace saved to {path}")
         logger.info(
             f"eddy_seek: session {self.session_id} finished "
-            f"status={result.status} probes={len(self._probes)}"
+            f"status={result.status} probes={len(self.recorder.to_probe_dicts())}"
         )
         return result
+
+    def _record_probe(self, probe: dict[str, Any]) -> None:
+        self.recorder.record(
+            ProbeRecord(
+                x=float(probe["x"]),
+                y=float(probe["y"]),
+                mean_hz=float(probe["mean_hz"]),
+                samples_hz=tuple(probe["samples_hz"]),
+            )
+        )
 
     def measure_at(self, offset: Offset) -> float:
         return self.motion.sample(offset)
@@ -266,7 +293,6 @@ def _write_seek_trace(
     host: SeekHost,
     result: SeekSessionResult,
     probes: list[dict[str, Any]],
-    plot_traces: list[dict[str, Any]],
     *,
     run_id: str | None = None,
     suffix: str = "",
@@ -297,7 +323,7 @@ def _write_seek_trace(
             "error_message": result.error_message,
             "config": host.session_trace_config(),
         },
-        "probes": probes + plot_traces,
+        "probes": probes,
     }
     try:
         out.parent.mkdir(parents=True, exist_ok=True)
