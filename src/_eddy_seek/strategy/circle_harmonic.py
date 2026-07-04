@@ -397,6 +397,8 @@ class CircleHarmonicStrategy(SeekStrategy):
             max_jog_x=cfg.max_jog_x,
             max_jog_y=cfg.max_jog_y,
         )
+        # ponytail: invert Y step — coil frame vs toolhead Y sign experiment
+        step = step.with_y(-step.y)
         unclamped = trace_center + step
         result = unclamped.clamp(cfg.max_jog_x, cfg.max_jog_y)
 
