@@ -32,7 +32,11 @@ from ..harmonic import (
 )
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample, get_clamped_speed_for_min_samples_over_span
-from ..movement.leg_planner import iter_cross_offsets, sweep_axis
+from ..movement.leg_planner import (
+    get_samples_from_capture_legs,
+    iter_cross_offsets,
+    sweep_axis,
+)
 from ..optimizer import decoupled_centroid
 from ..plotting import PlotWriter
 from ..session import SeekSession
@@ -279,10 +283,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         if cfg.circle_refresh_sweeps:
             self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
-        handler = ctx.motion
-        handler.run_capture_legs(legs, clamped_speed)
-        ctx.sync_offset(handler.position)
-        samples = handler.collect_samples()
+        samples = get_samples_from_capture_legs(ctx, legs, clamped_speed)
 
         if len(samples) < 3:
             raise RuntimeError(
