@@ -79,9 +79,7 @@ def add_scatter(
         marker=marker,
         text=([f"{freq:.1f} Hz" for freq in freqs] if freqs is not None else None),
         hovertemplate=(
-            f"{record.label}<br>x=%{{x:.4f}} y=%{{y:.4f}}"
-            + (" %{{text}}" if freqs is not None else "")
-            + "<extra></extra>"
+            f"{record.label}<br>x=%{{x:.4f}} y=%{{y:.4f}} %{{text}}<extra></extra>"
         ),
         legendgroup=record.label,
     )
