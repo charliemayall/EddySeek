@@ -316,13 +316,13 @@ class CircleHarmonicStrategy(SeekStrategy):
         if not legs:
             self._frozen = best
             return best
-        circumfrence = 2 * math.pi * radius
+        circumfrence = 2 * math.pi * trace_radius
         clamped_speed = get_clamped_speed_for_min_samples_over_span(
             requested_mm_min=cfg.circle_speed,
-            span_mm=circumfrence,  # approx equal, we are doing a polygon, not a circle
+            span_mm=circumfrence,  # approx equal to the polygon we move on
             min_samples=max(
-                cfg.min_sweep_samples, len(legs)
-            ),  # try to get a sample per segment
+                cfg.min_sweep_samples, 2 * len(legs)
+            ),  # try to force ~2 samples per segment
         )
         logger.debug(
             f"eddy_seek: circle_harmonic pass {pass_num} "
@@ -333,6 +333,9 @@ class CircleHarmonicStrategy(SeekStrategy):
             self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
         samples = get_samples_from_capture_legs(ctx, legs, clamped_speed)
+        logger.debug(
+            f"eddy_seek: circle_harmonic pass {pass_num} collected {len(samples)} --> {len(samples) / len(legs):.2f} samples per segment"
+        )
 
         if len(samples) < 3:
             raise RuntimeError(
@@ -341,6 +344,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             )
 
         binned = bin_samples_by_angle(samples, trace_center, len(legs))
+        logger.debug(f"eddy_seek: circle_harmonic pass {pass_num} bins = {len(binned)}")
         fit_samples = binned_to_motion_samples(trace_center, trace_radius, binned)
         fit = fit_first_harmonic(fit_samples, trace_center)
         if fit is None:
