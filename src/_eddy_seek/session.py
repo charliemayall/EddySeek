@@ -123,8 +123,7 @@ class SeekSession:
         if self._save_trace:
             self.recorder.record(
                 ProbeRecord(
-                    x=float(probe["x"]),
-                    y=float(probe["y"]),
+                    at=Offset(float(probe["x"]), float(probe["y"])),
                     mean_hz=float(probe["mean_hz"]),
                     samples_hz=tuple(probe["samples_hz"]),
                 )
@@ -278,8 +277,7 @@ class SeekSession:
     def _record_probe(self, probe: dict[str, Any]) -> None:
         self.recorder.record(
             ProbeRecord(
-                x=float(probe["x"]),
-                y=float(probe["y"]),
+                at=Offset(float(probe["x"]), float(probe["y"])),
                 mean_hz=float(probe["mean_hz"]),
                 samples_hz=tuple(probe["samples_hz"]),
             )

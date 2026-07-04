@@ -15,8 +15,9 @@ from unittest.mock import patch
 import pytest
 from fakes import PLOT_HTML_SUFFIX, PLOT_SESSION_ID, PLOT_WRITE_AT
 
-from _eddy_seek.common import Axis, Offset, Phase, Position
+from _eddy_seek.common import Axis, Offset, Phase
 from _eddy_seek.config import SeekConfig
+from _eddy_seek.harmonic import HarmonicFit
 from _eddy_seek.movement.handler import MotionSample
 from _eddy_seek.optimizer import bin_frequencies
 from _eddy_seek.plotting import accuracy as _accuracy_plot  # noqa: F401
@@ -25,9 +26,14 @@ from _eddy_seek.plotting._plotly import THEME_COLORS, write_html
 from _eddy_seek.plotting.debug_scan import DebugScanRecord, write_debug_scan_plot
 from _eddy_seek.plotting.primitives import (
     AccuracyRepeatRecord,
+    BinnedProfile,
+    Bounds,
     CircleBootstrapRecord,
     CircleHarmonicPassRecord,
     HeatmapRecord,
+    PassMove,
+    TernaryStep,
+    XYCloud,
 )
 from _eddy_seek.plotting.recorder import SessionRecorder
 from _eddy_seek.strategy import (  # noqa: F401
@@ -39,7 +45,6 @@ from _eddy_seek.strategy import (  # noqa: F401
 )
 from _eddy_seek.strategy.centroid import CentroidStrategy, _record_centroid_pass
 from _eddy_seek.strategy.sweep_centroid import _record_sweep_centroid_pass
-from _eddy_seek.strategy.ternary import TernaryStep
 
 
 def test_plot_filename():
@@ -76,9 +81,11 @@ def _write_strategy_plot(tmp_path, strategy_name: str, records, *, search_for="m
 def test_accuracy_plot_writes_html(requires_plotly, plot_tmp):
     tmp_path, session_id, write_at = plot_tmp
     records = (
-        AccuracyRepeatRecord(1, 0.01, 0.02, session_plot_path="/tmp/repeat1.html"),
-        AccuracyRepeatRecord(2, -0.02, 0.01),
-        AccuracyRepeatRecord(3, 0.0, -0.01),
+        AccuracyRepeatRecord(
+            1, Offset(0.01, 0.02), session_plot_path="/tmp/repeat1.html"
+        ),
+        AccuracyRepeatRecord(2, Offset(-0.02, 0.01)),
+        AccuracyRepeatRecord(3, Offset(0.0, -0.01)),
     )
     path = write_figure(
         tmp_path,
@@ -95,7 +102,7 @@ def test_accuracy_plot_writes_html(requires_plotly, plot_tmp):
 def test_accuracy_plot_needs_two_repeats(requires_plotly, tmp_path):
     fig = render_session_plot(
         "accuracy",
-        [AccuracyRepeatRecord(1, 0.0, 0.0)],
+        [AccuracyRepeatRecord(1, Offset(0.0, 0.0))],
         search_for="max",
     )
     assert fig is None
@@ -122,9 +129,9 @@ def test_accuracy_plot_draws_spread_box(requires_plotly):
 
     fig = write_accuracy_plot(
         repeats=[
-            AccuracyRepeatRecord(1, 0.0, 0.0),
-            AccuracyRepeatRecord(2, 0.1, 0.05),
-            AccuracyRepeatRecord(3, -0.02, -0.03),
+            AccuracyRepeatRecord(1, Offset(0.0, 0.0)),
+            AccuracyRepeatRecord(2, Offset(0.1, 0.05)),
+            AccuracyRepeatRecord(3, Offset(-0.02, -0.03)),
         ]
     )
     assert fig is not None
@@ -145,8 +152,8 @@ def test_write_figure_creates_results_dir(requires_plotly, tmp_path):
     fig = render_session_plot(
         "accuracy",
         [
-            AccuracyRepeatRecord(1, 0.0, 0.0),
-            AccuracyRepeatRecord(2, 0.1, 0.0),
+            AccuracyRepeatRecord(1, Offset(0.0, 0.0)),
+            AccuracyRepeatRecord(2, Offset(0.1, 0.0)),
         ],
         search_for="max",
     )
@@ -402,16 +409,12 @@ def test_debug_scan_plot_writes_html(requires_plotly, plot_tmp):
     tmp_path, session_id, write_at = plot_tmp
     records = (
         HeatmapRecord(
-            center=Offset.zero(),
-            result=Offset(0.01, 0.02),
-            lo=Position(box[0], box[2]),
-            hi=Position(box[1], box[3]),
+            move=PassMove.compute(Offset.zero(), Offset(0.01, 0.02)),
+            bounds=Bounds.from_box(box),
             z=tuple(tuple(row) for row in z),
             x_centers=tuple(x_centers),
             y_centers=tuple(y_centers),
-            sample_xs=(0.0,),
-            sample_ys=(0.0,),
-            sample_freqs=(10000.0,),
+            samples=XYCloud((0.0,), (0.0,), (10000.0,)),
         ),
     )
     path = write_figure(
@@ -613,39 +616,29 @@ def test_circle_harmonic_plot_writes_session_html(requires_plotly, plot_tmp):
     records = (
         CircleBootstrapRecord(
             pass_num=1,
-            center_x=0.0,
-            center_y=0.0,
-            result_x=0.3,
-            result_y=0.1,
-            moved_x=0.3,
-            moved_y=0.1,
-            sample_xs=tuple(s.offset.x for s in samples),
-            sample_ys=tuple(s.offset.y for s in samples),
-            sample_freqs=tuple(s.freq for s in samples),
-            x_lo=-1.0,
-            x_hi=1.0,
-            y_lo=-1.0,
-            y_hi=1.0,
+            move=PassMove.compute(Offset.zero(), Offset(0.3, 0.1)),
+            samples=XYCloud(
+                tuple(s.offset.x for s in samples),
+                tuple(s.offset.y for s in samples),
+                tuple(s.freq for s in samples),
+            ),
+            bounds=Bounds.from_box((-1.0, 1.0, -1.0, 1.0)),
         ),
         CircleHarmonicPassRecord(
             pass_num=2,
-            trace_center_x=0.3,
-            trace_center_y=0.1,
+            trace_center=Offset(0.3, 0.1),
             radius=1.0,
-            result_x=0.3,
-            result_y=0.1,
-            moved_x=0.0,
-            moved_y=0.0,
-            sample_xs=tuple(s.offset.x for s in circle_samples),
-            sample_ys=tuple(s.offset.y for s in circle_samples),
-            sample_freqs=tuple(s.freq for s in circle_samples),
-            binned_thetas=tuple(theta for theta, _ in binned),
-            binned_freqs=tuple(freq for _, freq in binned),
-            fit_c0=10000.0,
-            fit_a=50.0,
-            fit_b=0.0,
-            fit_amp=50.0,
-            fit_noise=1.0,
+            move=PassMove.compute(Offset(0.3, 0.1), Offset(0.3, 0.1)),
+            samples=XYCloud(
+                tuple(s.offset.x for s in circle_samples),
+                tuple(s.offset.y for s in circle_samples),
+                tuple(s.freq for s in circle_samples),
+            ),
+            binned=BinnedProfile(
+                tuple(theta for theta, _ in binned),
+                tuple(freq for _, freq in binned),
+            ),
+            fit=HarmonicFit(10000.0, 50.0, 0.0, 50.0, 1.0, 36),
             rejected=True,
             reject_reasons="snr (amp=50.00 < 2×noise=2.00)",
         ),
@@ -666,39 +659,18 @@ def test_circle_harmonic_plot_has_wide_layout(requires_plotly):
     records = (
         CircleBootstrapRecord(
             pass_num=1,
-            center_x=0.0,
-            center_y=0.0,
-            result_x=0.2,
-            result_y=0.0,
-            moved_x=0.2,
-            moved_y=0.0,
-            sample_xs=(0.0,),
-            sample_ys=(0.0,),
-            sample_freqs=(10000.0,),
-            x_lo=-1.0,
-            x_hi=1.0,
-            y_lo=-1.0,
-            y_hi=1.0,
+            move=PassMove.compute(Offset.zero(), Offset(0.2, 0.0)),
+            samples=XYCloud((0.0,), (0.0,), (10000.0,)),
+            bounds=Bounds.from_box((-1.0, 1.0, -1.0, 1.0)),
         ),
         CircleHarmonicPassRecord(
             pass_num=2,
-            trace_center_x=0.2,
-            trace_center_y=0.0,
+            trace_center=Offset(0.2, 0.0),
             radius=0.5,
-            result_x=0.2,
-            result_y=0.0,
-            moved_x=0.0,
-            moved_y=0.0,
-            sample_xs=(0.2,),
-            sample_ys=(0.5,),
-            sample_freqs=(10050.0,),
-            binned_thetas=(0.0, math.pi),
-            binned_freqs=(10050.0, 9950.0),
-            fit_c0=10000.0,
-            fit_a=50.0,
-            fit_b=0.0,
-            fit_amp=50.0,
-            fit_noise=1.0,
+            move=PassMove.compute(Offset(0.2, 0.0), Offset(0.2, 0.0)),
+            samples=XYCloud((0.2,), (0.5,), (10050.0,)),
+            binned=BinnedProfile((0.0, math.pi), (10050.0, 9950.0)),
+            fit=HarmonicFit(10000.0, 50.0, 0.0, 50.0, 1.0, 2),
             rejected=False,
         ),
     )

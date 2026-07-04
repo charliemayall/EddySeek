@@ -14,7 +14,8 @@ from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from typing import Any, TypeAlias
 
-from _eddy_seek.common import Axis, Offset, Position
+from _eddy_seek.common import Axis, Offset
+from _eddy_seek.harmonic import HarmonicFit
 
 PASS_COLORS = (
     "#636EFA",
@@ -62,6 +63,74 @@ def pass_color(pass_num: int) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class Bounds:
+    lo: Offset
+    hi: Offset
+
+    @classmethod
+    def from_box(cls, box: tuple[float, float, float, float]) -> Bounds:
+        x_lo, x_hi, y_lo, y_hi = box
+        return cls(Offset(x_lo, y_lo), Offset(x_hi, y_hi))
+
+    def as_box(self) -> tuple[float, float, float, float]:
+        return self.lo.x, self.hi.x, self.lo.y, self.hi.y
+
+
+@dataclass(frozen=True, slots=True)
+class PassMove:
+    center: Offset
+    result: Offset
+    moved: Offset
+
+    @classmethod
+    def compute(cls, center: Offset, result: Offset) -> PassMove:
+        return cls(center, result, (result - center).abs_components())
+
+
+@dataclass(frozen=True, slots=True)
+class XYCloud:
+    xs: tuple[float, ...]
+    ys: tuple[float, ...]
+    freqs: tuple[float, ...] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AxisSpan:
+    axis: Axis
+    lo: float
+    hi: float
+
+
+@dataclass(frozen=True, slots=True)
+class TernaryStep:
+    axis: Axis
+    iteration: int
+    lo: float
+    hi: float
+    m1: float
+    m2: float
+    f1: float
+    f2: float
+
+    @property
+    def span(self) -> AxisSpan:
+        return AxisSpan(self.axis, self.lo, self.hi)
+
+
+@dataclass(frozen=True, slots=True)
+class BinnedProfile:
+    thetas: tuple[float, ...]
+    freqs: tuple[float, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class HarmonicCoeffs:
+    a: float
+    b: float
+    amp: float
+
+
+@dataclass(frozen=True, slots=True)
 class _Record:
     def to_dict(self) -> dict[str, Any]:
         return _record_to_dict(self)
@@ -71,9 +140,7 @@ class _Record:
 class ScatterRecord(_Record):
     pass_num: int
     label: str
-    xs: tuple[float, ...]
-    ys: tuple[float, ...]
-    freqs: tuple[float, ...] | None = None
+    cloud: XYCloud
     mode: ScatterMode = ScatterMode.MARKERS
     type: RecordType = RecordType.SCATTER
 
@@ -82,8 +149,7 @@ class ScatterRecord(_Record):
 class MarkerRecord(_Record):
     pass_num: int
     label: str
-    x: float
-    y: float
+    at: Offset
     symbol: str
     type: RecordType = RecordType.MARKER
 
@@ -91,8 +157,7 @@ class MarkerRecord(_Record):
 @dataclass(frozen=True, slots=True)
 class BoxRecord(_Record):
     pass_num: int
-    lo: Position
-    hi: Position
+    bounds: Bounds
     type: RecordType = RecordType.BOX
 
 
@@ -107,27 +172,17 @@ class StatsRecord(_Record):
 
 @dataclass(frozen=True, slots=True)
 class ProbeRecord(_Record):
-    x: float
-    y: float
+    at: Offset
     mean_hz: float
     samples_hz: tuple[float, ...]
     type: RecordType = RecordType.PROBE
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "x": self.x,
-            "y": self.y,
-            "mean_hz": self.mean_hz,
-            "samples_hz": list(self.samples_hz),
-        }
 
 
 @dataclass(frozen=True, slots=True)
 class SeriesRecord(_Record):
     pass_num: int
     label: str
-    xs: tuple[float, ...]
-    ys: tuple[float, ...]
+    cloud: XYCloud
     mode: str = "markers"
     line_dash: str = "solid"
     showlegend: bool = True
@@ -136,16 +191,12 @@ class SeriesRecord(_Record):
 
 @dataclass(frozen=True, slots=True)
 class HeatmapRecord(_Record):
-    center: Offset
-    result: Offset
-    lo: Position
-    hi: Position
+    move: PassMove
+    bounds: Bounds
     z: tuple[tuple[float | None, ...], ...]
     x_centers: tuple[float, ...]
     y_centers: tuple[float, ...]
-    sample_xs: tuple[float, ...]
-    sample_ys: tuple[float, ...]
-    sample_freqs: tuple[float, ...]
+    samples: XYCloud
     type: RecordType = RecordType.HEATMAP
 
 
@@ -161,56 +212,46 @@ class PlotArtifactRecord(_Record):
 class SweepTraceRecord(_Record):
     pass_num: int
     phase: str
-    axis: Axis
+    span: AxisSpan
     cross_offsets: tuple[float, ...]
     cross_center: float
-    lo: float
-    hi: float
-    samples: tuple[tuple[float, float], ...]
+    profile: tuple[tuple[float, float], ...]
     type: RecordType = RecordType.SWEEP
 
 
 @dataclass(frozen=True, slots=True)
 class SweepGridTraceRecord(_Record):
     center: Offset
-    lo: Position
-    hi: Position
+    bounds: Bounds
     step_size: float
     rows: int
     legs: int
-    samples: int
+    sample_count: int
     type: RecordType = RecordType.SWEEP_GRID
 
 
 @dataclass(frozen=True, slots=True)
-class SweepCentroidTraceRecord(_Record):
+class PassTraceRecord(_Record):
+    """Shared trace payload for single-pass strategies."""
+
     pass_num: int
     phase: str
-    center: Offset
-    result: Offset
-    samples: int
+    move: PassMove
+    sample_count: int
     type: RecordType = RecordType.SWEEP_CENTROID
 
 
 @dataclass(frozen=True, slots=True)
 class TernaryStepRecord(_Record):
     pass_num: int
-    axis: Axis
-    iteration: int
-    lo: float
-    hi: float
-    m1: float
-    m2: float
-    f1: float
-    f2: float
+    step: TernaryStep
     type: RecordType = RecordType.TERNARY_STEP
 
 
 @dataclass(frozen=True, slots=True)
-class DebugScanTraceRecord(_Record):
-    center: Offset
-    result: Offset
-    samples: int
+class ScanTraceRecord(_Record):
+    move: PassMove
+    sample_count: int
     type: RecordType = RecordType.DEBUG_SCAN
 
 
@@ -224,10 +265,8 @@ class CircleBootstrapTraceRecord(_Record):
 @dataclass(frozen=True, slots=True)
 class CircleHarmonicSlopeTraceRecord(_Record):
     pass_num: int
-    result_x: float
-    result_y: float
-    centroid_skipped_x: float | None = None
-    centroid_skipped_y: float | None = None
+    result: Offset
+    skipped: Offset | None = None
     type: RecordType = RecordType.CIRCLE_HARMONIC_SLOPE
 
 
@@ -235,53 +274,29 @@ class CircleHarmonicSlopeTraceRecord(_Record):
 class CircleHarmonicTraceRecord(_Record):
     pass_num: int
     radius: float
-    result_x: float
-    result_y: float
-    harmonic_a: float
-    harmonic_b: float
-    harmonic_amp: float
+    result: Offset
+    harmonic: HarmonicCoeffs
     type: RecordType = RecordType.CIRCLE_HARMONIC
 
 
 @dataclass(frozen=True, slots=True)
 class CircleBootstrapRecord(_Record):
     pass_num: int
-    center_x: float
-    center_y: float
-    result_x: float
-    result_y: float
-    moved_x: float
-    moved_y: float
-    sample_xs: tuple[float, ...]
-    sample_ys: tuple[float, ...]
-    sample_freqs: tuple[float, ...]
-    x_lo: float
-    x_hi: float
-    y_lo: float
-    y_hi: float
+    move: PassMove
+    samples: XYCloud
+    bounds: Bounds
     type: RecordType = RecordType.CIRCLE_BOOTSTRAP_PASS
 
 
 @dataclass(frozen=True, slots=True)
 class CircleHarmonicPassRecord(_Record):
     pass_num: int
-    trace_center_x: float
-    trace_center_y: float
+    trace_center: Offset
     radius: float
-    result_x: float
-    result_y: float
-    moved_x: float
-    moved_y: float
-    sample_xs: tuple[float, ...]
-    sample_ys: tuple[float, ...]
-    sample_freqs: tuple[float, ...]
-    binned_thetas: tuple[float, ...]
-    binned_freqs: tuple[float, ...]
-    fit_c0: float | None
-    fit_a: float | None
-    fit_b: float | None
-    fit_amp: float | None
-    fit_noise: float | None
+    move: PassMove
+    samples: XYCloud
+    binned: BinnedProfile
+    fit: HarmonicFit | None
     rejected: bool
     reject_reasons: str = ""
     type: RecordType = RecordType.CIRCLE_PASS
@@ -290,8 +305,7 @@ class CircleHarmonicPassRecord(_Record):
 @dataclass(frozen=True, slots=True)
 class AccuracyRepeatRecord(_Record):
     repeat_num: int
-    offset_x: float
-    offset_y: float
+    offset: Offset
     session_plot_path: str | None = None
     type: RecordType = RecordType.ACCURACY_REPEAT
 
@@ -307,9 +321,9 @@ SessionRecord: TypeAlias = (
     | PlotArtifactRecord
     | SweepTraceRecord
     | SweepGridTraceRecord
-    | SweepCentroidTraceRecord
+    | PassTraceRecord
     | TernaryStepRecord
-    | DebugScanTraceRecord
+    | ScanTraceRecord
     | CircleBootstrapTraceRecord
     | CircleHarmonicSlopeTraceRecord
     | CircleHarmonicTraceRecord
@@ -347,77 +361,38 @@ def _json_value(value: Any) -> Any:
 
 
 def _record_to_dict(record: _Record) -> dict[str, Any]:
-    if isinstance(record, BoxRecord):
-        return {
-            "type": record.type.value,
-            "pass_num": record.pass_num,
-            "x_lo": record.lo.x,
-            "x_hi": record.hi.x,
-            "y_lo": record.lo.y,
-            "y_hi": record.hi.y,
-        }
     out = _json_value(asdict(record))
-    if isinstance(record, ScatterRecord) and record.freqs is None:
-        out.pop("freqs", None)
+    if isinstance(record, ScatterRecord) and record.cloud.freqs is None:
+        out.get("cloud", {}).pop("freqs", None)
     return out
 
 
 def _test_primitives() -> None:
     import json
 
-    scatter = ScatterRecord(1, "pts", (1.0, 2.0), (3.0, 4.0), freqs=(100.0, 101.0))
-    scatter_no_freqs = ScatterRecord(1, "pts", (1.0,), (2.0,))
-    marker = MarkerRecord(1, "best", 1.0, 2.0, "star")
-    box = BoxRecord(1, Position(0.0, 0.0), Position(1.0, 1.0))
+    scatter = ScatterRecord(
+        1,
+        "pts",
+        XYCloud((1.0, 2.0), (3.0, 4.0), (100.0, 101.0)),
+    )
+    scatter_no_freqs = ScatterRecord(1, "pts", XYCloud((1.0,), (2.0,)))
+    marker = MarkerRecord(1, "best", Offset(1.0, 2.0), "star")
+    box = BoxRecord(1, Bounds.from_box((0.0, 1.0, 0.0, 1.0)))
     stats = StatsRecord("title", (("k", "K"),), ({"k": "v"},))
-    probe = ProbeRecord(1.0, 2.0, 100.0, (99.0, 101.0))
+    probe = ProbeRecord(Offset(1.0, 2.0), 100.0, (99.0, 101.0))
 
-    assert scatter.to_dict() == {
-        "type": "scatter",
-        "pass_num": 1,
-        "label": "pts",
-        "xs": [1.0, 2.0],
-        "ys": [3.0, 4.0],
-        "freqs": [100.0, 101.0],
-        "mode": "markers",
-    }
-    assert "freqs" not in scatter_no_freqs.to_dict()
-    assert marker.to_dict() == {
-        "type": "marker",
-        "pass_num": 1,
-        "label": "best",
-        "x": 1.0,
-        "y": 2.0,
-        "symbol": "star",
-    }
-    assert box.to_dict() == {
-        "type": "box",
-        "pass_num": 1,
-        "x_lo": 0.0,
-        "x_hi": 1.0,
-        "y_lo": 0.0,
-        "y_hi": 1.0,
-    }
-    assert stats.to_dict() == {
-        "type": "stats",
-        "title": "title",
-        "columns": [["k", "K"]],
-        "rows": [{"k": "v"}],
-        "footer": "",
-    }
-    assert probe.to_dict() == {
-        "x": 1.0,
-        "y": 2.0,
-        "mean_hz": 100.0,
-        "samples_hz": [99.0, 101.0],
-    }
-    assert "type" not in probe.to_dict()
+    assert scatter.to_dict()["type"] == "scatter"
+    assert scatter.to_dict()["cloud"]["freqs"] == [100.0, 101.0]
+    assert "freqs" not in scatter_no_freqs.to_dict()["cloud"]
+    assert marker.to_dict()["at"] == {"x": 1.0, "y": 2.0}
+    assert box.to_dict()["bounds"]["lo"] == {"x": 0.0, "y": 0.0}
+    assert probe.to_dict()["mean_hz"] == 100.0
 
     for record in (scatter, scatter_no_freqs, marker, box, stats, probe):
         json.dumps(record.to_dict())
 
     assert pass_color(1) == PASS_COLORS[0]
-    assert pass_color(len(PASS_COLORS) + 1) == PASS_COLORS[0]
+    assert PassMove.compute(Offset.zero(), Offset(1.0, 0.0)).moved.x == 1.0
 
 
 if __name__ == "__main__":

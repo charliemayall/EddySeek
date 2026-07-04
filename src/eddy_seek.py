@@ -431,8 +431,7 @@ class EddySeek(SeekHost):
                 accuracy_recorder.record(
                     AccuracyRepeatRecord(
                         repeat_num=repeat,
-                        offset_x=result.offset.x,
-                        offset_y=result.offset.y,
+                        offset=result.offset,
                         session_plot_path=result.plot_path,
                     )
                 )

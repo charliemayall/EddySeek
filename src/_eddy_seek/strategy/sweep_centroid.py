@@ -15,18 +15,21 @@ from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from ..common import Axis, Offset, Phase, Position, samples_in_box, search_box
+from ..common import Axis, Offset, Phase, samples_in_box, search_box
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample
 from ..movement.leg_planner import clamped_sweep_axis
 from ..optimizer import decoupled_centroid
 from ..plotting._plotly import go, plotly_available
 from ..plotting.primitives import (
+    Bounds,
     BoxRecord,
     MarkerRecord,
+    PassMove,
+    PassTraceRecord,
     ScatterRecord,
     StatsRecord,
-    SweepCentroidTraceRecord,
+    XYCloud,
     pass_color,
 )
 from ..plotting.registry import StrategyPlotter, register_plotter
@@ -161,23 +164,23 @@ def _record_sweep_centroid_pass(
         ScatterRecord(
             pass_num=pass_num,
             label=f"{label} samples",
-            xs=tuple(sample.offset.x for sample in samples),
-            ys=tuple(sample.offset.y for sample in samples),
-            freqs=tuple(sample.freq for sample in samples),
+            cloud=XYCloud(
+                tuple(sample.offset.x for sample in samples),
+                tuple(sample.offset.y for sample in samples),
+                tuple(sample.freq for sample in samples),
+            ),
         )
     )
-    x_lo, x_hi, y_lo, y_hi = box
-    rec.record(BoxRecord(pass_num, Position(x_lo, y_lo), Position(x_hi, y_hi)))
-    rec.record(MarkerRecord(pass_num, f"{label} centre", center.x, center.y, "x"))
-    rec.record(MarkerRecord(pass_num, f"{label} result", result.x, result.y, "star"))
+    rec.record(BoxRecord(pass_num, Bounds.from_box(box)))
+    rec.record(MarkerRecord(pass_num, f"{label} centre", center, "x"))
+    rec.record(MarkerRecord(pass_num, f"{label} result", result, "star"))
     if rec.trace:
         rec.record(
-            SweepCentroidTraceRecord(
+            PassTraceRecord(
                 pass_num=pass_num,
                 phase=phase.value,
-                center=center,
-                result=result,
-                samples=len(samples),
+                move=PassMove.compute(center, result),
+                sample_count=len(samples),
             )
         )
 
@@ -200,7 +203,7 @@ class SweepCentroidPlotter(StrategyPlotter):
             if not isinstance(pass_num, int):
                 continue
             passes[pass_num].append(record)
-            if isinstance(record, SweepCentroidTraceRecord):
+            if isinstance(record, PassTraceRecord):
                 phases[pass_num] = record.phase
 
         if not passes:
@@ -243,23 +246,21 @@ class SweepCentroidPlotter(StrategyPlotter):
                 ),
                 None,
             )
-            freqs = list(scatter.freqs) if scatter and scatter.freqs else []
+            freqs = list(scatter.cloud.freqs) if scatter and scatter.cloud.freqs else []
             moved = Offset.zero()
             if result is not None and center is not None:
-                moved = Offset(
-                    result.x - center.x, result.y - center.y
-                ).abs_components()
+                moved = (result.at - center.at).abs_components()
             pass_rows.append(
                 {
                     "pass": str(pass_num),
                     "phase": phase,
                     "result": (
-                        f"({result.x:+.4f}, {result.y:+.4f})"
+                        f"({result.at.x:+.4f}, {result.at.y:+.4f})"
                         if result is not None
                         else "n/a"
                     ),
                     "moved": f"({moved.x:.4f}, {moved.y:.4f})",
-                    "samples": str(len(scatter.xs)) if scatter else "0",
+                    "samples": str(len(scatter.cloud.xs)) if scatter else "0",
                     "freq": (
                         f"[{min(freqs):.0f}, {max(freqs):.0f}]" if freqs else "n/a"
                     ),
@@ -274,11 +275,7 @@ class SweepCentroidPlotter(StrategyPlotter):
             ),
             None,
         )
-        final = (
-            Offset(final_marker.x, final_marker.y)
-            if final_marker is not None
-            else Offset.zero()
-        )
+        final = final_marker.at if final_marker is not None else Offset.zero()
         layout_with_stats(
             fig,
             StatsRecord(

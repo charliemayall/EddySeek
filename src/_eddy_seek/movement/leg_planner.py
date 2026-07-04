@@ -13,8 +13,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
-from ..common import Axis, Offset, Phase, Position, samples_in_box, search_box
-from ..plotting.primitives import SweepGridTraceRecord, SweepTraceRecord
+from ..common import Axis, Offset, Phase, samples_in_box, search_box
+from ..plotting.primitives import (
+    AxisSpan,
+    Bounds,
+    SweepGridTraceRecord,
+    SweepTraceRecord,
+)
 from ..session import SeekSession
 from .handler import (
     MotionSample,
@@ -163,12 +168,10 @@ def sweep_axis(
             SweepTraceRecord(
                 pass_num=pass_num,
                 phase=phase.value,
-                axis=axis,
+                span=AxisSpan(axis, lo, hi),
                 cross_offsets=tuple(cross_offsets),
                 cross_center=cross_center,
-                lo=lo,
-                hi=hi,
-                samples=tuple(points),
+                profile=tuple(points),
             )
         )
     return points, samples
@@ -225,7 +228,7 @@ def sweep_grid(
     box = search_box(center, cfg.max_jog_x, cfg.max_jog_y, cfg.max_jog_x, cfg.max_jog_y)
     legs = plan_grid_legs(box, step_size, cfg.sweep_overscan, axis=Axis.X)
     legs.extend(plan_grid_legs(box, step_size, cfg.sweep_overscan, axis=Axis.Y))
-    x_lo, x_hi, y_lo, y_hi = box
+    _, _, y_lo, y_hi = box
     samples = get_samples_from_capture_legs(ctx, legs, speed)
     in_box = samples_in_box(samples, box)
     rows = len(y_lines(y_lo, y_hi, step_size))
@@ -237,12 +240,11 @@ def sweep_grid(
         ctx.recorder.record(
             SweepGridTraceRecord(
                 center=center,
-                lo=Position(x_lo, y_lo),
-                hi=Position(x_hi, y_hi),
+                bounds=Bounds.from_box(box),
                 step_size=step_size,
                 rows=rows,
                 legs=len(legs),
-                samples=len(in_box),
+                sample_count=len(in_box),
             )
         )
     return in_box, box

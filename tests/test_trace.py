@@ -60,13 +60,11 @@ def test_write_seek_trace(tmp_path):
 
 
 def test_probe_record_round_trip():
-    probe = ProbeRecord(1.0, 2.0, 100.0, (99.0, 101.0))
-    assert probe.to_dict() == {
-        "x": 1.0,
-        "y": 2.0,
-        "mean_hz": 100.0,
-        "samples_hz": [99.0, 101.0],
-    }
+    probe = ProbeRecord(Offset(1.0, 2.0), 100.0, (99.0, 101.0))
+    payload = probe.to_dict()
+    assert payload["at"] == {"x": 1.0, "y": 2.0}
+    assert payload["mean_hz"] == 100.0
+    assert payload["samples_hz"] == [99.0, 101.0]
     recorder = SessionRecorder(trace=True, plots=False)
     recorder.record(probe)
     assert recorder.to_probe_dicts() == [probe.to_dict()]
@@ -114,8 +112,7 @@ def test_seek_session_collects_probes_when_enabled():
     recorder = SessionRecorder(trace=True, plots=False)
     recorder.record(
         ProbeRecord(
-            x=1.0,
-            y=2.0,
+            at=Offset(1.0, 2.0),
             mean_hz=_Sensor().get_capture_mean(),
             samples_hz=tuple(_Sensor().peek_capture_samples()),
         )

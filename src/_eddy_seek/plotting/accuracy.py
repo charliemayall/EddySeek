@@ -14,7 +14,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
-from ..common import Offset
 from ..session import compute_accuracy_stats
 from ._plotly import (
     THEME_COLORS,
@@ -32,7 +31,7 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
     if not plotly_available() or go is None or len(repeats) < 2:
         return None
 
-    offsets = [Offset(record.offset_x, record.offset_y) for record in repeats]
+    offsets = [record.offset for record in repeats]
     stats = compute_accuracy_stats(offsets)
     fig = go.Figure()
 
@@ -60,8 +59,8 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
         )
     )
 
-    repeat_xs = [record.offset_x for record in repeats]
-    repeat_ys = [record.offset_y for record in repeats]
+    repeat_xs = [record.offset.x for record in repeats]
+    repeat_ys = [record.offset.y for record in repeats]
     fig.add_trace(
         go.Scatter(
             x=repeat_xs,
@@ -79,14 +78,14 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
         color = pass_color(record.repeat_num)
         hover = (
             f"repeat {record.repeat_num}<br>"
-            f"x={record.offset_x:+.4f} y={record.offset_y:+.4f} mm"
+            f"x={record.offset.x:+.4f} y={record.offset.y:+.4f} mm"
         )
         if record.session_plot_path:
             hover += f"<br>session plot: {record.session_plot_path}"
         fig.add_trace(
             go.Scatter(
-                x=[record.offset_x],
-                y=[record.offset_y],
+                x=[record.offset.x],
+                y=[record.offset.y],
                 mode="markers+text",
                 name=f"repeat {record.repeat_num}",
                 text=[str(record.repeat_num)],
@@ -106,7 +105,7 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
         repeat_rows.append(
             {
                 "repeat": str(record.repeat_num),
-                "offset": f"({record.offset_x:+.4f}, {record.offset_y:+.4f})",
+                "offset": f"({record.offset.x:+.4f}, {record.offset.y:+.4f})",
                 "radial": f"{radial:.4f}",
                 "plot": (
                     Path(record.session_plot_path).name

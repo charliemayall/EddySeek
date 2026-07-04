@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..common import Axis, Offset
@@ -28,7 +27,9 @@ from ..plotting.primitives import (
     MarkerRecord,
     ScatterMode,
     ScatterRecord,
+    TernaryStep,
     TernaryStepRecord,
+    XYCloud,
     pass_color,
 )
 from ..plotting.registry import StrategyPlotter, register_plotter
@@ -37,18 +38,6 @@ from ..session import SeekSession
 from .base import SeekStrategy
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class TernaryStep:
-    axis: Axis
-    iteration: int
-    lo: float
-    hi: float
-    m1: float
-    m2: float
-    f1: float
-    f2: float
 
 
 class TernaryStrategy(SeekStrategy):
@@ -185,26 +174,16 @@ def _record_ternary_pass(
             ScatterRecord(
                 pass_num=pass_num,
                 label=f"{label} probes",
-                xs=tuple(position.x for position, _ in probes),
-                ys=tuple(position.y for position, _ in probes),
+                cloud=XYCloud(
+                    tuple(position.x for position, _ in probes),
+                    tuple(position.y for position, _ in probes),
+                ),
                 mode=ScatterMode.MARKERS_LINES,
             )
         )
-    rec.record(MarkerRecord(pass_num, f"{label} result", result.x, result.y, "star"))
+    rec.record(MarkerRecord(pass_num, f"{label} result", result, "star"))
     for step in x_steps + y_steps:
-        rec.record(
-            TernaryStepRecord(
-                pass_num=pass_num,
-                axis=step.axis,
-                iteration=step.iteration,
-                lo=step.lo,
-                hi=step.hi,
-                m1=step.m1,
-                m2=step.m2,
-                f1=step.f1,
-                f2=step.f2,
-            )
-        )
+        rec.record(TernaryStepRecord(pass_num=pass_num, step=step))
 
 
 @register_plotter("ternary")
@@ -248,12 +227,8 @@ class TernaryPlotter(StrategyPlotter):
             ternary_steps = [
                 record for record in group if isinstance(record, TernaryStepRecord)
             ]
-            x_steps = [
-                record for record in ternary_steps if record.axis == Axis.X.value
-            ]
-            y_steps = [
-                record for record in ternary_steps if record.axis == Axis.Y.value
-            ]
+            x_steps = [record for record in ternary_steps if record.step.axis is Axis.X]
+            y_steps = [record for record in ternary_steps if record.step.axis is Axis.Y]
             for record in group:
                 if isinstance(record, ScatterRecord):
                     add_scatter(fig, record, search_for, color, row=1, col=1)
@@ -289,12 +264,12 @@ class TernaryPlotter(StrategyPlotter):
                 ),
                 None,
             )
-            freqs = list(scatter.freqs) if scatter and scatter.freqs else []
+            freqs = list(scatter.cloud.freqs) if scatter and scatter.cloud.freqs else []
             pass_rows.append(
                 {
                     "pass": str(pass_num),
                     "result": (
-                        f"({result.x:+.4f}, {result.y:+.4f})"
+                        f"({result.at.x:+.4f}, {result.at.y:+.4f})"
                         if result is not None
                         else "n/a"
                     ),
@@ -313,11 +288,7 @@ class TernaryPlotter(StrategyPlotter):
             ),
             None,
         )
-        final = (
-            Offset(final_marker.x, final_marker.y)
-            if final_marker is not None
-            else Offset.zero()
-        )
+        final = final_marker.at if final_marker is not None else Offset.zero()
         fig.update_xaxes(title_text="X offset (mm)", row=1, col=1)
         fig.update_yaxes(title_text="Y offset (mm)", row=1, col=1)
         fig.update_xaxes(title_text="Offset (mm)", row=2, col=1)
@@ -362,7 +333,8 @@ def _add_bracket_history(
 ) -> None:
     if not steps or go is None:
         return
-    for step in steps:
+    for record in steps:
+        step = record.step
         y = y_base + step.iteration
         fig.add_trace(
             go.Scatter(

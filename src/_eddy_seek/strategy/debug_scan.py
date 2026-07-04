@@ -14,13 +14,19 @@ import logging
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from ..common import Offset, Position
+from ..common import Offset
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample
 from ..movement.leg_planner import sweep_grid
 from ..optimizer import bin_frequencies, peak_bin_center
 from ..plotting.debug_scan import DebugScanRecord, write_debug_scan_plot
-from ..plotting.primitives import DebugScanTraceRecord, HeatmapRecord
+from ..plotting.primitives import (
+    Bounds,
+    HeatmapRecord,
+    PassMove,
+    ScanTraceRecord,
+    XYCloud,
+)
 from ..plotting.registry import StrategyPlotter, register_plotter
 from ..plotting.renderer import finalize_strategy_plot
 from ..session import SeekSession
@@ -119,27 +125,26 @@ def _record_debug_scan(
     rec = ctx.recorder
     if not rec.active:
         return
-    x_lo, x_hi, y_lo, y_hi = box
+
     rec.record(
         HeatmapRecord(
-            center=center,
-            result=result,
-            lo=Position(x_lo, y_lo),
-            hi=Position(x_hi, y_hi),
+            move=PassMove.compute(center, result),
+            bounds=Bounds.from_box(box),
             z=tuple(tuple(row) for row in z),
             x_centers=tuple(x_centers),
             y_centers=tuple(y_centers),
-            sample_xs=tuple(sample.offset.x for sample in samples),
-            sample_ys=tuple(sample.offset.y for sample in samples),
-            sample_freqs=tuple(sample.freq for sample in samples),
+            samples=XYCloud(
+                tuple(sample.offset.x for sample in samples),
+                tuple(sample.offset.y for sample in samples),
+                tuple(sample.freq for sample in samples),
+            ),
         )
     )
     if rec.trace:
         rec.record(
-            DebugScanTraceRecord(
-                center=center,
-                result=result,
-                samples=len(samples),
+            ScanTraceRecord(
+                move=PassMove.compute(center, result),
+                sample_count=len(samples),
             )
         )
 
@@ -158,20 +163,21 @@ class DebugScanPlotter(StrategyPlotter):
         )
         if heatmap is None:
             return None
+        freqs = heatmap.samples.freqs or (0.0,) * len(heatmap.samples.xs)
         samples = [
             MotionSample(Offset(x, y), freq, 0.0)
             for x, y, freq in zip(
-                heatmap.sample_xs,
-                heatmap.sample_ys,
-                heatmap.sample_freqs,
+                heatmap.samples.xs,
+                heatmap.samples.ys,
+                freqs,
                 strict=True,
             )
         ]
         record = DebugScanRecord(
-            center=heatmap.center,
-            result=heatmap.result,
+            center=heatmap.move.center,
+            result=heatmap.move.result,
             samples=samples,
-            box=(heatmap.lo.x, heatmap.hi.x, heatmap.lo.y, heatmap.hi.y),
+            box=heatmap.bounds.as_box(),
             z=[list(row) for row in heatmap.z],
             x_centers=list(heatmap.x_centers),
             y_centers=list(heatmap.y_centers),

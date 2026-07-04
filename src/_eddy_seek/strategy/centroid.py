@@ -22,6 +22,7 @@ from ..plotting.primitives import (
     ScatterMode,
     ScatterRecord,
     StatsRecord,
+    XYCloud,
     pass_color,
 )
 from ..plotting.registry import StrategyPlotter, register_plotter
@@ -141,14 +142,16 @@ def _record_centroid_pass(
         ScatterRecord(
             pass_num=pass_num,
             label=f"{label} probes",
-            xs=tuple(position.x for position, _ in probes),
-            ys=tuple(position.y for position, _ in probes),
-            freqs=tuple(freq for _, freq in probes),
+            cloud=XYCloud(
+                tuple(position.x for position, _ in probes),
+                tuple(position.y for position, _ in probes),
+                tuple(freq for _, freq in probes),
+            ),
             mode=ScatterMode.MARKERS_LINES,
         )
     )
-    rec.record(MarkerRecord(pass_num, f"{label} centre", center.x, center.y, "x"))
-    rec.record(MarkerRecord(pass_num, f"{label} result", result.x, result.y, "star"))
+    rec.record(MarkerRecord(pass_num, f"{label} centre", center, "x"))
+    rec.record(MarkerRecord(pass_num, f"{label} result", result, "star"))
 
 
 @register_plotter("centroid")
@@ -207,17 +210,15 @@ class CentroidPlotter(StrategyPlotter):
                 ),
                 None,
             )
-            freqs = list(scatter.freqs) if scatter and scatter.freqs else []
+            freqs = list(scatter.cloud.freqs) if scatter and scatter.cloud.freqs else []
             moved = Offset.zero()
             if result is not None and center is not None:
-                moved = Offset(
-                    result.x - center.x, result.y - center.y
-                ).abs_components()
+                moved = (result.at - center.at).abs_components()
             pass_rows.append(
                 {
                     "pass": str(pass_num),
                     "result": (
-                        f"({result.x:+.4f}, {result.y:+.4f})"
+                        f"({result.at.x:+.4f}, {result.at.y:+.4f})"
                         if result is not None
                         else "n/a"
                     ),
@@ -236,11 +237,7 @@ class CentroidPlotter(StrategyPlotter):
             ),
             None,
         )
-        final = (
-            Offset(final_marker.x, final_marker.y)
-            if final_marker is not None
-            else Offset.zero()
-        )
+        final = final_marker.at if final_marker is not None else Offset.zero()
         layout_with_stats(
             fig,
             StatsRecord(

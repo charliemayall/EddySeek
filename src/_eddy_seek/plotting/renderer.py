@@ -61,29 +61,26 @@ def add_scatter(
     row: int | None = None,
     col: int | None = None,
 ) -> None:
-    if go is None or not record.xs:
+    if go is None or not record.cloud.xs:
         return
     mode = record.mode.value if isinstance(record.mode, ScatterMode) else record.mode
+    freqs = record.cloud.freqs
     marker: dict[str, Any]
-    if record.freqs is not None:
-        marker = freq_marker(list(record.freqs), search_for, size=9, opacity=1.0)
+    if freqs is not None:
+        marker = freq_marker(list(freqs), search_for, size=9, opacity=1.0)
     else:
         marker = {"size": 9, "color": color}
     trace = go.Scatter(
-        x=list(record.xs),
-        y=list(record.ys),
+        x=list(record.cloud.xs),
+        y=list(record.cloud.ys),
         mode=mode,
         name=record.label,
         line={"color": color, "width": 1},
         marker=marker,
-        text=(
-            [f"{freq:.1f} Hz" for freq in record.freqs]
-            if record.freqs is not None
-            else None
-        ),
+        text=([f"{freq:.1f} Hz" for freq in freqs] if freqs is not None else None),
         hovertemplate=(
             f"{record.label}<br>x=%{{x:.4f}} y=%{{y:.4f}}"
-            + (" %{{text}}" if record.freqs is not None else "")
+            + (" %{{text}}" if freqs is not None else "")
             + "<extra></extra>"
         ),
         legendgroup=record.label,
@@ -106,8 +103,8 @@ def add_marker(
     if go is None:
         return
     trace = go.Scatter(
-        x=[record.x],
-        y=[record.y],
+        x=[record.at.x],
+        y=[record.at.y],
         mode="markers",
         name=record.label,
         marker={
@@ -139,10 +136,10 @@ def add_box(
 ) -> None:
     shape = {
         "type": "rect",
-        "x0": record.lo.x,
-        "x1": record.hi.x,
-        "y0": record.lo.y,
-        "y1": record.hi.y,
+        "x0": record.bounds.lo.x,
+        "x1": record.bounds.hi.x,
+        "y0": record.bounds.lo.y,
+        "y1": record.bounds.hi.y,
         "line": {"color": color, "width": 1, "dash": "dot"},
         "fillcolor": "rgba(0,0,0,0)",
     }
