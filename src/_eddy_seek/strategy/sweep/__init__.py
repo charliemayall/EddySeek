@@ -9,7 +9,7 @@ Re-exports from ``leg_planner`` for backward-compatible imports.
 """
 
 from ...movement.leg_planner import (
-    capture_legs,
+    get_samples_from_capture_legs,
     iter_cross_offsets,
     plan_axis_legs,
     plan_grid_legs,
@@ -19,7 +19,7 @@ from ...movement.leg_planner import (
 )
 
 __all__ = [
-    "capture_legs",
+    "get_samples_from_capture_legs",
     "iter_cross_offsets",
     "plan_axis_legs",
     "plan_grid_legs",

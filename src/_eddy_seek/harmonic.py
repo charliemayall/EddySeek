@@ -276,13 +276,14 @@ def radial_slope(
     x_profile: Sequence[tuple[float, float]],
     y_profile: Sequence[tuple[float, float]],
     radius: float,
+    center: Offset = Offset(0.0, 0.0),
 ) -> float | None:
-    """Estimate ``f'(r)`` from axis-aligned sweep profiles at ``|coord| ≈ radius``."""
+    """Estimate ``f'(r)`` from axis sweep profiles, radius measured from ``center``."""
     slopes = [
         slope
         for slope in (
-            _axis_radial_slope(x_profile, radius),
-            _axis_radial_slope(y_profile, radius),
+            _axis_radial_slope(x_profile, radius, center.x),
+            _axis_radial_slope(y_profile, radius, center.y),
         )
         if slope is not None
     ]
@@ -296,10 +297,18 @@ def harmonic_step_v2(
     f_prime: float | None,
     *,
     step_gain: float,
+    radius: float,
+    search_for: str,
     max_jog_x: float,
     max_jog_y: float,
 ) -> Offset:
-    """Convert harmonic coefficients into a centre correction."""
+    """Convert harmonic coefficients into a centre correction.
+
+    With a radial slope ``f'`` the Newton step is ``-(a, b)/f'`` (sign of ``f'``
+    carries the search direction).  Without it, step a fraction of the circle
+    radius toward the extremum: for a ``max`` field ``f'<0`` so the correction
+    points along ``+(a, b)``; for ``min`` along ``-(a, b)``.
+    """
     if not math.isfinite(fit.a) or not math.isfinite(fit.b) or fit.amplitude <= 0.0:
         return Offset.zero()
 
@@ -310,11 +319,14 @@ def harmonic_step_v2(
     ):
         step = Offset(-fit.a / f_prime, -fit.b / f_prime)
     else:
-        scale = fit.amplitude * step_gain
-        step = Offset(
-            -fit.a / fit.amplitude * scale,
-            -fit.b / fit.amplitude * scale,
-        )
+        sign = 1.0 if search_for == "max" else -1.0
+        scale = sign * step_gain * radius / fit.amplitude
+        step = Offset(fit.a * scale, fit.b * scale)
+    # Trust region: the first-harmonic linearisation only holds within the
+    # traced circle, and a far-off centre biases f' low (Newton overshoot).
+    magnitude = math.hypot(step.x, step.y)
+    if radius > 0.0 and magnitude > radius:
+        step = Offset(step.x * radius / magnitude, step.y * radius / magnitude)
     return step.clamp(max_jog_x, max_jog_y)
 
 
@@ -378,21 +390,28 @@ def circle_radius_for_pass(
 def _axis_radial_slope(
     profile: Sequence[tuple[float, float]],
     radius: float,
+    center_coord: float = 0.0,
 ) -> float | None:
+    """``df/dr`` at distance ``radius`` from ``center_coord``, from one axis profile.
+
+    Central difference at ``±radius`` on both branches; radial distance grows
+    as the coordinate decreases on the negative branch, so its difference is
+    mirrored.  A secant from the centre would halve the slope of a parabola
+    and make every Newton step overshoot 2x.
+    """
     if len(profile) < 2 or radius <= 0.0:
         return None
-    coords = [float(coord) for coord, _ in profile]
+    coords = [float(coord) - center_coord for coord, _ in profile]
     freqs = [float(freq) for _, freq in profile]
     order = sorted(range(len(coords)), key=coords.__getitem__)
     coords = [coords[i] for i in order]
     freqs = [freqs[i] for i in order]
-    if radius < coords[0] or radius > coords[-1]:
+    h = min(radius / 2.0, coords[-1] - radius, -coords[0] - radius)
+    if h <= 1e-9:
         return None
-    f_r = _interp_linear(coords, freqs, radius)
-    f_neg = _interp_linear(coords, freqs, -radius)
-    f_0 = _interp_linear(coords, freqs, 0.0)
-    slope_pos = (f_r - f_0) / radius
-    slope_neg = (f_0 - f_neg) / radius
+    f = lambda x: _interp_linear(coords, freqs, x)
+    slope_pos = (f(radius + h) - f(radius - h)) / (2.0 * h)
+    slope_neg = (f(-radius - h) - f(-radius + h)) / (2.0 * h)
     return (slope_pos + slope_neg) / 2.0
 
 
@@ -504,6 +523,54 @@ def _self_check() -> None:
     assert not harmonic_model_accepted(
         fit_small, binned_small, noise_k=2.0, min_quality=0.5
     )
+
+    # End-to-end nulling: peak field, offset estimate, slope from a sweep
+    # profile centred on the estimate.  One step must land near the target.
+    target = Offset(0.15, -0.25)
+    guess = Offset(0.45, 0.10)
+    peak = lambda x, y: (
+        100_000.0 - 8_000.0 * ((x - target.x) ** 2 + (y - target.y) ** 2)
+    )
+    r = 0.5
+    orbit = [
+        MotionSample(
+            Offset(guess.x + r * math.cos(t), guess.y + r * math.sin(t)),
+            peak(guess.x + r * math.cos(t), guess.y + r * math.sin(t)),
+            0.0,
+        )
+        for t in [_TWO_PI * i / 36.0 for i in range(36)]
+    ]
+    fit_orbit = fit_first_harmonic(orbit, guess)
+    assert fit_orbit is not None
+    x_prof = [(guess.x + d, peak(guess.x + d, guess.y)) for d in _grid(-1.0, 1.0, 41)]
+    y_prof = [(guess.y + d, peak(guess.x, guess.y + d)) for d in _grid(-1.0, 1.0, 41)]
+    slope = radial_slope(x_prof, y_prof, r, center=guess)
+    assert slope is not None and slope < 0.0
+    step = harmonic_step_v2(
+        fit_orbit,
+        slope,
+        step_gain=0.15,
+        radius=r,
+        search_for="max",
+        max_jog_x=5.0,
+        max_jog_y=5.0,
+    )
+    assert (guess + step).distance_to(target) < 0.05
+    # Slope-free fallback must still trend toward the target.
+    fallback = harmonic_step_v2(
+        fit_orbit,
+        None,
+        step_gain=0.15,
+        radius=r,
+        search_for="max",
+        max_jog_x=5.0,
+        max_jog_y=5.0,
+    )
+    assert (guess + fallback).distance_to(target) < guess.distance_to(target)
+
+
+def _grid(lo: float, hi: float, n: int) -> list[float]:
+    return [lo + (hi - lo) * i / (n - 1) for i in range(n)]
 
 
 _self_check()

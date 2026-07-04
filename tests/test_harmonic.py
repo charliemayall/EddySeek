@@ -113,9 +113,13 @@ def test_bin_samples_by_angle_debiases_corners():
 
 def test_harmonic_step_v2_uses_gain_when_f_prime_small():
     fit = HarmonicFit(c0=0.0, a=1.0, b=0.0, amplitude=1.0, noise=0.1, n=36)
-    step = harmonic_step_v2(fit, 1e-6, step_gain=0.2, max_jog_x=5.0, max_jog_y=5.0)
-    assert step.x == pytest.approx(-0.2, abs=0.01)
+    kwargs = dict(step_gain=0.2, radius=1.0, max_jog_x=5.0, max_jog_y=5.0)
+    # On a peak field (search_for="max") f' < 0, so the correction follows +(a, b).
+    step = harmonic_step_v2(fit, 1e-6, search_for="max", **kwargs)
+    assert step.x == pytest.approx(0.2, abs=0.01)
     assert step.y == pytest.approx(0.0, abs=0.01)
+    step_min = harmonic_step_v2(fit, 1e-6, search_for="min", **kwargs)
+    assert step_min.x == pytest.approx(-0.2, abs=0.01)
 
 
 def test_harmonic_step_v2_scales_with_radial_slope():
@@ -128,7 +132,15 @@ def test_harmonic_step_v2_scales_with_radial_slope():
         Offset(0.2, -0.1),
     )
     assert fit is not None
-    step = harmonic_step_v2(fit, -10.0, step_gain=0.15, max_jog_x=5.0, max_jog_y=5.0)
+    step = harmonic_step_v2(
+        fit,
+        -10.0,
+        step_gain=0.15,
+        radius=1.0,
+        search_for="max",
+        max_jog_x=5.0,
+        max_jog_y=5.0,
+    )
     assert step.x == pytest.approx(fit.a / 10.0, abs=0.05)
     assert step.y == pytest.approx(fit.b / 10.0, abs=0.05)
 
@@ -141,7 +153,15 @@ def test_harmonic_nulling_recovers_offset_on_paraboloid():
     )
     fit = fit_first_harmonic(samples, estimate)
     assert fit is not None
-    step = harmonic_step_v2(fit, -10.0, step_gain=0.15, max_jog_x=5.0, max_jog_y=5.0)
+    step = harmonic_step_v2(
+        fit,
+        -10.0,
+        step_gain=0.15,
+        radius=radius,
+        search_for="max",
+        max_jog_x=5.0,
+        max_jog_y=5.0,
+    )
     corrected = estimate + step
     assert corrected.distance_to(Offset.zero()) < estimate.distance_to(Offset.zero())
     assert corrected.x == pytest.approx(0.0, abs=0.08)
@@ -387,3 +407,60 @@ def test_radial_slope_asymmetric_paraboloid():
     slope = radial_slope(profile, profile, 0.5)
     assert slope is not None
     assert slope < 0.0
+
+
+def test_radial_slope_symmetric_peak_not_cancelled():
+    """Regression: the ± branches of a symmetric peak must add, not cancel."""
+    profile = [(x, 100.0 - 5.0 * x * x) for x in [i * 0.1 for i in range(-10, 11)]]
+    slope = radial_slope(profile, profile, 0.5)
+    assert slope is not None
+    assert slope == pytest.approx(-5.0, abs=0.2)  # true f'(0.5) = -10 * 0.5
+
+
+def test_radial_slope_respects_off_origin_center():
+    center = Offset(0.6, -0.4)
+    x_profile = [
+        (center.x + d, 100.0 - 5.0 * d * d) for d in [i * 0.1 for i in range(-10, 11)]
+    ]
+    y_profile = [
+        (center.y + d, 100.0 - 5.0 * d * d) for d in [i * 0.1 for i in range(-10, 11)]
+    ]
+    slope = radial_slope(x_profile, y_profile, 0.5, center=center)
+    assert slope is not None
+    assert slope == pytest.approx(-5.0, abs=0.2)
+    # Without centring the same profiles fall outside the ± radius window.
+    assert radial_slope(x_profile, y_profile, 0.7) is None
+
+
+def test_full_circle_pass_steps_converge_on_both_axes():
+    """Iterated fit + slope + step cycles must null the offset on X and Y."""
+    target = Offset(0.2, -0.3)
+    center = Offset(0.6, 0.4)
+    radius = 0.5
+
+    def field(x: float, y: float) -> float:
+        return 100_000.0 - 8_000.0 * ((x - target.x) ** 2 + (y - target.y) ** 2)
+
+    grid = [i * 0.05 for i in range(-40, 41)]
+    x_profile = [(center.x + d, field(center.x + d, center.y)) for d in grid]
+    y_profile = [(center.y + d, field(center.x, center.y + d)) for d in grid]
+    for _ in range(4):
+        samples = _circle_samples(center, radius, field)
+        fit = fit_first_harmonic(samples, center)
+        assert fit is not None
+        f_prime = radial_slope(x_profile, y_profile, radius, center=center)
+        assert f_prime is not None
+        step = harmonic_step_v2(
+            fit,
+            f_prime,
+            step_gain=0.15,
+            radius=radius,
+            search_for="max",
+            max_jog_x=5.0,
+            max_jog_y=5.0,
+        )
+        # Trust region: no single correction may exceed the traced radius.
+        assert math.hypot(step.x, step.y) <= radius + 1e-9
+        center = center + step
+    assert center.x == pytest.approx(target.x, abs=0.02)
+    assert center.y == pytest.approx(target.y, abs=0.02)

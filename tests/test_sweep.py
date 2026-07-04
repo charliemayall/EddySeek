@@ -159,7 +159,8 @@ def test_speed_clamp_for_min_samples_leaves_slow_request():
     )
 
 
-def test_sweep_axis_clamps_speed_for_short_in_range_span():
+def test_sweep_axis_passes_speed_through():
+    """Speed clamping is the caller's job; sweep_axis must not alter it."""
     ctx = MagicMock()
     ctx.config.min_sweep_samples = 20
     ctx.config.sweep_overscan = 1.0
@@ -169,16 +170,7 @@ def test_sweep_axis_clamps_speed_for_short_in_range_span():
     handler.collect_samples.return_value = []
 
     speed = 1800.0
-    lo, hi = 0.5, 1.5
-    expected = get_clamped_speed_for_min_samples_over_span(
-        requested_mm_min=speed,
-        span_mm=hi - lo,
-        min_samples=20,
-    )
-    assert expected < speed
-
-    sweep_axis(ctx, Axis.X, lo, hi, 0.0, [0.0], speed, Phase.FINE, 2)
+    sweep_axis(ctx, Axis.X, 0.5, 1.5, 0.0, [0.0], speed, Phase.FINE, 2)
 
     handler.run_capture_legs.assert_called_once()
-    assert handler.run_capture_legs.call_args.args[1] == expected
-    assert handler.run_capture_legs.call_args.kwargs["clamp"] is False
+    assert handler.run_capture_legs.call_args.args[1] == speed

@@ -389,16 +389,18 @@ class CircleHarmonicStrategy(SeekStrategy):
             )
             return bootstrap
 
-        f_prime = radial_slope(self._x_profile, self._y_profile, trace_radius)
+        f_prime = radial_slope(
+            self._x_profile, self._y_profile, trace_radius, center=trace_center
+        )
         step = harmonic_step_v2(
             fit,
             f_prime,
             step_gain=cfg.harmonic_step_gain,
+            radius=trace_radius,
+            search_for=cfg.search_for,
             max_jog_x=cfg.max_jog_x,
             max_jog_y=cfg.max_jog_y,
         )
-        # ponytail: invert Y step — coil frame vs toolhead Y sign experiment
-        step = step.with_y(-step.y)
         unclamped = trace_center + step
         result = unclamped.clamp(cfg.max_jog_x, cfg.max_jog_y)
 
