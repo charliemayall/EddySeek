@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_LDC1612_BULK_HZ = 400.0  # batch bulk client nominal rate
+
 
 def move_to_xy(
     toolhead: ToolHead,
@@ -42,6 +44,25 @@ def move_to_xy(
     toolhead.manual_move([position.x, position.y], feedrate / 60.0)
     if wait:
         toolhead.wait_moves()
+
+
+def get_clamped_speed_for_min_samples_over_span(
+    *,
+    requested_mm_min: float,
+    span_mm: float,
+    min_samples: int,
+) -> float:
+    """Cap feedrate so an in-range traverse can yield ``min_samples`` at ``bulk_rate_hz``."""
+    if span_mm <= 0.0 or min_samples <= 0:
+        return requested_mm_min
+    cap = span_mm * _LDC1612_BULK_HZ * 60.0 / min_samples
+    result_speed_mm_min = min(requested_mm_min, cap)
+    if result_speed_mm_min != requested_mm_min:
+        logger.debug(
+            f"eddy_seek: speed clamped {requested_mm_min:.1f} -> {result_speed_mm_min:.1f} mm/min "
+            f"(span={span_mm:.3f} mm, min_samples={min_samples}, bulk_rate_hz={_LDC1612_BULK_HZ:.0f} Hz)"
+        )
+    return result_speed_mm_min
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,13 +270,20 @@ class MotionHandler(_SessionMotionBase):
         if not self._active:
             raise RuntimeError("eddy_seek: continuous motion not active")
         if self._last_move_end is None or line_start != self._last_move_end:
+            # Start so don't clamp speed
             self._manual_move(line_start, speed)
+        clamped_speed = get_clamped_speed_for_min_samples_over_span(
+            requested_mm_min=speed,
+            span_mm=line_end.x - line_start.x,
+            min_samples=self._config.min_sweep_samples,
+        )
 
-        capture_start = self.th.get_last_move_time()
-
-        self._manual_move(line_end, speed)
+        capture_start_t = self.th.get_last_move_time()
+        self._manual_move(line_end, clamped_speed)
         self._position = line_end
-        self._register_capture_window(capture_start)
+        self._register_capture_window(
+            capture_start_t
+        )  # make cb for move end (start,end)->(...)
         self._last_move_end = line_end
 
     def run_capture_legs(
@@ -364,3 +392,23 @@ class MotionHandler(_SessionMotionBase):
             flat.extend(batch)
         self._results.clear()
         return flat
+
+
+def _assert_speed_clamp_for_min_samples() -> None:
+    cap = get_clamped_speed_for_min_samples_over_span(
+        requested_mm_min=3000.0,
+        span_mm=2.0,
+        min_samples=20,
+    )
+    assert cap == 2400.0
+    assert (
+        get_clamped_speed_for_min_samples_over_span(
+            requested_mm_min=1200.0,
+            span_mm=2.0,
+            min_samples=20,
+        )
+        == 1200.0
+    )
+
+
+_assert_speed_clamp_for_min_samples()

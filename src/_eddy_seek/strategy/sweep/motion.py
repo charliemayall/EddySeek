@@ -5,7 +5,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-Sweep path planning and session capture glue.
+Generic motion planning and capture helpers.
 """
 
 from __future__ import annotations
@@ -15,22 +15,6 @@ from collections.abc import Sequence
 from ...common import Axis, Offset
 from ...motion_handler import MotionSample
 from ...session import SeekSession
-
-_LDC1612_BULK_HZ = 400.0  # batch bulk client nominal rate
-
-
-def speed_clamp_for_min_samples(
-    *,
-    requested_mm_min: float,
-    span_mm: float,
-    min_samples: int,
-    bulk_rate_hz: float = _LDC1612_BULK_HZ,
-) -> float:
-    """Cap feedrate so an in-range traverse can yield ``min_samples`` at ``bulk_rate_hz``."""
-    if span_mm <= 0.0 or min_samples <= 0:
-        return requested_mm_min
-    cap = span_mm * bulk_rate_hz * 60.0 / min_samples
-    return min(requested_mm_min, cap)
 
 
 def effective_overscan(overscan: float) -> float:
@@ -151,24 +135,4 @@ def _assert_grid_leg_count() -> None:
     assert len(legs) == rows * 2
 
 
-def _assert_speed_clamp_for_min_samples() -> None:
-    cap = speed_clamp_for_min_samples(
-        requested_mm_min=3000.0,
-        span_mm=2.0,
-        min_samples=20,
-        bulk_rate_hz=400.0,
-    )
-    assert cap == 2400.0
-    assert (
-        speed_clamp_for_min_samples(
-            requested_mm_min=1200.0,
-            span_mm=2.0,
-            min_samples=20,
-            bulk_rate_hz=400.0,
-        )
-        == 1200.0
-    )
-
-
 _assert_grid_leg_count()
-_assert_speed_clamp_for_min_samples()
