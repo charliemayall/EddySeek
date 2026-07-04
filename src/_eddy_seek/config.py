@@ -131,6 +131,10 @@ class SeekConfig:
     harmonic_min_quality: float = field(
         default=0.5, metadata={"gcode": "HARMONIC_MIN_QUALITY", "positive": True}
     )
+    circle_refresh_sweeps: bool = field(
+        default=False,
+        metadata={"gcode": "CIRCLE_REFRESH_SWEEPS", "bool": True},
+    )
     debug: bool = field(default=False, metadata={"bool": True})
 
     def __post_init__(self) -> None:

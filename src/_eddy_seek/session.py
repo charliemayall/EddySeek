@@ -128,6 +128,12 @@ class SeekSession:
         return self._motion
 
     def sync_offset(self, offset: Offset) -> None:
+        """
+
+        Sync the current offset to the motion handler.
+
+        This is used to update the motion handler's position after a move.
+        """
         self.motion.sync_offset(offset)
 
     @property

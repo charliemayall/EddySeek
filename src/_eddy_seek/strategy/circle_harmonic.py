@@ -70,7 +70,8 @@ class CircleHarmonicStrategy(SeekStrategy):
         logger.debug(
             f"eddy_seek: circle_harmonic coarse={cfg.sweep_coarse_speed / 60.0:.2f} mm/s "
             f"circle={cfg.circle_speed / 60.0:.2f} mm/s "
-            f"segments={cfg.circle_segments}"
+            f"segments={cfg.circle_segments} "
+            f"refresh_sweeps={cfg.circle_refresh_sweeps}"
         )
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
@@ -268,7 +269,8 @@ class CircleHarmonicStrategy(SeekStrategy):
             f"eddy_seek: circle_harmonic pass {pass_num} clamped_speed={clamped_speed:.4f} mm/s"
         )
 
-        self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
+        if cfg.circle_refresh_sweeps:
+            self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
         handler = ctx.motion
         handler.run_capture_legs(legs, clamped_speed)

@@ -85,6 +85,16 @@ def test_load_seek_config_circle_harmonic_params():
     assert cfg.harmonic_step_gain == 0.2
 
 
+def test_load_seek_config_circle_refresh_sweeps():
+    assert load_seek_config(FakeKlipperConfig()).circle_refresh_sweeps is False
+    assert (
+        load_seek_config(
+            FakeKlipperConfig(circle_refresh_sweeps="true")
+        ).circle_refresh_sweeps
+        is True
+    )
+
+
 def test_load_seek_config_rejects_circle_radius_min_above_start():
     with raises(ValueError, match="circle_radius_min"):
         SeekConfig(circle_radius_start=0.5, circle_radius_min=1.0)

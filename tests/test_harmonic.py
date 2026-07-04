@@ -246,6 +246,46 @@ def test_circle_harmonic_search_retries_after_rejected_pass():
     assert best.x == pytest.approx(0.96)
 
 
+def test_circle_harmonic_skips_refresh_sweeps_when_disabled():
+    from unittest.mock import MagicMock, patch
+
+    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
+
+    strategy = CircleHarmonicStrategy()
+    strategy._bootstrap = Offset(1.0, 0.0)
+    ctx = MagicMock()
+    ctx.config = SeekConfig(circle_refresh_sweeps=False)
+
+    with patch.object(strategy, "_refresh_profiles") as refresh:
+        with patch.object(
+            ctx.motion, "run_capture_legs", side_effect=RuntimeError("stop")
+        ):
+            with pytest.raises(RuntimeError, match="stop"):
+                strategy._circle_pass(ctx, 2, Offset(1.0, 0.0))
+
+    refresh.assert_not_called()
+
+
+def test_circle_harmonic_runs_refresh_sweeps_when_enabled():
+    from unittest.mock import MagicMock, patch
+
+    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
+
+    strategy = CircleHarmonicStrategy()
+    strategy._bootstrap = Offset(1.0, 0.0)
+    ctx = MagicMock()
+    ctx.config = SeekConfig(circle_refresh_sweeps=True)
+
+    with patch.object(strategy, "_refresh_profiles") as refresh:
+        with patch.object(
+            ctx.motion, "run_capture_legs", side_effect=RuntimeError("stop")
+        ):
+            with pytest.raises(RuntimeError, match="stop"):
+                strategy._circle_pass(ctx, 2, Offset(1.0, 0.0))
+
+    refresh.assert_called_once()
+
+
 def test_radial_slope_asymmetric_paraboloid():
     profile = [
         (x, 100.0 - 5.0 * x * x - 2.0 * x) for x in [i * 0.1 for i in range(-10, 11)]
