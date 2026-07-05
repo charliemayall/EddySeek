@@ -408,7 +408,7 @@ def _add_heatmap_panel(
     if z and isinstance(z[0][0], int):
         display_z = [[float(value) for value in row] for row in z]
     else:
-        display_z = _z_for_display(z)  # type: ignore[arg-type]
+        display_z = _z_for_display(z)  # pyright: ignore[reportArgumentType]
     fig.add_trace(
         go.Heatmap(
             x=x_edges,

@@ -158,4 +158,4 @@ def ok_seek_result(
         "error_message": None,
     }
     defaults.update(kwargs)
-    return SeekSessionResult(**defaults)  # type: ignore[arg-type]
+    return SeekSessionResult(**defaults)  # pyright: ignore[reportArgumentType]
