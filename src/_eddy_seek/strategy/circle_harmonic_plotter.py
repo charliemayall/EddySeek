@@ -58,8 +58,8 @@ class CircleHarmonicPlotter(StrategyPlotter):
             rows=2,
             cols=1,
             shared_xaxes=False,
-            vertical_spacing=0.08,
-            row_heights=[0.55, 0.45],
+            vertical_spacing=0.14,
+            row_heights=[0.5, 0.5],
             subplot_titles=("XY samples", "Circle harmonic (θ vs Hz)"),
         )
         pass_rows: list[dict[str, str]] = []
@@ -265,7 +265,7 @@ class CircleHarmonicPlotter(StrategyPlotter):
                     )
                 ],
                 final=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
-                row_height_px=320,
+                row_height_px=380,
             )
         )
         fig.update_xaxes(title_text="X offset (mm)", row=1, col=1)
