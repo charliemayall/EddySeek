@@ -151,9 +151,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._y_profile: list[tuple[float, float]] = []
         self._frozen: Offset | None = None
         self._last_pass_rejected = False
-        self._last_tier_shrink = False
         self._radius_tier = 0
-        self._tier_had_ok = False
         self._last_ok: Offset | None = None
 
     @property
@@ -175,15 +173,12 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._bootstrap = None
         self._frozen = None
         self._last_pass_rejected = False
-        self._last_tier_shrink = False
         self._radius_tier = 0
-        self._tier_had_ok = False
         self._last_ok = None
         return finalize_strategy_plot(ctx, self.name)
 
     def _before_pass(self, ctx: SeekSession, pass_num: int) -> None:
         self._last_pass_rejected = False
-        self._last_tier_shrink = False
 
     def should_check_divergence(self, ctx: SeekSession, pass_num: int) -> bool:
         return not self._last_pass_rejected
@@ -211,9 +206,9 @@ class CircleHarmonicStrategy(SeekStrategy):
     ) -> bool:
         cfg = ctx.config
         if self._last_pass_rejected:
-            if RADIUS_PLATEAU_MODE and self._last_tier_shrink:
+            if RADIUS_PLATEAU_MODE:
                 logger.info(
-                    f"eddy_seek: {self.name} pass {pass_num} rejected after ok "
+                    f"eddy_seek: {self.name} pass {pass_num} rejected "
                     f"- continuing at smaller circle"
                 )
             else:
@@ -533,16 +528,13 @@ class CircleHarmonicStrategy(SeekStrategy):
         bootstrap = self._bootstrap if self._bootstrap is not None else best
         if outcome.rejected:
             self._last_pass_rejected = True
-            if RADIUS_PLATEAU_MODE and self._tier_had_ok:
+            if RADIUS_PLATEAU_MODE:
                 self._radius_tier += 1
-                self._tier_had_ok = False
-                self._last_tier_shrink = True
                 logger.info(
                     f"eddy_seek: circle_harmonic radius tier -> {self._radius_tier} "
-                    f"(reject after ok)"
+                    f"(reject)"
                 )
         elif RADIUS_PLATEAU_MODE and not outcome.freeze:
-            self._tier_had_ok = True
             self._last_ok = outcome.result
         if outcome.freeze:
             self._frozen = outcome.result
