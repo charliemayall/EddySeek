@@ -5,7 +5,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-Shared session/plot record primitives — JSON-serializable, consumed by recorder and plotters.
+Shared session/plot record primitives - JSON-serializable, consumed by recorder and plotters.
 """
 
 from __future__ import annotations

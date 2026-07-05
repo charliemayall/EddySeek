@@ -72,7 +72,7 @@ def _read_max_accel(toolhead: ToolHead) -> float:
 class KnownKinematicLimits:
     """Save and restore toolhead SCV/cruise limits and input shaper for seeks.
 
-    Gcode XY offset is not handled here — ``SAVE_GCODE_STATE`` / ``RESTORE`` and
+    Gcode XY offset is not handled here - ``SAVE_GCODE_STATE`` / ``RESTORE`` and
     ``clear_gcode_offset_xy()`` own that at the session boundary.
     """
 

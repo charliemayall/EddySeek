@@ -56,7 +56,7 @@ MIN_SAMPLES_PER_SPAN = 3
 
 KALMAN_PROCESS_VAR = 1.0
 KALMAN_MEASURE_VAR = 100.0
-# experiment — repeat radius while passes ok, shrink after first reject
+# experiment - repeat radius while passes ok, shrink after first reject
 RADIUS_PLATEAU_MODE = True
 
 
@@ -85,7 +85,7 @@ def _outcome_hold(
     samples: list[MotionSample] | None = None,
     binned: list[tuple[float, float]] | None = None,
 ) -> _CirclePassOutcome:
-    """Radius too small / no legs — freeze, no plot."""
+    """Radius too small / no legs - freeze, no plot."""
     return _CirclePassOutcome(
         result=best,
         trace_center=trace_center,
@@ -109,7 +109,7 @@ def _outcome_reject(
     fit: HarmonicFit | None,
     reason: str,
 ) -> _CirclePassOutcome:
-    """Rejected fit — hold best, plot bootstrap."""
+    """Rejected fit - hold best, plot bootstrap."""
     return _CirclePassOutcome(
         result=best,
         trace_center=trace_center,
@@ -133,7 +133,7 @@ def _outcome_accept(
     *,
     freeze: bool,
 ) -> _CirclePassOutcome:
-    """Successful step — plot result, freeze when search is done."""
+    """Successful step - plot result, freeze when search is done."""
     return _CirclePassOutcome(
         result=result,
         trace_center=trace_center,
@@ -422,7 +422,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         empty_legs = sum(1 for n in leg_counts if n == 0)
         logger.info(
             f"eddy_seek: circle_harmonic pass {pass_num} collected "
-            f"{len(samples)} samples — samples per segment: "
+            f"{len(samples)} samples - samples per segment: "
             f"avg={len(samples) / len(legs):.1f} min={min_per_leg} empty={empty_legs}"
         )
 

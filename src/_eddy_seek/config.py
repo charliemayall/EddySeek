@@ -41,7 +41,7 @@ class SeekConfig:
         default=2.5, metadata={"gcode": "MAX_JOG_Y", "positive": True}
     )
     tolerance: float = field(
-        default=0.1, metadata={"gcode": "TOLERANCE", "positive": True}
+        default=0.05, metadata={"gcode": "TOLERANCE", "positive": True}
     )
     dwell_time: float = field(
         default=0.5, metadata={"gcode": "DWELL_TIME", "positive": True}
@@ -68,12 +68,6 @@ class SeekConfig:
                 "circle_harmonic",
             ),
         },
-    )
-    grid_step_x: float = field(
-        default=1.25, metadata={"gcode": "GRID_STEP_X", "positive": True}
-    )
-    grid_step_y: float = field(
-        default=1.25, metadata={"gcode": "GRID_STEP_Y", "positive": True}
     )
     max_iter: int = field(default=10, metadata={"gcode": "MAX_ITER", "min": 1})
     max_passes: int = field(default=6, metadata={"gcode": "MAX_PASSES", "min": 1})
@@ -109,22 +103,22 @@ class SeekConfig:
         default=20, metadata={"gcode": "MIN_SWEEP_SAMPLES", "min": 3}
     )
     circle_radius_start: float = field(
-        default=1.0, metadata={"gcode": "CIRCLE_RADIUS_START", "positive": True}
+        default=2.0, metadata={"gcode": "CIRCLE_RADIUS_START", "positive": True}
     )
     circle_radius_min: float = field(
         default=0.5, metadata={"gcode": "CIRCLE_RADIUS_MIN", "positive": True}
     )
     circle_shrink: float = field(
-        default=0.5, metadata={"gcode": "CIRCLE_SHRINK", "positive": True}
+        default=0.4, metadata={"gcode": "CIRCLE_SHRINK", "positive": True}
     )
     circle_arc_resolution: float = field(
-        default=1.0, metadata={"gcode": "CIRCLE_ARC_RESOLUTION", "positive": True}
+        default=0.1, metadata={"gcode": "CIRCLE_ARC_RESOLUTION", "positive": True}
     )
     circle_speed: float = field(
         default=600.0,
         metadata={"gcode": "CIRCLE_SPEED", "positive": True, "speed": True},
     )
-    noise_k: float = field(default=2.0, metadata={"gcode": "NOISE_K", "positive": True})
+    noise_k: float = field(default=1.0, metadata={"gcode": "NOISE_K", "positive": True})
     harmonic_step_gain: float = field(
         default=0.15, metadata={"gcode": "HARMONIC_STEP_GAIN", "positive": True}
     )
@@ -148,6 +142,14 @@ class SeekConfig:
     def __post_init__(self) -> None:
         _validate(self)
         self.result_folder = str(Path(self.result_folder).expanduser().resolve())
+
+    @property
+    def grid_step_x(self) -> float:
+        return self.max_jog_x / 2.0
+
+    @property
+    def grid_step_y(self) -> float:
+        return self.max_jog_y / 2.0
 
     def format_seek_config(self) -> str:
         """One-line summary of effective alignment settings (speeds in mm/s)."""
@@ -320,11 +322,7 @@ def load_seek_config(config: ConfigWrapper) -> SeekConfig:
         for spec in fields(SeekConfig):
             name = spec.name
             default = getattr(d, name)
-            if name == "grid_step_x":
-                values[name] = config.getfloat(name, values["max_jog_x"] / 2.0)
-            elif name == "grid_step_y":
-                values[name] = config.getfloat(name, values["max_jog_y"] / 2.0)
-            elif spec.metadata.get("bool"):
+            if spec.metadata.get("bool"):
                 values[name] = config.getboolean(name, default)
             elif "enum" in spec.metadata:
                 values[name] = config.get(name, default).lower()  # type: ignore[union-attr]

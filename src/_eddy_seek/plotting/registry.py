@@ -5,7 +5,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-Strategy plotter registry — resolve plotter by strategy name.
+Strategy plotter registry - resolve plotter by strategy name.
 """
 
 from __future__ import annotations

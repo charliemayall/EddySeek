@@ -22,8 +22,6 @@ def test_validate_var():
     assert cfg._var_ok("jog_speed", 10.0) is True
     assert cfg._var_ok("search_for", "max") is True
     assert cfg._var_ok("strategy", "ternary") is True
-    assert cfg._var_ok("grid_step_x", 2.5) is True
-    assert cfg._var_ok("grid_step_y", 2.5) is True
     assert cfg._var_ok("max_iter", 10) is True
     assert cfg._var_ok("max_passes", 6) is True
     assert cfg._var_ok("save_session_trace", True) is True
@@ -31,10 +29,14 @@ def test_validate_var():
     assert cfg._var_ok("save_session_trace", "false") is True
     assert cfg._var_ok("search_for", "bogus") is False
     assert cfg._var_ok("strategy", "bogus") is False
-    assert cfg._var_ok("grid_step_x", -1.0) is False
-    assert cfg._var_ok("grid_step_y", -1.0) is False
     assert cfg._var_ok("max_iter", -1) is False
     assert cfg._var_ok("max_passes", -1) is False
+
+
+def test_grid_step_derived_from_max_jog():
+    cfg = SeekConfig(max_jog_x=3.0, max_jog_y=4.0)
+    assert cfg.grid_step_x == 1.5
+    assert cfg.grid_step_y == 2.0
 
 
 def test_load_seek_config_speeds_mm_s_to_mm_min():

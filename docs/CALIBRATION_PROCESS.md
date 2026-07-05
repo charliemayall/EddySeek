@@ -137,26 +137,10 @@ flowchart TD
     MORE -->|no| MAX([Use best result anyway])
 ```
 
-### Ternary strategy (`strategy: ternary`)
-
-Each pass runs a 1-D ternary search on **X**, then **Y**, within the jog radius.
-Up to `max_iter` subdivisions per axis.
-
-```mermaid
-flowchart LR
-    subgraph pass["One pass"]
-        X["Ternary search X<br/>(Y fixed at best_y)"] --> Y["Ternary search Y<br/>(X fixed at new best_x)"]
-    end
-    pass --> OUT["New (best_x, best_y)"]
-```
-
-At each ternary subdivision, two probe points divide the interval; the side with
-the better frequency (per `search_for: max|min`) is kept.
-
 ### Centroid strategy (`strategy: centroid`)
 
 Each pass probes a **3×3 grid** around the current best point. Grid spacing
-halves every pass (`grid_step × 0.5^(pass−1)`). Sampled frequencies are
+halves every pass (`max_jog/2 × 0.5^(pass−1)`). Sampled frequencies are
 weighted toward the target extreme and the toolhead moves to the weighted
 centroid.
 
@@ -189,8 +173,7 @@ coordinates. `dwell_time` is not used for sweep_centroid.
 
 ## Single probe cycle (`measure_at`)
 
-Every probe point - whether from ternary or centroid - follows the same
-measurement steps:
+Every probe point follows the same measurement steps:
 
 ```mermaid
 flowchart TD
