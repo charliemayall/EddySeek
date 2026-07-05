@@ -154,6 +154,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._last_tier_shrink = False
         self._radius_tier = 0
         self._tier_had_ok = False
+        self._last_ok: Offset | None = None
 
     @property
     def name(self) -> str:
@@ -177,6 +178,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._last_tier_shrink = False
         self._radius_tier = 0
         self._tier_had_ok = False
+        self._last_ok = None
         return finalize_strategy_plot(ctx, self.name)
 
     def _before_pass(self, ctx: SeekSession, pass_num: int) -> None:
@@ -227,6 +229,11 @@ class CircleHarmonicStrategy(SeekStrategy):
             )
             return True
         return False
+
+    def _circle_center(self, best: Offset) -> Offset:
+        if RADIUS_PLATEAU_MODE and self._last_ok is not None:
+            return self._last_ok
+        return best
 
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         if ctx.config.circle_skip_bootstrap:
@@ -366,7 +373,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 radius_shrink=cfg.circle_shrink,
             )
         trace_center, trace_radius = circle_in_jog_box(
-            best, radius, cfg.max_jog_x, cfg.max_jog_y
+            self._circle_center(best), radius, cfg.max_jog_x, cfg.max_jog_y
         )
         if trace_radius < cfg.circle_radius_min:
             logger.warning(
@@ -536,11 +543,19 @@ class CircleHarmonicStrategy(SeekStrategy):
                 )
         elif RADIUS_PLATEAU_MODE and not outcome.freeze:
             self._tier_had_ok = True
+            self._last_ok = outcome.result
         if outcome.freeze:
             self._frozen = outcome.result
         freeze_without_plot = outcome.freeze and not outcome.samples
         if outcome.rejected or (outcome.samples and not freeze_without_plot):
-            plot = bootstrap if outcome.rejected else outcome.result
+            if outcome.rejected:
+                plot = (
+                    self._last_ok
+                    if RADIUS_PLATEAU_MODE and self._last_ok is not None
+                    else bootstrap
+                )
+            else:
+                plot = outcome.result
             self._record_circle_plot(
                 ctx,
                 pass_num,
@@ -554,6 +569,8 @@ class CircleHarmonicStrategy(SeekStrategy):
                 rejected=outcome.rejected,
                 reject_reasons=outcome.reject_reasons,
             )
+        if outcome.rejected and RADIUS_PLATEAU_MODE and self._last_ok is not None:
+            return self._last_ok
         return outcome.result
 
     def _record_bootstrap_plot(
