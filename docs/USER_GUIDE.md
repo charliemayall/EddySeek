@@ -129,6 +129,8 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | `harmonic_step_gain`    | `0.15`  | Fraction of fitted offset applied each pass                       |
 | `harmonic_min_quality`  | `0.5`   | Minimum fit quality to accept a pass                              |
 
+> **max_jog** should be ≥ 2× your worst-case expected misalignment (per axis).Searches are unlikely to converge fully if the nozzle starts too far from the true centre.
+
 > **Speed units:** All speed values are in mm/s in `printer.cfg` and `EDDY_SEEK_SET`.
 
 > **Speed overrides:** Any move where samples are taken will dynamically adjust the speed to keep the sampling density at an acceptable level.
