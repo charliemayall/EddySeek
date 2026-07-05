@@ -367,7 +367,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         if cfg.circle_refresh_sweeps:
             self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
-        samples = get_samples_from_capture_legs(ctx, legs, clamped_speed)
+        samples = get_samples_from_capture_legs(ctx, legs, clamped_speed, flat=True)
         logger.info(
             f"eddy_seek: circle_harmonic pass {pass_num} collected {len(samples)} samples --> {len(samples) / len(legs):.2f} samples per segment"
         )

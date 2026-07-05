@@ -380,12 +380,14 @@ class MotionHandler(_SessionMotionBase):
             return False
 
     @overload
-    def collect_samples(self, flat: Literal[True]) -> list[MotionSample]: ...
+    def collect_samples(self, flat: Literal[True]) -> Sequence[MotionSample]: ...
     @overload
     def collect_samples(
         self, flat: Literal[False] = False
-    ) -> list[list[MotionSample]]: ...
-    def collect_samples(self, flat: bool = False):
+    ) -> Sequence[Sequence[MotionSample]]: ...
+    def collect_samples(
+        self, flat: bool = True
+    ) -> Sequence[MotionSample] | Sequence[Sequence[MotionSample]]:
         self._wait_for_pending()
         if flat:
             flat_samples: list[MotionSample] = []

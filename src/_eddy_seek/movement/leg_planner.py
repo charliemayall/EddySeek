@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal, overload
 
 from ..common import Axis, Offset, Phase, samples_in_box, search_box
 from ..optimizer import decoupled_centroid
@@ -129,11 +130,26 @@ def plan_grid_legs(
     return legs
 
 
+@overload
 def get_samples_from_capture_legs(
     ctx: SeekSession,
     legs: Sequence[tuple[Offset, Offset]],
     speed: float,
-) -> list[MotionSample]:
+    flat: Literal[True] = True,
+) -> list[MotionSample]: ...
+@overload
+def get_samples_from_capture_legs(
+    ctx: SeekSession,
+    legs: Sequence[tuple[Offset, Offset]],
+    speed: float,
+    flat: Literal[False],
+) -> list[list[MotionSample]]: ...
+def get_samples_from_capture_legs(
+    ctx: SeekSession,
+    legs: Sequence[tuple[Offset, Offset]],
+    speed: float,
+    flat: bool = True,
+):
     """Run continuous capture legs and return merged session-relative samples.
 
     Args:
@@ -148,7 +164,7 @@ def get_samples_from_capture_legs(
     handler.begin(ctx.session_start)
     handler.run_capture_legs(legs, speed)
     ctx.sync_offset(handler.position)
-    return handler.collect_samples(flat=True)
+    return handler.collect_samples(flat=flat)
 
 
 def sweep_axis(
