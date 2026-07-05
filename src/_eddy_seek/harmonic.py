@@ -89,7 +89,7 @@ def kalman_filter_freqs(
     process_var: float = 1.0,
     measure_var: float = 100.0,
 ) -> list[MotionSample]:
-    """ponytail: scalar random-walk Kalman on freq ordered by print_time."""
+    """scalar random-walk Kalman on freq ordered by print_time."""
     if not samples:
         return []
     ordered = sorted(samples, key=lambda sample: sample.print_time)

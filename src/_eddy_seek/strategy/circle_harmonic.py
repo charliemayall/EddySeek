@@ -56,7 +56,7 @@ MIN_SAMPLES_PER_SPAN = 3
 
 KALMAN_PROCESS_VAR = 1.0
 KALMAN_MEASURE_VAR = 100.0
-# ponytail: experiment — repeat radius while passes ok, shrink after first reject
+# experiment — repeat radius while passes ok, shrink after first reject
 RADIUS_PLATEAU_MODE = True
 
 
