@@ -196,7 +196,7 @@ class SeekConfig:
                 ) from exc
             setattr(self, config_field_name, value)
             display = value / 60.0 if _is_speed_field(config_field_name) else value
-            changes.append(f"{config_field_name}={display}")
+            changes.append(f"{config_field_name} --> {display}")
         try:
             _validate(self)
         except ValueError as exc:
