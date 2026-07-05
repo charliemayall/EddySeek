@@ -25,9 +25,9 @@ from ..plotting.primitives import (
     BoxRecord,
     MarkerRecord,
     PassMove,
-    PassTraceRecord,
     ScatterRecord,
     StatsRecord,
+    SweepCentroidPassRecord,
     XYCloud,
     pass_color,
 )
@@ -36,9 +36,8 @@ from ..plotting.renderer import (
     add_box,
     add_marker,
     add_scatter,
-    final_result_marker,
+    final_result_offset,
     finalize_strategy_plot,
-    group_by_pass,
     layout_with_stats,
     pass_group_stats,
 )
@@ -161,30 +160,19 @@ def _record_sweep_centroid_pass(
     rec = ctx.recorder
     if not rec.active:
         return
-    label = f"pass {pass_num} ({phase.value})"
     rec.record(
-        ScatterRecord(
+        SweepCentroidPassRecord(
             pass_num=pass_num,
-            label=f"{label} samples",
-            cloud=XYCloud(
+            phase=phase.value,
+            move=PassMove.compute(center, result),
+            bounds=Bounds.from_box(box),
+            samples=XYCloud(
                 tuple(sample.offset.x for sample in samples),
                 tuple(sample.offset.y for sample in samples),
                 tuple(sample.freq for sample in samples),
             ),
         )
     )
-    rec.record(BoxRecord(pass_num, Bounds.from_box(box)))
-    rec.record(MarkerRecord(pass_num, f"{label} centre", center, "x"))
-    rec.record(MarkerRecord(pass_num, f"{label} result", result, "star"))
-    if rec.trace:
-        rec.record(
-            PassTraceRecord(
-                pass_num=pass_num,
-                phase=phase.value,
-                move=PassMove.compute(center, result),
-                sample_count=len(samples),
-            )
-        )
 
 
 @register_plotter("sweep_centroid")
@@ -198,37 +186,46 @@ class SweepCentroidPlotter(StrategyPlotter):
         if not plotly_available() or go is None:
             return None
 
-        passes = group_by_pass(records)
-        phases: dict[int, str] = {}
-        for record in records:
-            if isinstance(record, PassTraceRecord):
-                phases[record.pass_num] = record.phase
-
-        if not passes:
+        pass_records = [
+            record for record in records if isinstance(record, SweepCentroidPassRecord)
+        ]
+        if not pass_records:
             return None
 
         fig = go.Figure()
-        pass_nums = sorted(passes)
         pass_rows: list[dict[str, str]] = []
-        for pass_num in pass_nums:
+        for record in sorted(pass_records, key=lambda item: item.pass_num):
+            pass_num = record.pass_num
             color = pass_color(pass_num)
-            phase = phases.get(pass_num, "")
-            group = passes[pass_num]
-            for record in group:
-                if isinstance(record, ScatterRecord):
-                    add_scatter(fig, record, search_for, color)
-                elif isinstance(record, BoxRecord):
-                    add_box(fig, record, color)
-                elif isinstance(record, MarkerRecord):
-                    size = 11 if record.symbol == "star" else 10
-
-                    add_marker(fig, record, color, size=size)
-
-            stats = pass_group_stats(group)
+            label = f"pass {pass_num} ({record.phase})"
+            add_scatter(
+                fig,
+                ScatterRecord(
+                    pass_num,
+                    f"{label} samples",
+                    record.samples,
+                ),
+                search_for,
+                color,
+            )
+            add_box(fig, BoxRecord(pass_num, record.bounds), color)
+            add_marker(
+                fig,
+                MarkerRecord(pass_num, f"{label} centre", record.move.center, "x"),
+                color,
+                size=10,
+            )
+            add_marker(
+                fig,
+                MarkerRecord(pass_num, f"{label} result", record.move.result, "star"),
+                color,
+                size=11,
+            )
+            stats = pass_group_stats([record])
             pass_rows.append(
                 {
                     "pass": str(pass_num),
-                    "phase": phase,
+                    "phase": record.phase,
                     "result": stats.format_result(),
                     "moved": stats.format_moved(),
                     "samples": str(stats.sample_count),
@@ -236,14 +233,13 @@ class SweepCentroidPlotter(StrategyPlotter):
                 }
             )
 
-        final_marker = final_result_marker(passes)
-        final = final_marker.at if final_marker is not None else Offset.zero()
+        final = final_result_offset(pass_records)
         layout_with_stats(
             fig,
             StatsRecord(
                 title=(
-                    f"Sweep centroid ({len(pass_nums)} pass"
-                    f"{'' if len(pass_nums) == 1 else 'es'})  search={search_for}"
+                    f"Sweep centroid ({len(pass_records)} pass"
+                    f"{'' if len(pass_records) == 1 else 'es'})  search={search_for}"
                 ),
                 columns=(
                     ("pass", "Pass"),

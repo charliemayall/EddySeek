@@ -31,10 +31,15 @@ from ._plotly import (
 )
 from .primitives import (
     BoxRecord,
+    CentroidPassRecord,
     MarkerRecord,
     ScatterMode,
     ScatterRecord,
     StatsRecord,
+    SweepCentroidPassRecord,
+    TernaryPassRecord,
+    _Record,
+    record_pass_num,
 )
 
 if TYPE_CHECKING:
@@ -45,88 +50,96 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class PassGroupStats:
-    scatter: ScatterRecord | None
-    center: MarkerRecord | None
-    result: MarkerRecord | None
-
-    @property
-    def freqs(self) -> list[float]:
-        if self.scatter is None or self.scatter.cloud.freqs is None:
-            return []
-        return list(self.scatter.cloud.freqs)
-
-    @property
-    def moved(self) -> Offset:
-        if self.result is None or self.center is None:
-            return Offset.zero()
-        return (self.result.at - self.center.at).abs_components()
-
-    @property
-    def sample_count(self) -> int:
-        if self.scatter is None:
-            return 0
-        return len(self.scatter.cloud.xs)
+    freqs: tuple[float, ...]
+    moved: Offset
+    result: Offset
+    sample_count: int
 
     def format_result(self) -> str:
-        if self.result is None:
-            return "n/a"
-        return f"({self.result.at.x:+.4f}, {self.result.at.y:+.4f})"
+        return f"({self.result.x:+.4f}, {self.result.y:+.4f})"
 
     def format_moved(self) -> str:
         return f"({self.moved.x:.4f}, {self.moved.y:.4f})"
 
     def format_freq_range(self) -> str:
-        freqs = self.freqs
-        if not freqs:
+        if not self.freqs:
             return "n/a"
-        return f"[{min(freqs):.0f}, {max(freqs):.0f}]"
+        return f"[{min(self.freqs):.0f}, {max(self.freqs):.0f}]"
 
 
-def group_by_pass(records: Sequence[Any]) -> dict[int, list[Any]]:
-    passes: dict[int, list[Any]] = defaultdict(list)
+def pass_record_stats(record: _Record) -> PassGroupStats:
+    if isinstance(record, SweepCentroidPassRecord):
+        freqs = record.samples.freqs or ()
+        return PassGroupStats(
+            freqs=freqs,
+            moved=record.move.moved,
+            result=record.move.result,
+            sample_count=len(record.samples.xs),
+        )
+    if isinstance(record, CentroidPassRecord):
+        freqs = record.probes.freqs or ()
+        return PassGroupStats(
+            freqs=freqs,
+            moved=record.move.moved,
+            result=record.move.result,
+            sample_count=len(record.probes.xs),
+        )
+    if isinstance(record, TernaryPassRecord):
+        return PassGroupStats(
+            freqs=(),
+            moved=record.move.moved,
+            result=record.move.result,
+            sample_count=len(record.probes.xs),
+        )
+    raise TypeError(f"unsupported pass record type: {type(record).__name__}")
+
+
+def group_by_pass(records: Sequence[_Record]) -> dict[int, list[_Record]]:
+    passes: dict[int, list[_Record]] = defaultdict(list)
     for record in records:
-        pass_num = getattr(record, "pass_num", None)
-        if isinstance(pass_num, int):
+        pass_num = record_pass_num(record)
+        if pass_num is not None:
             passes[pass_num].append(record)
     return passes
 
 
 def pass_group_stats(group: Sequence[Any]) -> PassGroupStats:
-    scatter = next(
-        (record for record in group if isinstance(record, ScatterRecord)),
-        None,
-    )
-    result = next(
-        (
-            record
-            for record in group
-            if isinstance(record, MarkerRecord) and record.symbol == "star"
-        ),
-        None,
-    )
-    center = next(
-        (
-            record
-            for record in group
-            if isinstance(record, MarkerRecord) and record.symbol == "x"
-        ),
-        None,
-    )
-    return PassGroupStats(scatter=scatter, center=center, result=result)
+    for record in group:
+        if isinstance(
+            record, (SweepCentroidPassRecord, CentroidPassRecord, TernaryPassRecord)
+        ):
+            return pass_record_stats(record)
+    raise ValueError("no pass record found in group")
+
+
+def final_result_offset(records: Sequence[_Record]) -> Offset:
+    best_pass = 0
+    best_result = Offset.zero()
+    for record in records:
+        pass_num = record_pass_num(record)
+        move = getattr(record, "move", None)
+        if pass_num is None or move is None:
+            continue
+        if pass_num >= best_pass:
+            best_pass = pass_num
+            best_result = move.result
+    return best_result
 
 
 def final_result_marker(passes: dict[int, list[Any]]) -> MarkerRecord | None:
     if not passes:
         return None
-    last_group = passes[max(passes)]
-    return next(
-        (
-            record
-            for record in last_group
-            if isinstance(record, MarkerRecord) and record.symbol == "star"
-        ),
-        None,
-    )
+    last_pass = max(passes)
+    for record in passes[last_pass]:
+        move = getattr(record, "move", None)
+        if move is not None:
+            return MarkerRecord(
+                last_pass,
+                f"pass {last_pass} result",
+                move.result,
+                "star",
+            )
+    return None
 
 
 def plot_filename(

@@ -13,8 +13,9 @@ from __future__ import annotations
 from typing import Any
 
 from .primitives import (
-    _PLOT_ONLY_RECORDS,
+    PlotArtifactRecord,
     SessionRecord,
+    record_pass_num,
 )
 
 
@@ -47,18 +48,16 @@ class SessionRecorder:
     def to_probe_dicts(self) -> list[dict[str, Any]]:
         if not self._trace:
             return []
-        out: list[dict[str, Any]] = []
-        for record in self._records:
-            if isinstance(record, _PLOT_ONLY_RECORDS):
-                continue
-            to_trace = getattr(record, "to_trace_dict", None)
-            out.append(to_trace() if callable(to_trace) else record.to_dict())
-        return out
+        return [
+            record.to_trace_dict()
+            for record in self._records
+            if not isinstance(record, PlotArtifactRecord)
+        ]
 
     def pass_count(self) -> int:
         best = 0
         for record in self._records:
-            pass_num = getattr(record, "pass_num", None)
-            if isinstance(pass_num, int):
+            pass_num = record_pass_num(record)
+            if pass_num is not None:
                 best = max(best, pass_num)
         return best

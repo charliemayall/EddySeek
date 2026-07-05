@@ -24,7 +24,6 @@ from ..plotting.primitives import (
     Bounds,
     HeatmapRecord,
     PassMove,
-    ScanTraceRecord,
     XYCloud,
 )
 from ..plotting.registry import StrategyPlotter, register_plotter
@@ -140,13 +139,6 @@ def _record_debug_scan(
             ),
         )
     )
-    if rec.trace:
-        rec.record(
-            ScanTraceRecord(
-                move=PassMove.compute(center, result),
-                sample_count=len(samples),
-            )
-        )
 
 
 @register_plotter("debug_scan")

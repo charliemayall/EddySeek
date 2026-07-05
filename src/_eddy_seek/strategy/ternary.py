@@ -24,10 +24,11 @@ from ..plotting._plotly import (
 )
 from ..plotting.primitives import (
     MarkerRecord,
+    PassMove,
     ScatterMode,
     ScatterRecord,
+    TernaryPassRecord,
     TernaryStep,
-    TernaryStepRecord,
     XYCloud,
     pass_color,
 )
@@ -35,9 +36,8 @@ from ..plotting.registry import StrategyPlotter, register_plotter
 from ..plotting.renderer import (
     add_marker,
     add_scatter,
-    final_result_marker,
+    final_result_offset,
     finalize_strategy_plot,
-    group_by_pass,
     pass_group_stats,
 )
 from ..session import SeekSession
@@ -81,6 +81,7 @@ class TernaryStrategy(SeekStrategy):
         _record_ternary_pass(
             ctx,
             pass_num,
+            best,
             result,
             (result - best).abs_components(),
             x_steps,
@@ -165,6 +166,7 @@ class TernaryStrategy(SeekStrategy):
 def _record_ternary_pass(
     ctx: SeekSession,
     pass_num: int,
+    center: Offset,
     result: Offset,
     moved: Offset,
     x_steps: list[TernaryStep],
@@ -174,22 +176,17 @@ def _record_ternary_pass(
     rec = ctx.recorder
     if not rec.active:
         return
-    label = f"pass {pass_num}"
-    if probes:
-        rec.record(
-            ScatterRecord(
-                pass_num=pass_num,
-                label=f"{label} probes",
-                cloud=XYCloud(
-                    tuple(position.x for position, _ in probes),
-                    tuple(position.y for position, _ in probes),
-                ),
-                mode=ScatterMode.MARKERS_LINES,
-            )
+    rec.record(
+        TernaryPassRecord(
+            pass_num=pass_num,
+            move=PassMove.compute(center, result),
+            probes=XYCloud(
+                tuple(position.x for position, _ in probes),
+                tuple(position.y for position, _ in probes),
+            ),
+            steps=tuple(x_steps + y_steps),
         )
-    rec.record(MarkerRecord(pass_num, f"{label} result", result, "star"))
-    for step in x_steps + y_steps:
-        rec.record(TernaryStepRecord(pass_num=pass_num, step=step))
+    )
 
 
 @register_plotter("ternary")
@@ -203,8 +200,10 @@ class TernaryPlotter(StrategyPlotter):
         if not plotly_available() or go is None or make_subplots is None:
             return None
 
-        passes = group_by_pass(records)
-        if not passes:
+        pass_records = [
+            record for record in records if isinstance(record, TernaryPassRecord)
+        ]
+        if not pass_records:
             return None
 
         fig = make_subplots(
@@ -220,24 +219,38 @@ class TernaryPlotter(StrategyPlotter):
             ),
         )
 
-        pass_nums = sorted(passes, reverse=False)
+        pass_nums = sorted(record.pass_num for record in pass_records)
         pass_rows: list[dict[str, str]] = []
 
-        for pass_num in pass_nums:
+        for record in sorted(pass_records, key=lambda item: item.pass_num):
+            pass_num = record.pass_num
             color = pass_color(pass_num)
-            group = passes[pass_num]
-            ternary_steps = [
-                record for record in group if isinstance(record, TernaryStepRecord)
-            ]
-            x_steps = [record for record in ternary_steps if record.step.axis is Axis.X]
-            y_steps = [record for record in ternary_steps if record.step.axis is Axis.Y]
-            for record in group:
-                if isinstance(record, ScatterRecord):
-                    add_scatter(fig, record, search_for, color, row=1, col=1)
-                elif isinstance(record, MarkerRecord):
-                    size = 14 if pass_num == pass_nums[-1] else 11
-                    add_marker(fig, record, color, size=size, row=1, col=1)
-
+            label = f"pass {pass_num}"
+            if record.probes.xs:
+                add_scatter(
+                    fig,
+                    ScatterRecord(
+                        pass_num,
+                        f"{label} probes",
+                        record.probes,
+                        mode=ScatterMode.MARKERS_LINES,
+                    ),
+                    search_for,
+                    color,
+                    row=1,
+                    col=1,
+                )
+            star_size = 14 if pass_num == pass_nums[-1] else 11
+            add_marker(
+                fig,
+                MarkerRecord(pass_num, f"{label} result", record.move.result, "star"),
+                color,
+                size=star_size,
+                row=1,
+                col=1,
+            )
+            x_steps = [step for step in record.steps if step.axis is Axis.X]
+            y_steps = [step for step in record.steps if step.axis is Axis.Y]
             y_band = max(len(x_steps), len(y_steps), 1) + 1
             _add_bracket_history(
                 fig,
@@ -254,7 +267,7 @@ class TernaryPlotter(StrategyPlotter):
                 y_base=(pass_num - 1) * y_band,
             )
 
-            stats = pass_group_stats(group)
+            stats = pass_group_stats([record])
             pass_rows.append(
                 {
                     "pass": str(pass_num),
@@ -264,8 +277,7 @@ class TernaryPlotter(StrategyPlotter):
                 }
             )
 
-        final_marker = final_result_marker(passes)
-        final = final_marker.at if final_marker is not None else Offset.zero()
+        final = final_result_offset(pass_records)
         fig.update_xaxes(title_text="X offset (mm)", row=1, col=1)
         fig.update_yaxes(title_text="Y offset (mm)", row=1, col=1)
         fig.update_xaxes(title_text="Offset (mm)", row=2, col=1)
@@ -277,8 +289,8 @@ class TernaryPlotter(StrategyPlotter):
                 rows=3,
                 cols=1,
                 title=(
-                    f"Ternary alignment ({len(pass_nums)} pass"
-                    f"{'' if len(pass_nums) == 1 else 'es'})  search={search_for}"
+                    f"Ternary alignment ({len(pass_records)} pass"
+                    f"{'' if len(pass_records) == 1 else 'es'})  search={search_for}"
                 ),
                 tables=[
                     header_table(
@@ -302,7 +314,7 @@ class TernaryPlotter(StrategyPlotter):
 
 def _add_bracket_history(
     fig: Any,
-    steps: Sequence[TernaryStepRecord],
+    steps: Sequence[TernaryStep],
     *,
     row: int,
     color: str,
@@ -310,8 +322,7 @@ def _add_bracket_history(
 ) -> None:
     if not steps or go is None:
         return
-    for record in steps:
-        step = record.step
+    for step in steps:
         y = y_base + step.iteration
         fig.add_trace(
             go.Scatter(

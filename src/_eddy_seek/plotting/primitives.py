@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
-from typing import Any, TypeAlias
+from typing import Any, ClassVar, TypeAlias
 
 from ..common import Axis, Offset
 from ..harmonic import HarmonicFit
@@ -29,25 +29,6 @@ PASS_COLORS = (
     "#FF97FF",
     "#FECB52",
 )
-
-
-class RecordType(str, Enum):
-    SCATTER = "scatter"
-    MARKER = "marker"
-    BOX = "box"
-    STATS = "stats"
-    PROBE = "probe"
-    SERIES = "series"
-    HEATMAP = "heatmap"
-    PLOT = "plot"
-    SWEEP = "sweep"
-    SWEEP_GRID = "sweep_grid"
-    SWEEP_CENTROID = "sweep_centroid"
-    TERNARY_STEP = "ternary_step"
-    DEBUG_SCAN = "debug_scan"
-    CIRCLE_BOOTSTRAP_PASS = "circle_bootstrap_pass"
-    CIRCLE_PASS = "circle_pass"
-    ACCURACY_REPEAT = "accuracy_repeat"
 
 
 class ScatterMode(str, Enum):
@@ -122,141 +103,194 @@ class BinnedProfile:
 
 @dataclass(frozen=True, slots=True)
 class _Record:
+    _KIND: ClassVar[str] = ""
+
     def to_dict(self) -> dict[str, Any]:
         return _record_to_dict(self)
+
+    def to_trace_dict(self) -> dict[str, Any]:
+        return self.to_dict()
+
+
+def record_pass_num(record: _Record) -> int | None:
+    pass_num = getattr(record, "pass_num", None)
+    if isinstance(pass_num, int):
+        return pass_num
+    repeat = getattr(record, "repeat_num", None)
+    return repeat if isinstance(repeat, int) else None
 
 
 @dataclass(frozen=True, slots=True)
 class ScatterRecord(_Record):
+    _KIND = "scatter"
+
     pass_num: int
     label: str
     cloud: XYCloud
     mode: ScatterMode = ScatterMode.MARKERS
-    type: RecordType = RecordType.SCATTER
 
 
 @dataclass(frozen=True, slots=True)
 class MarkerRecord(_Record):
+    _KIND = "marker"
+
     pass_num: int
     label: str
     at: Offset
     symbol: str
-    type: RecordType = RecordType.MARKER
 
 
 @dataclass(frozen=True, slots=True)
 class BoxRecord(_Record):
+    _KIND = "box"
+
     pass_num: int
     bounds: Bounds
-    type: RecordType = RecordType.BOX
 
 
 @dataclass(frozen=True, slots=True)
 class StatsRecord(_Record):
+    _KIND = "stats"
+
     title: str
     columns: tuple[tuple[str, str], ...]
     rows: tuple[dict[str, str], ...]
     footer: str = ""
-    type: RecordType = RecordType.STATS
 
 
 @dataclass(frozen=True, slots=True)
 class ProbeRecord(_Record):
+    _KIND = "probe"
+
     at: Offset
     mean_hz: float
     samples_hz: tuple[float, ...]
-    type: RecordType = RecordType.PROBE
-
-
-@dataclass(frozen=True, slots=True)
-class SeriesRecord(_Record):
-    pass_num: int
-    label: str
-    cloud: XYCloud
-    mode: str = "markers"
-    line_dash: str = "solid"
-    showlegend: bool = True
-    type: RecordType = RecordType.SERIES
 
 
 @dataclass(frozen=True, slots=True)
 class HeatmapRecord(_Record):
+    _KIND = "heatmap"
+
     move: PassMove
     bounds: Bounds
     z: tuple[tuple[float | None, ...], ...]
     x_centers: tuple[float, ...]
     y_centers: tuple[float, ...]
     samples: XYCloud
-    type: RecordType = RecordType.HEATMAP
+
+    def to_trace_dict(self) -> dict[str, Any]:
+        return {
+            "type": "debug_scan",
+            "move": _json_value(asdict(self.move)),
+            "sample_count": len(self.samples.xs),
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class PlotArtifactRecord(_Record):
+    _KIND = "plot"
+
     strategy: str
     passes: int
     path: str
-    type: RecordType = RecordType.PLOT
 
 
 @dataclass(frozen=True, slots=True)
 class SweepTraceRecord(_Record):
+    _KIND = "sweep"
+
     pass_num: int
     phase: str
     span: AxisSpan
     cross_offsets: tuple[float, ...]
     cross_center: float
     profile: tuple[tuple[float, float], ...]
-    type: RecordType = RecordType.SWEEP
 
 
 @dataclass(frozen=True, slots=True)
 class SweepGridTraceRecord(_Record):
+    _KIND = "sweep_grid"
+
     center: Offset
     bounds: Bounds
     step_size: float
     rows: int
     legs: int
     sample_count: int
-    type: RecordType = RecordType.SWEEP_GRID
 
 
 @dataclass(frozen=True, slots=True)
-class PassTraceRecord(_Record):
-    """Shared trace payload for single-pass strategies."""
+class SweepCentroidPassRecord(_Record):
+    _KIND = "sweep_centroid"
 
     pass_num: int
     phase: str
     move: PassMove
-    sample_count: int
-    type: RecordType = RecordType.SWEEP_CENTROID
+    bounds: Bounds
+    samples: XYCloud
+
+    def to_trace_dict(self) -> dict[str, Any]:
+        return {
+            "type": self._KIND,
+            "pass_num": self.pass_num,
+            "phase": self.phase,
+            "move": _json_value(asdict(self.move)),
+            "sample_count": len(self.samples.xs),
+        }
 
 
 @dataclass(frozen=True, slots=True)
-class TernaryStepRecord(_Record):
+class CentroidPassRecord(_Record):
+    _KIND = "centroid_pass"
+
     pass_num: int
-    step: TernaryStep
-    type: RecordType = RecordType.TERNARY_STEP
+    move: PassMove
+    probes: XYCloud
+
+    def to_trace_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "type": self._KIND,
+            "pass_num": self.pass_num,
+            "result": _json_value(asdict(self.move.result)),
+            "sample_count": len(self.probes.xs),
+        }
+        if self.probes.freqs:
+            freqs = self.probes.freqs
+            out["freq_range"] = [min(freqs), max(freqs)]
+        return out
 
 
 @dataclass(frozen=True, slots=True)
-class ScanTraceRecord(_Record):
+class TernaryPassRecord(_Record):
+    _KIND = "ternary_pass"
+
+    pass_num: int
     move: PassMove
-    sample_count: int
-    type: RecordType = RecordType.DEBUG_SCAN
+    probes: XYCloud
+    steps: tuple[TernaryStep, ...]
+
+    def to_trace_dict(self) -> dict[str, Any]:
+        return {
+            "type": self._KIND,
+            "pass_num": self.pass_num,
+            "result": _json_value(asdict(self.move.result)),
+            "steps": [_json_value(asdict(step)) for step in self.steps],
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class CircleBootstrapRecord(_Record):
+    _KIND = "circle_bootstrap_pass"
+
     pass_num: int
     move: PassMove
     samples: XYCloud
     bounds: Bounds
     skipped: Offset | None = None
-    type: RecordType = RecordType.CIRCLE_BOOTSTRAP_PASS
 
     def to_trace_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
-            "type": self.type.value,
+            "type": self._KIND,
             "pass_num": self.pass_num,
             "result": _json_value(asdict(self.move.result)),
         }
@@ -267,6 +301,8 @@ class CircleBootstrapRecord(_Record):
 
 @dataclass(frozen=True, slots=True)
 class CircleHarmonicPassRecord(_Record):
+    _KIND = "circle_pass"
+
     pass_num: int
     trace_center: Offset
     radius: float
@@ -276,11 +312,10 @@ class CircleHarmonicPassRecord(_Record):
     fit: HarmonicFit | None
     rejected: bool
     reject_reasons: str = ""
-    type: RecordType = RecordType.CIRCLE_PASS
 
     def to_trace_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
-            "type": self.type.value,
+            "type": self._KIND,
             "pass_num": self.pass_num,
             "radius": self.radius,
             "result": _json_value(asdict(self.move.result)),
@@ -299,40 +334,25 @@ class CircleHarmonicPassRecord(_Record):
 
 @dataclass(frozen=True, slots=True)
 class AccuracyRepeatRecord(_Record):
+    _KIND = "accuracy_repeat"
+
     repeat_num: int
     offset: Offset
     session_plot_path: str | None = None
-    type: RecordType = RecordType.ACCURACY_REPEAT
 
 
 SessionRecord: TypeAlias = (
-    ScatterRecord
-    | MarkerRecord
-    | BoxRecord
-    | StatsRecord
-    | ProbeRecord
-    | SeriesRecord
+    ProbeRecord
     | HeatmapRecord
     | PlotArtifactRecord
     | SweepTraceRecord
     | SweepGridTraceRecord
-    | PassTraceRecord
-    | TernaryStepRecord
-    | ScanTraceRecord
+    | SweepCentroidPassRecord
+    | CentroidPassRecord
+    | TernaryPassRecord
     | CircleBootstrapRecord
     | CircleHarmonicPassRecord
     | AccuracyRepeatRecord
-)
-
-_PLOT_ONLY_RECORDS = (
-    ScatterRecord,
-    MarkerRecord,
-    BoxRecord,
-    StatsRecord,
-    SeriesRecord,
-    HeatmapRecord,
-    TernaryStepRecord,
-    AccuracyRepeatRecord,
 )
 
 
@@ -352,6 +372,8 @@ def _json_value(value: Any) -> Any:
 
 def _record_to_dict(record: _Record) -> dict[str, Any]:
     out = _json_value(asdict(record))
+    if record._KIND:
+        out["type"] = record._KIND
     if isinstance(record, ScatterRecord) and record.cloud.freqs is None:
         out.get("cloud", {}).pop("freqs", None)
     return out
@@ -383,6 +405,7 @@ def _test_primitives() -> None:
 
     assert pass_color(1) == PASS_COLORS[0]
     assert PassMove.compute(Offset.zero(), Offset(1.0, 0.0)).moved.x == 1.0
+    assert record_pass_num(AccuracyRepeatRecord(2, Offset.zero())) == 2
 
     circle = CircleHarmonicPassRecord(
         2,
@@ -398,6 +421,35 @@ def _test_primitives() -> None:
     assert trace["type"] == "circle_pass"
     assert trace["harmonic"]["amp"] == 1.0
     assert "samples" not in trace
+
+    sweep = SweepCentroidPassRecord(
+        1,
+        "coarse",
+        PassMove.compute(Offset.zero(), Offset(0.1, 0.0)),
+        Bounds.from_box((-1.0, 1.0, -1.0, 1.0)),
+        XYCloud((0.0,), (0.0,), (100.0,)),
+    )
+    sweep_trace = sweep.to_trace_dict()
+    assert sweep_trace["type"] == "sweep_centroid"
+    assert sweep_trace["sample_count"] == 1
+    assert "samples" not in sweep_trace
+
+    centroid = CentroidPassRecord(
+        1,
+        PassMove.compute(Offset.zero(), Offset(0.1, 0.0)),
+        XYCloud((0.0,), (0.0,), (100.0,)),
+    )
+    assert centroid.to_trace_dict()["sample_count"] == 1
+
+    heatmap = HeatmapRecord(
+        PassMove.compute(Offset.zero(), Offset(0.0, 0.0)),
+        Bounds.from_box((-1.0, 1.0, -1.0, 1.0)),
+        ((100.0,),),
+        (0.0,),
+        (0.0,),
+        XYCloud((0.0,), (0.0,), (100.0,)),
+    )
+    assert heatmap.to_trace_dict()["type"] == "debug_scan"
 
 
 if __name__ == "__main__":

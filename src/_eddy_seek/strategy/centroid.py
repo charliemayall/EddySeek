@@ -17,7 +17,9 @@ from ..kconsole import KConsole
 from ..optimizer import weighted_centroid
 from ..plotting._plotly import go, plotly_available
 from ..plotting.primitives import (
+    CentroidPassRecord,
     MarkerRecord,
+    PassMove,
     ScatterMode,
     ScatterRecord,
     StatsRecord,
@@ -28,9 +30,8 @@ from ..plotting.registry import StrategyPlotter, register_plotter
 from ..plotting.renderer import (
     add_marker,
     add_scatter,
-    final_result_marker,
+    final_result_offset,
     finalize_strategy_plot,
-    group_by_pass,
     layout_with_stats,
     pass_group_stats,
 )
@@ -139,21 +140,17 @@ def _record_centroid_pass(
     rec = ctx.recorder
     if not rec.active:
         return
-    label = f"pass {pass_num}"
     rec.record(
-        ScatterRecord(
+        CentroidPassRecord(
             pass_num=pass_num,
-            label=f"{label} probes",
-            cloud=XYCloud(
+            move=PassMove.compute(center, result),
+            probes=XYCloud(
                 tuple(position.x for position, _ in probes),
                 tuple(position.y for position, _ in probes),
                 tuple(freq for _, freq in probes),
             ),
-            mode=ScatterMode.MARKERS_LINES,
         )
     )
-    rec.record(MarkerRecord(pass_num, f"{label} centre", center, "x"))
-    rec.record(MarkerRecord(pass_num, f"{label} result", result, "star"))
 
 
 @register_plotter("centroid")
@@ -167,28 +164,44 @@ class CentroidPlotter(StrategyPlotter):
         if not plotly_available() or go is None:
             return None
 
-        passes = group_by_pass(records)
-        if not passes:
+        pass_records = [
+            record for record in records if isinstance(record, CentroidPassRecord)
+        ]
+        if not pass_records:
             return None
 
         fig = go.Figure()
-        pass_nums = sorted(passes)
         pass_rows: list[dict[str, str]] = []
-        for pass_num in pass_nums:
+        pass_nums = sorted(record.pass_num for record in pass_records)
+        for record in sorted(pass_records, key=lambda item: item.pass_num):
+            pass_num = record.pass_num
             color = pass_color(pass_num)
-            group = passes[pass_num]
-            for record in group:
-                if isinstance(record, ScatterRecord):
-                    add_scatter(fig, record, search_for, color)
-                elif isinstance(record, MarkerRecord):
-                    size = 11
-                    if record.symbol == "x":
-                        size = 10
-                    if record.symbol == "star":
-                        size = 14 if pass_num == pass_nums[-1] else 11
-                    add_marker(fig, record, color, size=size)
-
-            stats = pass_group_stats(group)
+            label = f"pass {pass_num}"
+            add_scatter(
+                fig,
+                ScatterRecord(
+                    pass_num,
+                    f"{label} probes",
+                    record.probes,
+                    mode=ScatterMode.MARKERS_LINES,
+                ),
+                search_for,
+                color,
+            )
+            add_marker(
+                fig,
+                MarkerRecord(pass_num, f"{label} centre", record.move.center, "x"),
+                color,
+                size=10,
+            )
+            star_size = 14 if pass_num == pass_nums[-1] else 11
+            add_marker(
+                fig,
+                MarkerRecord(pass_num, f"{label} result", record.move.result, "star"),
+                color,
+                size=star_size,
+            )
+            stats = pass_group_stats([record])
             pass_rows.append(
                 {
                     "pass": str(pass_num),
@@ -198,14 +211,13 @@ class CentroidPlotter(StrategyPlotter):
                 }
             )
 
-        final_marker = final_result_marker(passes)
-        final = final_marker.at if final_marker is not None else Offset.zero()
+        final = final_result_offset(pass_records)
         layout_with_stats(
             fig,
             StatsRecord(
                 title=(
-                    f"Centroid alignment ({len(pass_nums)} pass"
-                    f"{'' if len(pass_nums) == 1 else 'es'})  search={search_for}"
+                    f"Centroid alignment ({len(pass_records)} pass"
+                    f"{'' if len(pass_records) == 1 else 'es'})  search={search_for}"
                 ),
                 columns=(
                     ("pass", "Pass"),

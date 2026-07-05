@@ -494,9 +494,25 @@ def test_ternary_plot_writes_session_html(requires_plotly, plot_tmp):
     tmp_path, session_id, write_at = plot_tmp
     recorder = SessionRecorder(trace=False, plots=True)
     ctx = SimpleNamespace(recorder=recorder)
-    _record_ternary_pass(ctx, 1, Offset(0.1, 0.0), Offset(0.1, 0.0), steps, [], probes)  # type: ignore[arg-type]
     _record_ternary_pass(
-        ctx, 2, Offset(0.0, 0.0), Offset(0.1, 0.0), steps, steps, probes
+        ctx,
+        1,
+        Offset.zero(),
+        Offset(0.1, 0.0),
+        Offset(0.1, 0.0),
+        steps,
+        [],
+        probes,
+    )  # type: ignore[arg-type]
+    _record_ternary_pass(
+        ctx,
+        2,
+        Offset(0.1, 0.0),
+        Offset(0.0, 0.0),
+        Offset(0.1, 0.0),
+        steps,
+        steps,
+        probes,
     )  # type: ignore[arg-type]
     path = write_figure(
         tmp_path,
@@ -566,6 +582,7 @@ def test_ternary_plot_pass_bands_do_not_overlap(requires_plotly):
     _record_ternary_pass(
         ctx,
         1,
+        Offset.zero(),
         Offset(0.1, 0.0),
         Offset(0.1, 0.0),
         _steps(Axis.X, 3),
@@ -575,6 +592,7 @@ def test_ternary_plot_pass_bands_do_not_overlap(requires_plotly):
     _record_ternary_pass(
         ctx,
         2,
+        Offset(0.1, 0.0),
         Offset(0.0, 0.0),
         Offset(0.1, 0.0),
         _steps(Axis.X, 2),

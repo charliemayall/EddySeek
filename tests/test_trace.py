@@ -13,7 +13,12 @@ from pathlib import Path
 
 from _eddy_seek.common import Offset
 from _eddy_seek.config import SeekConfig
-from _eddy_seek.plotting.primitives import ProbeRecord
+from _eddy_seek.plotting.primitives import (
+    CentroidPassRecord,
+    PassMove,
+    ProbeRecord,
+    XYCloud,
+)
 from _eddy_seek.plotting.recorder import SessionRecorder
 from _eddy_seek.session import SeekSessionResult, _write_seek_trace
 
@@ -120,3 +125,18 @@ def test_seek_session_collects_probes_when_enabled():
     probes = recorder.to_probe_dicts()
     assert probes[0]["mean_hz"] == 101.0
     assert len(probes[0]["samples_hz"]) == 3
+
+
+def test_centroid_pass_record_round_trip():
+    record = CentroidPassRecord(
+        pass_num=1,
+        move=PassMove.compute(Offset.zero(), Offset(0.1, 0.0)),
+        probes=XYCloud((0.0,), (0.0,), (100.0,)),
+    )
+    recorder = SessionRecorder(trace=True, plots=False)
+    recorder.record(record)
+    trace = recorder.to_probe_dicts()
+    assert len(trace) == 1
+    assert trace[0]["type"] == "centroid_pass"
+    assert trace[0]["sample_count"] == 1
+    assert "probes" not in trace[0]
