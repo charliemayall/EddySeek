@@ -241,7 +241,7 @@ def session_artifact_run_dir(
     """``HH_MM_DD_MM_YY_{run_id}`` — one folder per seek run under ``result_folder``."""
     t = when or datetime.now()
     rid = (run_id or session_id)[:8]
-    return f"{t.isoformat(timespec='minutes')}_{rid}"
+    return f"{t.hour:02d}_{t.minute:02d}_{t.day:02d}_{t.month:02d}_{t.year % 100:02d}_{rid}"
 
 
 def session_artifact_basename(*, suffix: str = "", ext: str = "html") -> str:
