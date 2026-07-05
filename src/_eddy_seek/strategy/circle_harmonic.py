@@ -28,6 +28,7 @@ from ..harmonic import (
     harmonic_converged,
     harmonic_reject_reasons,
     harmonic_step_v2,
+    kalman_filter_freqs,
     radial_slope,
 )
 from ..kconsole import KConsole
@@ -52,6 +53,8 @@ from .base import SeekStrategy
 logger = logging.getLogger(__name__)
 
 MIN_SAMPLES_PER_SPAN = 3
+KALMAN_PROCESS_VAR = 1.0
+KALMAN_MEASURE_VAR = 100.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -368,6 +371,11 @@ class CircleHarmonicStrategy(SeekStrategy):
             self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
         samples = get_samples_from_capture_legs(ctx, legs, clamped_speed, flat=True)
+        samples = kalman_filter_freqs(
+            samples,
+            process_var=KALMAN_PROCESS_VAR,
+            measure_var=KALMAN_MEASURE_VAR,
+        )
         logger.info(
             f"eddy_seek: circle_harmonic pass {pass_num} collected {len(samples)} samples --> {len(samples) / len(legs):.2f} samples per segment"
         )
