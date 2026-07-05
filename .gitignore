@@ -10,6 +10,6 @@ dist/
 tools/deploy_extra.sh
 AGENTS.md
 scripts/
-references/
-.cursor/
+references
+.cursor
 experiments/

@@ -131,6 +131,8 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 
 > **Speed units:** All speed values are in mm/s in `printer.cfg` and `EDDY_SEEK_SET`.
 
+> **Speed overrides:** Any move where samples are taken will dynamically adjust the speed to keep the sampling density at an acceptable level.
+
 > **Travel limits:** `sensor_x ± max_jog_x` and `sensor_y ± max_jog_y` must be within machine limits.
 
 Example for a four-tool changer:
@@ -190,7 +192,7 @@ If `total` stays at `0`: check I2C wiring, `i2c_mcu` / `i2c_bus`, and `klippy.lo
 
 ### Single-nozzle XY seek (`EDDY_SEEK_START`)
 
-Finds the sensor centre from current XY positon - for debugging or repeatability checks e.g. to check your `sensor_x` and `sensor_y` positions.
+Finds the sensor centre from current XY position - for debugging or repeatability checks e.g. to check your `sensor_x` and `sensor_y` positions.
 
 ### Toolchanger alignment (`EDDY_SEEK_TOOL` / `EDDY_SEEK_TOOLS`)
 
@@ -230,7 +232,7 @@ Finds the sensor centre from current XY positon - for debugging or repeatability
 
 ### Sweep centroid (`strategy: sweep_centroid`) - default
 
-Continuous axis sweeps (like bed mesh `rapid_scan`). Coarse bidirectional sweeps, then finer passes; samples merged into a frequency-weighted 2D centroid. Fastest option (typically 2–4× quicker than grid strategies). `dwell_time` is ignored.
+Continuous axis sweeps (like bed mesh `rapid_scan`). Coarse bidirectional sweeps, then finer passes; samples merged into a frequency-weighted 2D centroid. Best compromise between speed and reliability.
 
 ### Centroid (`strategy: centroid`)
 
