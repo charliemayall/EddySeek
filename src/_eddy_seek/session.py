@@ -378,7 +378,7 @@ def report_accuracy_stats(
     output = []
     for i, offset in enumerate(offsets, start=1):
         line = (
-            f"  #{i}  X={offset.x:+.4f} mm  Y={offset.y:+.4f} mm  "
+            f"#{i}  X={offset.x:+.4f} mm  Y={offset.y:+.4f} mm  "
             f"radial={stats.radial[i - 1]:.4f} mm"
         )
         if durations_s is not None and i <= len(durations_s):
@@ -395,7 +395,7 @@ def report_accuracy_stats(
             console.BR,
             f"Max scatter: {stats.max_radial:.3f} mm",
             console.BR,
-            f" Max pairwise {stats.max_pair:.3f} mm",
+            f"Max pairwise {stats.max_pair:.3f} mm",
             console.BR,
         ]
     )
