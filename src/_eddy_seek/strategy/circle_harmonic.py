@@ -55,6 +55,8 @@ logger = logging.getLogger(__name__)
 MIN_SAMPLES_PER_SPAN = 3
 KALMAN_PROCESS_VAR = 1.0
 KALMAN_MEASURE_VAR = 100.0
+# ponytail: experiment flag — plateau at each radius until harmonic converged, then shrink
+RADIUS_PLATEAU_MODE = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +70,7 @@ class _CirclePassOutcome:
     rejected: bool
     reject_reasons: str
     freeze: bool
+    plateau_done: bool = False
 
 
 def _outcome_hold(
@@ -124,9 +127,10 @@ def _outcome_accept(
     binned: list[tuple[float, float]],
     fit: HarmonicFit,
     *,
-    converged: bool,
+    freeze: bool,
+    plateau_done: bool = False,
 ) -> _CirclePassOutcome:
-    """Successful step — plot result, freeze if converged."""
+    """Successful step — plot result, freeze when search is done."""
     return _CirclePassOutcome(
         result=result,
         trace_center=trace_center,
@@ -136,7 +140,8 @@ def _outcome_accept(
         fit=fit,
         rejected=False,
         reject_reasons="",
-        freeze=converged,
+        freeze=freeze,
+        plateau_done=plateau_done,
     )
 
 
@@ -149,6 +154,8 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._y_profile: list[tuple[float, float]] = []
         self._frozen: Offset | None = None
         self._last_pass_rejected = False
+        self._last_plateau_done = False
+        self._radius_tier = 0
 
     @property
     def name(self) -> str:
@@ -169,10 +176,13 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._bootstrap = None
         self._frozen = None
         self._last_pass_rejected = False
+        self._last_plateau_done = False
+        self._radius_tier = 0
         return finalize_strategy_plot(ctx, self.name)
 
     def _before_pass(self, ctx: SeekSession, pass_num: int) -> None:
         self._last_pass_rejected = False
+        self._last_plateau_done = False
 
     def should_check_divergence(self, ctx: SeekSession, pass_num: int) -> bool:
         return not self._last_pass_rejected
@@ -209,6 +219,12 @@ class CircleHarmonicStrategy(SeekStrategy):
             logger.info(
                 f"eddy_seek: {self.name} slope-only bootstrap done "
                 f"- continuing to circle passes"
+            )
+            return True
+        if RADIUS_PLATEAU_MODE and self._last_plateau_done:
+            logger.info(
+                f"eddy_seek: {self.name} converged at radius tier "
+                f"{self._radius_tier - 1} - continuing at smaller circle"
             )
             return True
         return False
@@ -335,13 +351,21 @@ class CircleHarmonicStrategy(SeekStrategy):
         cfg = ctx.config
         bootstrap = self._bootstrap if self._bootstrap is not None else best
 
-        circle_pass_num = pass_num if cfg.circle_skip_bootstrap else pass_num - 1
-        radius = circle_radius_for_pass(
-            circle_pass_num + 1,
-            radius_start=cfg.circle_radius_start,
-            radius_min=cfg.circle_radius_min,
-            radius_shrink=cfg.circle_shrink,
-        )
+        if RADIUS_PLATEAU_MODE:
+            radius = circle_radius_for_pass(
+                self._radius_tier + 2,
+                radius_start=cfg.circle_radius_start,
+                radius_min=cfg.circle_radius_min,
+                radius_shrink=cfg.circle_shrink,
+            )
+        else:
+            circle_pass_num = pass_num if cfg.circle_skip_bootstrap else pass_num - 1
+            radius = circle_radius_for_pass(
+                circle_pass_num + 1,
+                radius_start=cfg.circle_radius_start,
+                radius_min=cfg.circle_radius_min,
+                radius_shrink=cfg.circle_shrink,
+            )
         trace_center, trace_radius = circle_in_jog_box(
             best, radius, cfg.max_jog_x, cfg.max_jog_y
         )
@@ -478,6 +502,13 @@ class CircleHarmonicStrategy(SeekStrategy):
         converged = harmonic_converged(fit, step, cfg.tolerance, cfg.noise_k)
         if converged:
             logger.info(f"eddy_seek: circle_harmonic converged at pass {pass_num}")
+        if RADIUS_PLATEAU_MODE:
+            at_min = trace_radius <= cfg.circle_radius_min + 1e-9
+            freeze = converged and at_min
+            plateau_done = converged and not at_min
+        else:
+            freeze = converged
+            plateau_done = False
         return _outcome_accept(
             result,
             trace_center,
@@ -485,7 +516,8 @@ class CircleHarmonicStrategy(SeekStrategy):
             samples,
             binned,
             fit,
-            converged=converged,
+            freeze=freeze,
+            plateau_done=plateau_done,
         )
 
     def _finish_circle_pass(
@@ -498,6 +530,12 @@ class CircleHarmonicStrategy(SeekStrategy):
         bootstrap = self._bootstrap if self._bootstrap is not None else best
         if outcome.rejected:
             self._last_pass_rejected = True
+        if RADIUS_PLATEAU_MODE and outcome.plateau_done:
+            self._radius_tier += 1
+            self._last_plateau_done = True
+            logger.info(
+                f"eddy_seek: circle_harmonic radius tier -> {self._radius_tier}"
+            )
         if outcome.freeze:
             self._frozen = outcome.result
         freeze_without_plot = outcome.freeze and not outcome.samples
