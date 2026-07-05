@@ -83,6 +83,30 @@ def circle_in_jog_box(
     return safe_center, max(safe_radius, 0.0)
 
 
+def kalman_filter_freqs(
+    samples: Sequence[MotionSample],
+    *,
+    process_var: float = 1.0,
+    measure_var: float = 100.0,
+) -> list[MotionSample]:
+    """ponytail: scalar random-walk Kalman on freq ordered by print_time."""
+    if not samples:
+        return []
+    ordered = sorted(samples, key=lambda sample: sample.print_time)
+    x = ordered[0].freq
+    p = measure_var
+    filtered: list[MotionSample] = [
+        MotionSample(ordered[0].offset, x, ordered[0].print_time),
+    ]
+    for sample in ordered[1:]:
+        p += process_var
+        k = p / (p + measure_var)
+        x = x + k * (sample.freq - x)
+        p = (1.0 - k) * p
+        filtered.append(MotionSample(sample.offset, x, sample.print_time))
+    return filtered
+
+
 def bin_samples_by_angle(
     samples: Sequence[MotionSample],
     center: Offset,
