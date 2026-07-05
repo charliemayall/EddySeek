@@ -62,7 +62,7 @@ class SweepCentroidStrategy(SeekStrategy):
         logger.info(
             f"eddy_seek: sweep_centroid coarse={cfg.sweep_coarse_speed / 60.0:.2f} mm/s "
             f"fine={cfg.sweep_fine_speed / 60.0:.2f} mm/s "
-            f"cross_passes={cfg.sweep_cross_passes}"
+            f"cross_passes={cfg.cross_passes}"
         )
 
     def on_session_end(self, ctx: SeekSession) -> str | None:

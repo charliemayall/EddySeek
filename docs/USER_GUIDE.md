@@ -103,6 +103,7 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | `save_plots`              | `False`                                   | Write HTML plots to `result_folder` (needs plotly)                                     |
 | `result_folder`           | `~/printer_data/config/eddy_seek_results` | Output directory for debug artefacts                                                   |
 | `debug`                   | `False`                                   | Verbose console; pass `VERBOSE=1` on any command for one-off verbosity                 |
+| `cross_passes`            | `3`                                       | Staggered axis-sweep lines on coarse passes only (odd; fine passes use 1)              |
 
 ### `[eddy_seek]` - `strategy: sweep_centroid` options
 
@@ -112,7 +113,6 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | `sweep_fine_speed`   | `10`    | Fine sweep feedrate (mm/s)                 |
 | `sweep_overscan`     | `1.0`   | Extra travel beyond jog range (mm)         |
 | `sweep_cross_offset` | `0.3`   | Stagger between parallel sweeps (mm)       |
-| `sweep_cross_passes` | `3`     | Staggered sweep lines per axis             |
 | `fine_shrink`        | `0.4`   | Fine pass range multiplier (× max_jog)     |
 | `min_sweep_samples`  | `20`    | Minimum profile points before centroid fit |
 

@@ -175,7 +175,7 @@ def test_sweep_axis_clamps_speed_for_min_samples():
             max_jog_x=2.5,
             max_jog_y=2.5,
             min_sweep_samples=20,
-            sweep_cross_passes=1,
+            cross_passes=1,
         )
     )
     capture = MagicMock()
@@ -201,7 +201,7 @@ def test_sweep_axis_clamps_speed_for_min_samples():
 
 def test_sweep_axis_honors_cross_pass_override():
     settings = SweepSettings.from_config(
-        SeekConfig(sweep_cross_passes=3, min_sweep_samples=3)
+        SeekConfig(cross_passes=3, min_sweep_samples=3)
     )
     capture = MagicMock()
     capture.collect_legs.return_value = [
@@ -223,6 +223,35 @@ def test_sweep_axis_honors_cross_pass_override():
             phase=Phase.COARSE,
             pass_num=1,
             cross_passes=1,
+            clamp_speed=False,
+        )
+
+    assert plan_legs.call_args.args[4] == [0.0]
+
+
+def test_sweep_axis_fine_phase_uses_single_cross_pass():
+    settings = SweepSettings.from_config(
+        SeekConfig(cross_passes=3, min_sweep_samples=3)
+    )
+    capture = MagicMock()
+    capture.collect_legs.return_value = [
+        MotionSample(Offset(i * 0.01, 0.0), 100.0, 0.0) for i in range(3)
+    ]
+
+    with patch(
+        "_eddy_seek.movement.leg_planner.plan_axis_legs",
+        return_value=[],
+    ) as plan_legs:
+        sweep_axis(
+            capture,
+            settings,
+            axis=Axis.X,
+            lo=-1.0,
+            hi=1.0,
+            cross_center=0.0,
+            speed_mm_min=600.0,
+            phase=Phase.FINE,
+            pass_num=3,
             clamp_speed=False,
         )
 

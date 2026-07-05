@@ -91,8 +91,8 @@ class SeekConfig:
     sweep_cross_offset: float = field(
         default=0.3, metadata={"gcode": "SWEEP_CROSS_OFFSET", "positive": True}
     )
-    sweep_cross_passes: int = field(
-        default=3, metadata={"gcode": "SWEEP_CROSS_PASSES", "min": 1}
+    cross_passes: int = field(
+        default=3, metadata={"gcode": "CROSS_PASSES", "min": 1, "odd": True}
     )
     fine_shrink: float = field(
         default=0.4, metadata={"gcode": "FINE_SHRINK", "positive": True}
@@ -322,6 +322,9 @@ def _validate(cfg: SeekConfig) -> None:
             raise ValueError(
                 f"{spec.name} must be one of {meta['enum']!r} (got {value!r})"
             )
+        if meta.get("odd") and value % 2 == 0:
+            raise ValueError(f"{spec.name} must be odd (got {value!r})")
+
     if cfg.circle_radius_min > cfg.circle_radius_start:
         raise ValueError(
             "circle_radius_min must be <= circle_radius_start "

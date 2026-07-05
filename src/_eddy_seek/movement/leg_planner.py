@@ -44,7 +44,7 @@ class SweepSettings:
     max_jog_x: float
     max_jog_y: float
     sweep_overscan: float
-    sweep_cross_passes: int
+    cross_passes: int
     sweep_cross_offset: float
     min_sweep_samples: int
     search_for: Literal["min", "max"]
@@ -55,7 +55,7 @@ class SweepSettings:
             max_jog_x=cfg.max_jog_x,
             max_jog_y=cfg.max_jog_y,
             sweep_overscan=cfg.sweep_overscan,
-            sweep_cross_passes=cfg.sweep_cross_passes,
+            cross_passes=cfg.cross_passes,
             sweep_cross_offset=cfg.sweep_cross_offset,
             min_sweep_samples=cfg.min_sweep_samples,
             search_for=cfg.search_for,
@@ -215,11 +215,17 @@ def _axis_span(
 
 def _resolve_cross(
     settings: SweepSettings,
+    phase: Phase,
     *,
     cross_passes: int | None,
     cross_offset: float | None,
 ) -> list[float]:
-    passes = settings.sweep_cross_passes if cross_passes is None else cross_passes
+    if phase is Phase.FINE:
+        passes = 1
+    elif cross_passes is None:
+        passes = settings.cross_passes
+    else:
+        passes = cross_passes
     offset = settings.sweep_cross_offset if cross_offset is None else cross_offset
     return iter_cross_offsets(passes, offset)
 
@@ -252,7 +258,10 @@ def sweep_axis(
             min_samples=settings.min_sweep_samples,
         )
     cross_offsets = _resolve_cross(
-        settings, cross_passes=cross_passes, cross_offset=cross_offset
+        settings,
+        phase,
+        cross_passes=cross_passes,
+        cross_offset=cross_offset,
     )
     legs = plan_axis_legs(
         axis, lo, hi, cross_center, cross_offsets, settings.sweep_overscan

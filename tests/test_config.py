@@ -34,6 +34,11 @@ def test_validate_var():
     assert cfg._var_ok("max_passes", -1) is False
 
 
+def test_cross_passes_must_be_odd():
+    with raises(ValueError, match="cross_passes must be odd"):
+        SeekConfig(cross_passes=4)
+
+
 def test_apply_runtime_set():
     cfg = SeekConfig()
     changed = cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "centroid"}))
