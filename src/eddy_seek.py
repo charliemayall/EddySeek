@@ -283,11 +283,16 @@ class EddySeek(SeekHost):
             status = self.get_status(0)
             rate = status["sample_rate_hz"]
             rate_text = f"{rate:.0f} Hz" if rate is not None else "n/a"
-            console.info(
-                f"Sensor {status['smooth_mean']:.1f} MHz "
-                f"(capture: {status['capture_mean']:.1f} MHz, "
-                f"{status['capture_count']} samples, sample_rate: {rate_text})"
-            )
+            if gained:
+                console.info(
+                    f"Sensor {status['smooth_mean']:.1f} Hz "
+                    f"(capture: {status['capture_mean']:.1f} Hz, "
+                    f"{status['capture_count']} samples, sample_rate: {rate_text})"
+                )
+            else:
+                raise gcmd.error(
+                    "No samples gained during query, check sensor connection"
+                )
 
     def cmd_EDDY_SEEK_RESET(self, gcmd: GCodeCommand) -> None:
         console = self.refresh_console(gcmd)
