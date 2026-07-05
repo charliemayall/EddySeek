@@ -152,6 +152,8 @@ def get_samples_from_capture_legs(
 ):
     """Run continuous capture legs and return merged session-relative samples.
 
+    This will clear the internal buffer of the MotionHandler after collecting the samples.
+
     Args:
         ctx: The seek session context.
         legs: [Offset(startx, starty), Offset(endx, endy)]
