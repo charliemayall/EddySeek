@@ -119,26 +119,6 @@ class SeekSession:
             )
         return self._session_start
 
-    def append_trace(self, probe: dict[str, Any]) -> None:
-        if self._save_trace:
-            self.recorder.record(
-                ProbeRecord(
-                    at=Offset(float(probe["x"]), float(probe["y"])),
-                    mean_hz=float(probe["mean_hz"]),
-                    samples_hz=tuple(probe["samples_hz"]),
-                )
-            )
-
-    def append_plot_trace(self, entry: dict[str, Any]) -> None:
-        if entry.get("type") == "plot":
-            self.recorder.record(
-                PlotArtifactRecord(
-                    strategy=str(entry["strategy"]),
-                    passes=int(entry["passes"]),
-                    path=str(entry["path"]),
-                )
-            )
-
     @property
     def motion(self) -> MotionHandler:
         if self._motion is None:
