@@ -55,7 +55,7 @@ logger = logging.getLogger(__name__)
 MIN_SAMPLES_PER_SPAN = 3
 KALMAN_PROCESS_VAR = 1.0
 KALMAN_MEASURE_VAR = 100.0
-# ponytail: experiment flag — plateau at each radius until harmonic converged, then shrink
+# ponytail: experiment — repeat radius while passes ok, shrink after first reject
 RADIUS_PLATEAU_MODE = True
 
 
@@ -70,7 +70,6 @@ class _CirclePassOutcome:
     rejected: bool
     reject_reasons: str
     freeze: bool
-    plateau_done: bool = False
 
 
 def _outcome_hold(
@@ -128,7 +127,6 @@ def _outcome_accept(
     fit: HarmonicFit,
     *,
     freeze: bool,
-    plateau_done: bool = False,
 ) -> _CirclePassOutcome:
     """Successful step — plot result, freeze when search is done."""
     return _CirclePassOutcome(
@@ -141,7 +139,6 @@ def _outcome_accept(
         rejected=False,
         reject_reasons="",
         freeze=freeze,
-        plateau_done=plateau_done,
     )
 
 
@@ -154,8 +151,9 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._y_profile: list[tuple[float, float]] = []
         self._frozen: Offset | None = None
         self._last_pass_rejected = False
-        self._last_plateau_done = False
+        self._last_tier_shrink = False
         self._radius_tier = 0
+        self._tier_had_ok = False
 
     @property
     def name(self) -> str:
@@ -176,13 +174,14 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._bootstrap = None
         self._frozen = None
         self._last_pass_rejected = False
-        self._last_plateau_done = False
+        self._last_tier_shrink = False
         self._radius_tier = 0
+        self._tier_had_ok = False
         return finalize_strategy_plot(ctx, self.name)
 
     def _before_pass(self, ctx: SeekSession, pass_num: int) -> None:
         self._last_pass_rejected = False
-        self._last_plateau_done = False
+        self._last_tier_shrink = False
 
     def should_check_divergence(self, ctx: SeekSession, pass_num: int) -> bool:
         return not self._last_pass_rejected
@@ -210,21 +209,21 @@ class CircleHarmonicStrategy(SeekStrategy):
     ) -> bool:
         cfg = ctx.config
         if self._last_pass_rejected:
-            logger.info(
-                f"eddy_seek: {self.name} pass {pass_num} rejected "
-                f"- retrying with smaller circle if passes remain"
-            )
+            if RADIUS_PLATEAU_MODE and self._last_tier_shrink:
+                logger.info(
+                    f"eddy_seek: {self.name} pass {pass_num} rejected after ok "
+                    f"- continuing at smaller circle"
+                )
+            else:
+                logger.info(
+                    f"eddy_seek: {self.name} pass {pass_num} rejected "
+                    f"- retrying at same radius if passes remain"
+                )
             return True
         if cfg.circle_bootstrap_slope_only and pass_num == 1:
             logger.info(
                 f"eddy_seek: {self.name} slope-only bootstrap done "
                 f"- continuing to circle passes"
-            )
-            return True
-        if RADIUS_PLATEAU_MODE and self._last_plateau_done:
-            logger.info(
-                f"eddy_seek: {self.name} converged at radius tier "
-                f"{self._radius_tier - 1} - continuing at smaller circle"
             )
             return True
         return False
@@ -505,10 +504,8 @@ class CircleHarmonicStrategy(SeekStrategy):
         if RADIUS_PLATEAU_MODE:
             at_min = trace_radius <= cfg.circle_radius_min + 1e-9
             freeze = converged and at_min
-            plateau_done = converged and not at_min
         else:
             freeze = converged
-            plateau_done = False
         return _outcome_accept(
             result,
             trace_center,
@@ -517,7 +514,6 @@ class CircleHarmonicStrategy(SeekStrategy):
             binned,
             fit,
             freeze=freeze,
-            plateau_done=plateau_done,
         )
 
     def _finish_circle_pass(
@@ -530,12 +526,16 @@ class CircleHarmonicStrategy(SeekStrategy):
         bootstrap = self._bootstrap if self._bootstrap is not None else best
         if outcome.rejected:
             self._last_pass_rejected = True
-        if RADIUS_PLATEAU_MODE and outcome.plateau_done:
-            self._radius_tier += 1
-            self._last_plateau_done = True
-            logger.info(
-                f"eddy_seek: circle_harmonic radius tier -> {self._radius_tier}"
-            )
+            if RADIUS_PLATEAU_MODE and self._tier_had_ok:
+                self._radius_tier += 1
+                self._tier_had_ok = False
+                self._last_tier_shrink = True
+                logger.info(
+                    f"eddy_seek: circle_harmonic radius tier -> {self._radius_tier} "
+                    f"(reject after ok)"
+                )
+        elif RADIUS_PLATEAU_MODE and not outcome.freeze:
+            self._tier_had_ok = True
         if outcome.freeze:
             self._frozen = outcome.result
         freeze_without_plot = outcome.freeze and not outcome.samples
