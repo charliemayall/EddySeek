@@ -51,7 +51,8 @@ class SessionRecorder:
         for record in self._records:
             if isinstance(record, _PLOT_ONLY_RECORDS):
                 continue
-            out.append(record.to_dict())
+            to_trace = getattr(record, "to_trace_dict", None)
+            out.append(to_trace() if callable(to_trace) else record.to_dict())
         return out
 
     def pass_count(self) -> int:

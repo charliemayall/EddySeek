@@ -9,7 +9,6 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -29,8 +28,11 @@ from ..plotting.registry import StrategyPlotter, register_plotter
 from ..plotting.renderer import (
     add_marker,
     add_scatter,
+    final_result_marker,
     finalize_strategy_plot,
+    group_by_pass,
     layout_with_stats,
+    pass_group_stats,
 )
 from ..session import SeekSession
 from .base import SeekStrategy
@@ -165,11 +167,7 @@ class CentroidPlotter(StrategyPlotter):
         if not plotly_available() or go is None:
             return None
 
-        passes: dict[int, list[Any]] = defaultdict(list)
-        for record in records:
-            pass_num = getattr(record, "pass_num", None)
-            if isinstance(pass_num, int):
-                passes[pass_num].append(record)
+        passes = group_by_pass(records)
         if not passes:
             return None
 
@@ -190,53 +188,17 @@ class CentroidPlotter(StrategyPlotter):
                         size = 14 if pass_num == pass_nums[-1] else 11
                     add_marker(fig, record, color, size=size)
 
-            scatter = next(
-                (record for record in group if isinstance(record, ScatterRecord)),
-                None,
-            )
-            result = next(
-                (
-                    record
-                    for record in group
-                    if isinstance(record, MarkerRecord) and record.symbol == "star"
-                ),
-                None,
-            )
-            center = next(
-                (
-                    record
-                    for record in group
-                    if isinstance(record, MarkerRecord) and record.symbol == "x"
-                ),
-                None,
-            )
-            freqs = list(scatter.cloud.freqs) if scatter and scatter.cloud.freqs else []
-            moved = Offset.zero()
-            if result is not None and center is not None:
-                moved = (result.at - center.at).abs_components()
+            stats = pass_group_stats(group)
             pass_rows.append(
                 {
                     "pass": str(pass_num),
-                    "result": (
-                        f"({result.at.x:+.4f}, {result.at.y:+.4f})"
-                        if result is not None
-                        else "n/a"
-                    ),
-                    "moved": f"({moved.x:.4f}, {moved.y:.4f})",
-                    "freq": (
-                        f"[{min(freqs):.0f}, {max(freqs):.0f}]" if freqs else "n/a"
-                    ),
+                    "result": stats.format_result(),
+                    "moved": stats.format_moved(),
+                    "freq": stats.format_freq_range(),
                 }
             )
 
-        final_marker = next(
-            (
-                record
-                for record in passes[pass_nums[-1]]
-                if isinstance(record, MarkerRecord) and record.symbol == "star"
-            ),
-            None,
-        )
+        final_marker = final_result_marker(passes)
         final = final_marker.at if final_marker is not None else Offset.zero()
         layout_with_stats(
             fig,

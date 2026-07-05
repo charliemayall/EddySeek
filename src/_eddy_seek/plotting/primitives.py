@@ -45,11 +45,8 @@ class RecordType(str, Enum):
     SWEEP_CENTROID = "sweep_centroid"
     TERNARY_STEP = "ternary_step"
     DEBUG_SCAN = "debug_scan"
-    CIRCLE_BOOTSTRAP = "circle_harmonic_bootstrap"
     CIRCLE_BOOTSTRAP_PASS = "circle_bootstrap_pass"
     CIRCLE_PASS = "circle_pass"
-    CIRCLE_HARMONIC = "circle_harmonic"
-    CIRCLE_HARMONIC_SLOPE = "circle_harmonic_bootstrap_slope_only"
     ACCURACY_REPEAT = "accuracy_repeat"
 
 
@@ -121,13 +118,6 @@ class TernaryStep:
 class BinnedProfile:
     thetas: tuple[float, ...]
     freqs: tuple[float, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class HarmonicCoeffs:
-    a: float
-    b: float
-    amp: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,36 +246,23 @@ class ScanTraceRecord(_Record):
 
 
 @dataclass(frozen=True, slots=True)
-class CircleBootstrapTraceRecord(_Record):
-    pass_num: int
-    result: Offset
-    type: RecordType = RecordType.CIRCLE_BOOTSTRAP
-
-
-@dataclass(frozen=True, slots=True)
-class CircleHarmonicSlopeTraceRecord(_Record):
-    pass_num: int
-    result: Offset
-    skipped: Offset | None = None
-    type: RecordType = RecordType.CIRCLE_HARMONIC_SLOPE
-
-
-@dataclass(frozen=True, slots=True)
-class CircleHarmonicTraceRecord(_Record):
-    pass_num: int
-    radius: float
-    result: Offset
-    harmonic: HarmonicCoeffs
-    type: RecordType = RecordType.CIRCLE_HARMONIC
-
-
-@dataclass(frozen=True, slots=True)
 class CircleBootstrapRecord(_Record):
     pass_num: int
     move: PassMove
     samples: XYCloud
     bounds: Bounds
+    skipped: Offset | None = None
     type: RecordType = RecordType.CIRCLE_BOOTSTRAP_PASS
+
+    def to_trace_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "type": self.type.value,
+            "pass_num": self.pass_num,
+            "result": _json_value(asdict(self.move.result)),
+        }
+        if self.skipped is not None:
+            out["skipped"] = _json_value(asdict(self.skipped))
+        return out
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,6 +277,24 @@ class CircleHarmonicPassRecord(_Record):
     rejected: bool
     reject_reasons: str = ""
     type: RecordType = RecordType.CIRCLE_PASS
+
+    def to_trace_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "type": self.type.value,
+            "pass_num": self.pass_num,
+            "radius": self.radius,
+            "result": _json_value(asdict(self.move.result)),
+            "rejected": self.rejected,
+        }
+        if self.reject_reasons:
+            out["reject_reasons"] = self.reject_reasons
+        if self.fit is not None:
+            out["harmonic"] = {
+                "a": self.fit.a,
+                "b": self.fit.b,
+                "amp": self.fit.amplitude,
+            }
+        return out
 
 
 @dataclass(frozen=True, slots=True)
@@ -324,9 +319,6 @@ SessionRecord: TypeAlias = (
     | PassTraceRecord
     | TernaryStepRecord
     | ScanTraceRecord
-    | CircleBootstrapTraceRecord
-    | CircleHarmonicSlopeTraceRecord
-    | CircleHarmonicTraceRecord
     | CircleBootstrapRecord
     | CircleHarmonicPassRecord
     | AccuracyRepeatRecord
@@ -340,8 +332,6 @@ _PLOT_ONLY_RECORDS = (
     SeriesRecord,
     HeatmapRecord,
     TernaryStepRecord,
-    CircleBootstrapRecord,
-    CircleHarmonicPassRecord,
     AccuracyRepeatRecord,
 )
 
@@ -393,6 +383,21 @@ def _test_primitives() -> None:
 
     assert pass_color(1) == PASS_COLORS[0]
     assert PassMove.compute(Offset.zero(), Offset(1.0, 0.0)).moved.x == 1.0
+
+    circle = CircleHarmonicPassRecord(
+        2,
+        Offset(0.1, 0.2),
+        1.0,
+        PassMove.compute(Offset(0.1, 0.2), Offset(0.2, 0.3)),
+        XYCloud((0.0,), (0.0,), (100.0,)),
+        BinnedProfile((0.0,), (100.0,)),
+        HarmonicFit(100.0, 1.0, 0.0, 1.0, 0.1, 1),
+        rejected=False,
+    )
+    trace = circle.to_trace_dict()
+    assert trace["type"] == "circle_pass"
+    assert trace["harmonic"]["amp"] == 1.0
+    assert "samples" not in trace
 
 
 if __name__ == "__main__":

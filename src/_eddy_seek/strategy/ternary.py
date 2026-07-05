@@ -9,7 +9,6 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -33,7 +32,14 @@ from ..plotting.primitives import (
     pass_color,
 )
 from ..plotting.registry import StrategyPlotter, register_plotter
-from ..plotting.renderer import add_marker, add_scatter, finalize_strategy_plot
+from ..plotting.renderer import (
+    add_marker,
+    add_scatter,
+    final_result_marker,
+    finalize_strategy_plot,
+    group_by_pass,
+    pass_group_stats,
+)
 from ..session import SeekSession
 from .base import SeekStrategy
 
@@ -197,11 +203,7 @@ class TernaryPlotter(StrategyPlotter):
         if not plotly_available() or go is None or make_subplots is None:
             return None
 
-        passes: dict[int, list[Any]] = defaultdict(list)
-        for record in records:
-            pass_num = getattr(record, "pass_num", None)
-            if isinstance(pass_num, int):
-                passes[pass_num].append(record)
+        passes = group_by_pass(records)
         if not passes:
             return None
 
@@ -252,42 +254,17 @@ class TernaryPlotter(StrategyPlotter):
                 y_base=(pass_num - 1) * y_band,
             )
 
-            scatter = next(
-                (record for record in group if isinstance(record, ScatterRecord)),
-                None,
-            )
-            result = next(
-                (
-                    record
-                    for record in group
-                    if isinstance(record, MarkerRecord) and record.symbol == "star"
-                ),
-                None,
-            )
-            freqs = list(scatter.cloud.freqs) if scatter and scatter.cloud.freqs else []
+            stats = pass_group_stats(group)
             pass_rows.append(
                 {
                     "pass": str(pass_num),
-                    "result": (
-                        f"({result.at.x:+.4f}, {result.at.y:+.4f})"
-                        if result is not None
-                        else "n/a"
-                    ),
+                    "result": stats.format_result(),
                     "moved": "n/a",
-                    "freq": (
-                        f"[{min(freqs):.0f}, {max(freqs):.0f}]" if freqs else "n/a"
-                    ),
+                    "freq": stats.format_freq_range(),
                 }
             )
 
-        final_marker = next(
-            (
-                record
-                for record in passes[pass_nums[-1]]
-                if isinstance(record, MarkerRecord) and record.symbol == "star"
-            ),
-            None,
-        )
+        final_marker = final_result_marker(passes)
         final = final_marker.at if final_marker is not None else Offset.zero()
         fig.update_xaxes(title_text="X offset (mm)", row=1, col=1)
         fig.update_yaxes(title_text="Y offset (mm)", row=1, col=1)

@@ -11,7 +11,6 @@ Continuous sweep motion with frequency-weighted centroid peak finding.
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -37,8 +36,11 @@ from ..plotting.renderer import (
     add_box,
     add_marker,
     add_scatter,
+    final_result_marker,
     finalize_strategy_plot,
+    group_by_pass,
     layout_with_stats,
+    pass_group_stats,
 )
 from ..session import SeekSession
 from .base import SeekStrategy
@@ -196,15 +198,11 @@ class SweepCentroidPlotter(StrategyPlotter):
         if not plotly_available() or go is None:
             return None
 
-        passes: dict[int, list[Any]] = defaultdict(list)
+        passes = group_by_pass(records)
         phases: dict[int, str] = {}
         for record in records:
-            pass_num = getattr(record, "pass_num", None)
-            if not isinstance(pass_num, int):
-                continue
-            passes[pass_num].append(record)
             if isinstance(record, PassTraceRecord):
-                phases[pass_num] = record.phase
+                phases[record.pass_num] = record.phase
 
         if not passes:
             return None
@@ -226,55 +224,19 @@ class SweepCentroidPlotter(StrategyPlotter):
 
                     add_marker(fig, record, color, size=size)
 
-            scatter = next(
-                (record for record in group if isinstance(record, ScatterRecord)),
-                None,
-            )
-            result = next(
-                (
-                    record
-                    for record in group
-                    if isinstance(record, MarkerRecord) and record.symbol == "star"
-                ),
-                None,
-            )
-            center = next(
-                (
-                    record
-                    for record in group
-                    if isinstance(record, MarkerRecord) and record.symbol == "x"
-                ),
-                None,
-            )
-            freqs = list(scatter.cloud.freqs) if scatter and scatter.cloud.freqs else []
-            moved = Offset.zero()
-            if result is not None and center is not None:
-                moved = (result.at - center.at).abs_components()
+            stats = pass_group_stats(group)
             pass_rows.append(
                 {
                     "pass": str(pass_num),
                     "phase": phase,
-                    "result": (
-                        f"({result.at.x:+.4f}, {result.at.y:+.4f})"
-                        if result is not None
-                        else "n/a"
-                    ),
-                    "moved": f"({moved.x:.4f}, {moved.y:.4f})",
-                    "samples": str(len(scatter.cloud.xs)) if scatter else "0",
-                    "freq": (
-                        f"[{min(freqs):.0f}, {max(freqs):.0f}]" if freqs else "n/a"
-                    ),
+                    "result": stats.format_result(),
+                    "moved": stats.format_moved(),
+                    "samples": str(stats.sample_count),
+                    "freq": stats.format_freq_range(),
                 }
             )
 
-        final_marker = next(
-            (
-                record
-                for record in passes[pass_nums[-1]]
-                if isinstance(record, MarkerRecord) and record.symbol == "star"
-            ),
-            None,
-        )
+        final_marker = final_result_marker(passes)
         final = final_marker.at if final_marker is not None else Offset.zero()
         layout_with_stats(
             fig,

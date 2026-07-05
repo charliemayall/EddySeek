@@ -11,11 +11,14 @@ Shared Plotly builders for session record primitives.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from ..common import session_artifact_filename
+from ..common import Offset, session_artifact_filename
 from ._plotly import (
     apply_axes_theme,
     freq_marker,
@@ -38,6 +41,92 @@ if TYPE_CHECKING:
     from ..session import SeekSession
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class PassGroupStats:
+    scatter: ScatterRecord | None
+    center: MarkerRecord | None
+    result: MarkerRecord | None
+
+    @property
+    def freqs(self) -> list[float]:
+        if self.scatter is None or self.scatter.cloud.freqs is None:
+            return []
+        return list(self.scatter.cloud.freqs)
+
+    @property
+    def moved(self) -> Offset:
+        if self.result is None or self.center is None:
+            return Offset.zero()
+        return (self.result.at - self.center.at).abs_components()
+
+    @property
+    def sample_count(self) -> int:
+        if self.scatter is None:
+            return 0
+        return len(self.scatter.cloud.xs)
+
+    def format_result(self) -> str:
+        if self.result is None:
+            return "n/a"
+        return f"({self.result.at.x:+.4f}, {self.result.at.y:+.4f})"
+
+    def format_moved(self) -> str:
+        return f"({self.moved.x:.4f}, {self.moved.y:.4f})"
+
+    def format_freq_range(self) -> str:
+        freqs = self.freqs
+        if not freqs:
+            return "n/a"
+        return f"[{min(freqs):.0f}, {max(freqs):.0f}]"
+
+
+def group_by_pass(records: Sequence[Any]) -> dict[int, list[Any]]:
+    passes: dict[int, list[Any]] = defaultdict(list)
+    for record in records:
+        pass_num = getattr(record, "pass_num", None)
+        if isinstance(pass_num, int):
+            passes[pass_num].append(record)
+    return passes
+
+
+def pass_group_stats(group: Sequence[Any]) -> PassGroupStats:
+    scatter = next(
+        (record for record in group if isinstance(record, ScatterRecord)),
+        None,
+    )
+    result = next(
+        (
+            record
+            for record in group
+            if isinstance(record, MarkerRecord) and record.symbol == "star"
+        ),
+        None,
+    )
+    center = next(
+        (
+            record
+            for record in group
+            if isinstance(record, MarkerRecord) and record.symbol == "x"
+        ),
+        None,
+    )
+    return PassGroupStats(scatter=scatter, center=center, result=result)
+
+
+def final_result_marker(passes: dict[int, list[Any]]) -> MarkerRecord | None:
+    if not passes:
+        return None
+    last_group = passes[max(passes)]
+    return next(
+        (
+            record
+            for record in last_group
+            if isinstance(record, MarkerRecord) and record.symbol == "star"
+        ),
+        None,
+    )
 
 
 def plot_filename(

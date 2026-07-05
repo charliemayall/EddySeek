@@ -23,7 +23,7 @@ from _eddy_seek.optimizer import bin_frequencies
 from _eddy_seek.plotting import accuracy as _accuracy_plot  # noqa: F401
 from _eddy_seek.plotting import plot_filename, render_session_plot, write_figure
 from _eddy_seek.plotting._plotly import THEME_COLORS, write_html
-from _eddy_seek.plotting.debug_scan import DebugScanRecord, write_debug_scan_plot
+from _eddy_seek.plotting.debug_scan import render_debug_scan_figure
 from _eddy_seek.plotting.primitives import (
     AccuracyRepeatRecord,
     BinnedProfile,
@@ -363,16 +363,19 @@ def test_debug_scan_plot_returns_figure(requires_plotly):
     z, x_centers, y_centers = bin_frequencies(
         samples, box, tolerance=0.5, center=Offset.zero(), search_for="max"
     )
-    record = DebugScanRecord(
-        center=Offset.zero(),
-        result=Offset(0.05, -0.02),
-        samples=samples,
-        box=box,
-        z=z,
-        x_centers=x_centers,
-        y_centers=y_centers,
+    record = HeatmapRecord(
+        move=PassMove.compute(Offset.zero(), Offset(0.05, -0.02)),
+        bounds=Bounds.from_box(box),
+        z=tuple(tuple(row) for row in z),
+        x_centers=tuple(x_centers),
+        y_centers=tuple(y_centers),
+        samples=XYCloud(
+            tuple(sample.offset.x for sample in samples),
+            tuple(sample.offset.y for sample in samples),
+            tuple(sample.freq for sample in samples),
+        ),
     )
-    fig = write_debug_scan_plot(record=record, search_for="max")
+    fig = render_debug_scan_figure(record, search_for="max")
     assert fig is not None
     heatmaps = [trace for trace in fig.data if trace.type == "heatmap"]
     assert len(heatmaps) == 5
@@ -449,16 +452,19 @@ def test_save_preview_debug_scan_plot(requires_plotly):
     z, x_centers, y_centers = bin_frequencies(
         samples, box, tolerance, center=Offset.zero(), search_for="max"
     )
-    record = DebugScanRecord(
-        center=Offset.zero(),
-        result=Offset(0.0, 0.0),
-        samples=samples,
-        box=box,
-        z=z,
-        x_centers=x_centers,
-        y_centers=y_centers,
+    record = HeatmapRecord(
+        move=PassMove.compute(Offset.zero(), Offset(0.0, 0.0)),
+        bounds=Bounds.from_box(box),
+        z=tuple(tuple(row) for row in z),
+        x_centers=tuple(x_centers),
+        y_centers=tuple(y_centers),
+        samples=XYCloud(
+            tuple(sample.offset.x for sample in samples),
+            tuple(sample.offset.y for sample in samples),
+            tuple(sample.freq for sample in samples),
+        ),
     )
-    fig = write_debug_scan_plot(record=record, search_for="max")
+    fig = render_debug_scan_figure(record, search_for="max")
     assert fig is not None
 
     out_dir = Path(__file__).resolve().parent / "output"

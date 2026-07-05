@@ -19,7 +19,7 @@ from ..kconsole import KConsole
 from ..movement.handler import MotionSample
 from ..movement.leg_planner import sweep_grid
 from ..optimizer import bin_frequencies, peak_bin_center
-from ..plotting.debug_scan import DebugScanRecord, write_debug_scan_plot
+from ..plotting.debug_scan import render_debug_scan_figure
 from ..plotting.primitives import (
     Bounds,
     HeatmapRecord,
@@ -163,23 +163,4 @@ class DebugScanPlotter(StrategyPlotter):
         )
         if heatmap is None:
             return None
-        freqs = heatmap.samples.freqs or (0.0,) * len(heatmap.samples.xs)
-        samples = [
-            MotionSample(Offset(x, y), freq, 0.0)
-            for x, y, freq in zip(
-                heatmap.samples.xs,
-                heatmap.samples.ys,
-                freqs,
-                strict=True,
-            )
-        ]
-        record = DebugScanRecord(
-            center=heatmap.move.center,
-            result=heatmap.move.result,
-            samples=samples,
-            box=heatmap.bounds.as_box(),
-            z=[list(row) for row in heatmap.z],
-            x_centers=list(heatmap.x_centers),
-            y_centers=list(heatmap.y_centers),
-        )
-        return write_debug_scan_plot(record=record, search_for=search_for)
+        return render_debug_scan_figure(heatmap, search_for=search_for)
