@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import math
+from dataclasses import dataclass
 
 from ..common import Axis, Offset, Phase, samples_in_box, search_box
 from ..harmonic import (
@@ -32,10 +33,10 @@ from ..harmonic import (
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample, get_clamped_speed_for_min_samples_over_span
 from ..movement.leg_planner import (
+    axis_sweep_centroid,
     clamped_sweep_axis,
     get_samples_from_capture_legs,
 )
-from ..optimizer import decoupled_centroid
 from ..plotting.primitives import (
     BinnedProfile,
     Bounds,
@@ -46,9 +47,24 @@ from ..plotting.primitives import (
 )
 from ..plotting.renderer import finalize_strategy_plot
 from ..session import SeekSession
-from .base import SeekStrategy, _check_pass_divergence
+from .base import SeekStrategy
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class _CirclePassOutcome:
+    result: Offset
+    plot_result: Offset
+    trace_center: Offset
+    trace_radius: float
+    samples: list[MotionSample]
+    binned: list[tuple[float, float]]
+    fit: HarmonicFit | None
+    rejected: bool
+    reject_reasons: str
+    freeze: bool
+    record: bool
 
 
 class CircleHarmonicStrategy(SeekStrategy):
@@ -82,63 +98,47 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._last_pass_rejected = False
         return finalize_strategy_plot(ctx, self.name)
 
-    def search(self, ctx: SeekSession, console: KConsole) -> tuple[Offset, int]:
-        """Keep trying smaller circle radii after a rejected harmonic fit."""
+    def _before_pass(self, ctx: SeekSession, pass_num: int) -> None:
+        self._last_pass_rejected = False
 
+    def should_check_divergence(self, ctx: SeekSession, pass_num: int) -> bool:
+        return not self._last_pass_rejected
+
+    def should_stop(
+        self,
+        ctx: SeekSession,
+        pass_num: int,
+        best: Offset,
+        moved: Offset,
+    ) -> bool:
+        if self._frozen is None:
+            return False
+        logger.info(
+            f"eddy_seek: {self.name} finished after pass {pass_num} "
+            f"(frozen at {best.x:.4f}, {best.y:.4f})"
+        )
+        return True
+
+    def continue_after_convergence(
+        self,
+        ctx: SeekSession,
+        pass_num: int,
+        moved: Offset,
+    ) -> bool:
         cfg = ctx.config
-        best = Offset.zero()
-        positions = [best]
-        passes_run = 0
-
-        for pass_num in range(1, cfg.max_passes + 1):
-            passes_run = pass_num
+        if self._last_pass_rejected:
             logger.info(
-                f"eddy_seek: {self.name} pass {pass_num} start "
-                f"best=({best.x:.4f}, {best.y:.4f})"
+                f"eddy_seek: {self.name} pass {pass_num} rejected "
+                f"- retrying with smaller circle if passes remain"
             )
-            self._last_pass_rejected = False
-            new = self._step(ctx, pass_num, best)
-            moved = (new - best).abs_components()
-            console.info(self._pass_message(pass_num, new, moved, ctx))
-            positions.append(new)
-            if not self._last_pass_rejected:
-                _check_pass_divergence(
-                    positions, tolerance=cfg.tolerance, pass_num=pass_num
-                )
-            best = new
-
-            if self._frozen is not None:
-                logger.info(
-                    f"eddy_seek: {self.name} finished after pass {pass_num} "
-                    f"(frozen at {best.x:.4f}, {best.y:.4f})"
-                )
-                break
-
-            if moved.x < cfg.tolerance and moved.y < cfg.tolerance:
-                if self._last_pass_rejected:
-                    logger.info(
-                        f"eddy_seek: {self.name} pass {pass_num} rejected "
-                        f"- retrying with smaller circle if passes remain"
-                    )
-                    continue
-                if cfg.circle_bootstrap_slope_only and pass_num == 1:
-                    logger.info(
-                        f"eddy_seek: {self.name} slope-only bootstrap done "
-                        f"- continuing to circle passes"
-                    )
-                    continue
-                logger.info(
-                    f"eddy_seek: {self.name} converged after pass {pass_num} "
-                    f"(moved {moved.x:.4f}, {moved.y:.4f})"
-                )
-                break
-        else:
+            return True
+        if cfg.circle_bootstrap_slope_only and pass_num == 1:
             logger.info(
-                f"eddy_seek: {self.name} hit max_passes={cfg.max_passes} "
-                "without convergence"
+                f"eddy_seek: {self.name} slope-only bootstrap done "
+                f"- continuing to circle passes"
             )
-
-        return best, passes_run
+            return True
+        return False
 
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         if self._frozen is not None:
@@ -178,33 +178,22 @@ class CircleHarmonicStrategy(SeekStrategy):
         best: Offset,
     ) -> Offset:
         cfg = ctx.config
-        half_x = cfg.max_jog_x
-        half_y = cfg.max_jog_y
-        speed = cfg.sweep_coarse_speed
-
-        _, samples_x = clamped_sweep_axis(
-            ctx, Axis.X, best.x, half_x, best.y, speed, Phase.COARSE, pass_num
+        sweep = axis_sweep_centroid(
+            ctx,
+            best,
+            half_x=cfg.max_jog_x,
+            half_y=cfg.max_jog_y,
+            speed=cfg.sweep_coarse_speed,
+            phase=Phase.COARSE,
+            pass_num=pass_num,
+            label="circle_harmonic bootstrap",
         )
-        _, samples_y = clamped_sweep_axis(
-            ctx, Axis.Y, best.y, half_y, best.x, speed, Phase.COARSE, pass_num
-        )
-        box = search_box(best, half_x, half_y, cfg.max_jog_x, cfg.max_jog_y)
-        in_box_x = samples_in_box(samples_x, box)
-        in_box_y = samples_in_box(samples_y, box)
+        self._x_profile = sweep.x_profile
+        self._y_profile = sweep.y_profile
+        result_or_none = sweep.centroid
+        box = sweep.box
+        in_box = sweep.in_box
 
-        if len(in_box_x) + len(in_box_y) < cfg.min_sweep_samples:
-            raise RuntimeError(
-                f"eddy_seek: circle_harmonic bootstrap collected "
-                f"{len(in_box_x) + len(in_box_y)} samples "
-                f"(need >= {cfg.min_sweep_samples})"
-            )
-
-        x_profile = [(s.offset.x, s.freq) for s in in_box_x]
-        y_profile = [(s.offset.y, s.freq) for s in in_box_y]
-        self._x_profile = x_profile
-        self._y_profile = y_profile
-
-        result_or_none = decoupled_centroid(x_profile, y_profile, cfg.search_for)
         if cfg.circle_bootstrap_slope_only:
             self._bootstrap = best
             centroid = (
@@ -228,7 +217,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 pass_num,
                 best,
                 best,
-                [*in_box_x, *in_box_y],
+                in_box,
                 box,
                 skipped=centroid,
             )
@@ -245,7 +234,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 pass_num,
                 best,
                 best,
-                [*in_box_x, *in_box_y],
+                in_box,
                 box,
             )
             return best
@@ -260,7 +249,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             pass_num,
             best,
             result,
-            [*in_box_x, *in_box_y],
+            in_box,
             box,
         )
         return result
@@ -271,6 +260,15 @@ class CircleHarmonicStrategy(SeekStrategy):
         pass_num: int,
         best: Offset,
     ) -> Offset:
+        outcome = self._compute_circle_pass(ctx, pass_num, best)
+        return self._finish_circle_pass(ctx, pass_num, best, outcome)
+
+    def _compute_circle_pass(
+        self,
+        ctx: SeekSession,
+        pass_num: int,
+        best: Offset,
+    ) -> _CirclePassOutcome:
         cfg = ctx.config
         bootstrap = self._bootstrap if self._bootstrap is not None else best
 
@@ -289,20 +287,41 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"eddy_seek: circle_harmonic pass {pass_num} radius {trace_radius:.4f} "
                 f"< min {cfg.circle_radius_min} - holding bootstrap"
             )
-            self._frozen = best
-            return best
+            return _CirclePassOutcome(
+                result=best,
+                plot_result=best,
+                trace_center=trace_center,
+                trace_radius=trace_radius,
+                samples=[],
+                binned=[],
+                fit=None,
+                rejected=False,
+                reject_reasons="",
+                freeze=True,
+                record=False,
+            )
 
         legs = circle_arc_legs(trace_center, trace_radius, cfg.circle_arc_resolution)
         if not legs:
-            self._frozen = best
-            return best
-        circumfrence = 2 * math.pi * trace_radius
+            return _CirclePassOutcome(
+                result=best,
+                plot_result=best,
+                trace_center=trace_center,
+                trace_radius=trace_radius,
+                samples=[],
+                binned=[],
+                fit=None,
+                rejected=False,
+                reject_reasons="",
+                freeze=True,
+                record=False,
+            )
+
+        circumference = 2 * math.pi * trace_radius
         clamped_speed = get_clamped_speed_for_min_samples_over_span(
             requested_mm_min=cfg.circle_speed,
-            span_mm=circumfrence,  # approx equal to the polygon we move on
-            min_samples=max(
-                cfg.min_sweep_samples, 2 * len(legs)
-            ),  # try to force ~2 samples per segment
+            span_mm=circumference,
+            min_samples=max(cfg.min_sweep_samples, 2 * len(legs)),
         )
         logger.info(
             f"eddy_seek: circle_harmonic pass {pass_num} "
@@ -328,25 +347,23 @@ class CircleHarmonicStrategy(SeekStrategy):
         fit_samples = binned_to_motion_samples(trace_center, trace_radius, binned)
         fit = fit_first_harmonic(fit_samples, trace_center)
         if fit is None:
-            self._last_pass_rejected = True
             logger.warning(
                 f"eddy_seek: circle_harmonic pass {pass_num} fit failed "
                 f"(r={trace_radius:.3f}) - holding bootstrap"
             )
-            self._record_circle_plot(
-                ctx,
-                pass_num,
-                best,
-                bootstrap,
-                trace_center,
-                trace_radius,
-                samples,
-                binned,
+            return _CirclePassOutcome(
+                result=best,
+                plot_result=bootstrap,
+                trace_center=trace_center,
+                trace_radius=trace_radius,
+                samples=samples,
+                binned=binned,
                 fit=None,
                 rejected=True,
                 reject_reasons="fit failed",
+                freeze=False,
+                record=True,
             )
-            return best
 
         reject_reasons = harmonic_reject_reasons(
             fit,
@@ -355,26 +372,24 @@ class CircleHarmonicStrategy(SeekStrategy):
             min_quality=cfg.harmonic_min_quality,
         )
         if reject_reasons:
-            self._last_pass_rejected = True
             logger.warning(
                 f"eddy_seek: circle_harmonic pass {pass_num} model rejected "
                 f"(r={trace_radius:.3f} amp={fit.amplitude:.4f} "
                 f"noise={fit.noise:.4f}): {', '.join(reject_reasons)}"
             )
-            self._record_circle_plot(
-                ctx,
-                pass_num,
-                best,
-                bootstrap,
-                trace_center,
-                trace_radius,
-                samples,
-                binned,
+            return _CirclePassOutcome(
+                result=best,
+                plot_result=bootstrap,
+                trace_center=trace_center,
+                trace_radius=trace_radius,
+                samples=samples,
+                binned=binned,
                 fit=fit,
                 rejected=True,
                 reject_reasons=", ".join(reject_reasons),
+                freeze=False,
+                record=True,
             )
-            return best
 
         f_prime = radial_slope(
             self._x_profile, self._y_profile, trace_radius, center=trace_center
@@ -407,46 +422,70 @@ class CircleHarmonicStrategy(SeekStrategy):
             cfg.tolerance,
             anchor_floor=anchor_floor,
         ):
-            self._last_pass_rejected = True
             logger.warning(
                 f"eddy_seek: circle_harmonic pass {pass_num} diverged from bootstrap "
                 f"Δ={divergence:.4f} > limit {divergence_limit:.4f} "
                 f"({result.x:.4f}, {result.y:.4f}) vs ({bootstrap.x:.4f}, {bootstrap.y:.4f})"
             )
-            self._record_circle_plot(
-                ctx,
-                pass_num,
-                best,
-                bootstrap,
-                trace_center,
-                trace_radius,
-                samples,
-                binned,
+            return _CirclePassOutcome(
+                result=best,
+                plot_result=bootstrap,
+                trace_center=trace_center,
+                trace_radius=trace_radius,
+                samples=samples,
+                binned=binned,
                 fit=fit,
                 rejected=True,
                 reject_reasons=(
                     f"diverged from bootstrap (Δ={divergence:.4f} > {divergence_limit:.4f})"
                 ),
+                freeze=False,
+                record=True,
             )
-            return best
 
-        if harmonic_converged(fit, step, cfg.tolerance, cfg.noise_k):
+        converged = harmonic_converged(fit, step, cfg.tolerance, cfg.noise_k)
+        if converged:
             logger.info(f"eddy_seek: circle_harmonic converged at pass {pass_num}")
-            self._frozen = result
-
-        self._record_circle_plot(
-            ctx,
-            pass_num,
-            best,
-            result,
-            trace_center,
-            trace_radius,
-            samples,
-            binned,
+        return _CirclePassOutcome(
+            result=result,
+            plot_result=result,
+            trace_center=trace_center,
+            trace_radius=trace_radius,
+            samples=samples,
+            binned=binned,
             fit=fit,
             rejected=False,
+            reject_reasons="",
+            freeze=converged,
+            record=True,
         )
-        return result
+
+    def _finish_circle_pass(
+        self,
+        ctx: SeekSession,
+        pass_num: int,
+        best: Offset,
+        outcome: _CirclePassOutcome,
+    ) -> Offset:
+        if outcome.rejected:
+            self._last_pass_rejected = True
+        if outcome.freeze:
+            self._frozen = outcome.result
+        if outcome.record:
+            self._record_circle_plot(
+                ctx,
+                pass_num,
+                best,
+                outcome.plot_result,
+                outcome.trace_center,
+                outcome.trace_radius,
+                outcome.samples,
+                outcome.binned,
+                fit=outcome.fit,
+                rejected=outcome.rejected,
+                reject_reasons=outcome.reject_reasons,
+            )
+        return outcome.result
 
     def _record_bootstrap_plot(
         self,

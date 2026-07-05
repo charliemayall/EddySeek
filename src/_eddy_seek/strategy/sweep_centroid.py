@@ -14,11 +14,10 @@ import logging
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from ..common import Axis, Offset, Phase, samples_in_box, search_box
+from ..common import Offset, Phase
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample
-from ..movement.leg_planner import clamped_sweep_axis
-from ..optimizer import decoupled_centroid
+from ..movement.leg_planner import axis_sweep_centroid
 from ..plotting._plotly import go, plotly_available
 from ..plotting.primitives import (
     Bounds,
@@ -81,28 +80,22 @@ class SweepCentroidStrategy(SeekStrategy):
         half_x = cfg.max_jog_x * shrink
         half_y = cfg.max_jog_y * shrink
 
-        _, samples_x = clamped_sweep_axis(
-            ctx, Axis.X, best.x, half_x, best.y, speed, phase, pass_num
+        sweep = axis_sweep_centroid(
+            ctx,
+            best,
+            half_x=half_x,
+            half_y=half_y,
+            speed=speed,
+            phase=phase,
+            pass_num=pass_num,
+            label=f"sweep_centroid pass {pass_num}",
         )
-        _, samples_y = clamped_sweep_axis(
-            ctx, Axis.Y, best.y, half_y, best.x, speed, phase, pass_num
-        )
-        box = search_box(best, half_x, half_y, cfg.max_jog_x, cfg.max_jog_y)
-        in_box_x = samples_in_box(samples_x, box)
-        in_box_y = samples_in_box(samples_y, box)
-        in_box = in_box_x + in_box_y
+        in_box = sweep.in_box
+        x_profile = sweep.x_profile
+        y_profile = sweep.y_profile
+        result_or_none = sweep.centroid
+        box = sweep.box
 
-        if len(in_box) < cfg.min_sweep_samples:
-            raise RuntimeError(
-                f"eddy_seek: sweep_centroid pass {pass_num} collected "
-                f"{len(in_box)} in-range samples "
-                f"(need >= {cfg.min_sweep_samples}). "
-                "Check sensor and sweep speed."
-            )
-
-        x_profile = [(sample.offset.x, sample.freq) for sample in in_box_x]
-        y_profile = [(sample.offset.y, sample.freq) for sample in in_box_y]
-        result_or_none = decoupled_centroid(x_profile, y_profile, cfg.search_for)
         if result_or_none is None:
             logger.warning(
                 f"eddy_seek: flat frequency response on sweep pass {pass_num} - "

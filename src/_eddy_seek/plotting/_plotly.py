@@ -288,7 +288,7 @@ def multi_panel_layout(
 
 
 def xy_session_layout(
-    strategy: str,
+    title: str,
     *,
     columns: list[tuple[str, str]],
     rows: list[dict[str, str]],
@@ -296,7 +296,7 @@ def xy_session_layout(
 ) -> dict[str, Any]:
     """Square XY plot layout with session stats in HTML header meta."""
     return single_xy_layout(
-        title=strategy,
+        title=title,
         tables=[header_table(columns, rows)],
         final=final,
     )

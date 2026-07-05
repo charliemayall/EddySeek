@@ -12,6 +12,7 @@ from fakes import fake_motion_printer
 from pytest import raises
 
 from _eddy_seek.common import Axis, Offset, Phase, Position, samples_in_box, search_box
+from _eddy_seek.config import SeekConfig
 from _eddy_seek.movement.handler import (
     MotionHandler,
     MotionSample,
@@ -20,6 +21,7 @@ from _eddy_seek.movement.handler import (
     get_clamped_speed_for_min_samples_over_span,
 )
 from _eddy_seek.movement.leg_planner import (
+    axis_sweep_centroid,
     iter_cross_offsets,
     sweep_axis,
     traversal_endpoints,
@@ -174,3 +176,67 @@ def test_sweep_axis_passes_speed_through():
 
     handler.run_capture_legs.assert_called_once()
     assert handler.run_capture_legs.call_args.args[1] == speed
+
+
+def test_axis_sweep_centroid_builds_profiles_and_centroid():
+    ctx = MagicMock()
+    ctx.config = SeekConfig(search_for="max", min_sweep_samples=5)
+
+    samples_x = [
+        MotionSample(Offset(x, 0.0), 100.0 - 5.0 * x * x, 0.0)
+        for x in [i * 0.1 for i in range(-10, 11)]
+    ]
+    samples_y = [
+        MotionSample(Offset(0.0, y), 100.0 - 5.0 * y * y, 0.0)
+        for y in [i * 0.1 for i in range(-10, 11)]
+    ]
+
+    with patch(
+        "_eddy_seek.movement.leg_planner.clamped_sweep_axis",
+        side_effect=[([], samples_x), ([], samples_y)],
+    ):
+        result = axis_sweep_centroid(
+            ctx,
+            Offset.zero(),
+            half_x=5.0,
+            half_y=5.0,
+            speed=3000.0,
+            phase=Phase.COARSE,
+            pass_num=1,
+            label="test",
+        )
+
+    assert len(result.in_box) == len(samples_x) + len(samples_y)
+    assert len(result.x_profile) == len(samples_x)
+    assert len(result.y_profile) == len(samples_y)
+    assert result.centroid is not None
+    assert result.centroid.x == 0.0
+    assert result.centroid.y == 0.0
+
+
+def test_axis_sweep_centroid_raises_when_too_few_samples():
+    ctx = MagicMock()
+    ctx.config = SeekConfig(min_sweep_samples=50)
+
+    samples_x = [
+        MotionSample(Offset(x, 0.0), 100.0, 0.0) for x in [i * 0.1 for i in range(5)]
+    ]
+    samples_y = [
+        MotionSample(Offset(0.0, y), 100.0, 0.0) for y in [i * 0.1 for i in range(5)]
+    ]
+
+    with patch(
+        "_eddy_seek.movement.leg_planner.clamped_sweep_axis",
+        side_effect=[([], samples_x), ([], samples_y)],
+    ):
+        with raises(RuntimeError, match="test collected 10 in-range samples"):
+            axis_sweep_centroid(
+                ctx,
+                Offset.zero(),
+                half_x=5.0,
+                half_y=5.0,
+                speed=3000.0,
+                phase=Phase.COARSE,
+                pass_num=1,
+                label="test",
+            )

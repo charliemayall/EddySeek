@@ -272,7 +272,7 @@ def test_circle_harmonic_slope_only_bootstrap_holds_center_and_keeps_profiles():
     ]
 
     with patch(
-        "_eddy_seek.strategy.circle_harmonic.clamped_sweep_axis",
+        "_eddy_seek.movement.leg_planner.clamped_sweep_axis",
         side_effect=[([], samples_x), ([], samples_y)],
     ):
         result = strategy._bootstrap_pass(ctx, 1, Offset.zero())
