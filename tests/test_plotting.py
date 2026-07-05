@@ -35,12 +35,6 @@ from _eddy_seek.plotting.primitives import (
     XYCloud,
 )
 from _eddy_seek.plotting.recorder import SessionRecorder
-from _eddy_seek.strategy import (  # noqa: F401
-    centroid,
-    circle_harmonic,
-    debug_scan,
-    sweep_centroid,
-)
 from _eddy_seek.strategy.centroid import CentroidStrategy, _record_centroid_pass
 from _eddy_seek.strategy.sweep_centroid import _record_sweep_centroid_pass
 
@@ -169,11 +163,21 @@ def test_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
     recorder = SessionRecorder(trace=False, plots=True)
     ctx = SimpleNamespace(recorder=recorder)
     _record_centroid_pass(
-        ctx, 1, Offset.zero(), Offset(0.1, 0.0), Offset(0.1, 0.0), probes
-    )  # type: ignore[arg-type]
+        ctx,
+        1,
+        Offset.zero(),
+        Offset(0.1, 0.0),
+        Offset(0.1, 0.0),
+        probes,  # pyright: ignore[reportArgumentType]
+    )
     _record_centroid_pass(
-        ctx, 2, Offset(0.1, 0.0), Offset(0.0, 0.0), Offset(0.1, 0.0), probes
-    )  # type: ignore[arg-type]
+        ctx,
+        2,
+        Offset(0.1, 0.0),
+        Offset(0.0, 0.0),
+        Offset(0.1, 0.0),
+        probes,  # pyright: ignore[reportArgumentType]
+    )
     path = write_figure(
         tmp_path,
         render_session_plot("centroid", recorder.records(), search_for="max"),
@@ -191,7 +195,7 @@ def _sweep_centroid_records(
     recorder = SessionRecorder(trace=False, plots=True)
     ctx = SimpleNamespace(recorder=recorder)
     _record_sweep_centroid_pass(
-        ctx,  # type: ignore[arg-type]
+        ctx,  # pyright: ignore[reportArgumentType]
         pass_num,
         phase,
         Offset.zero(),
@@ -213,7 +217,7 @@ def test_sweep_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
     recorder = SessionRecorder(trace=False, plots=True)
     ctx = SimpleNamespace(recorder=recorder)
     _record_sweep_centroid_pass(
-        ctx,
+        ctx,  # pyright: ignore[reportArgumentType]
         1,
         Phase.COARSE,
         Offset.zero(),
@@ -223,7 +227,7 @@ def test_sweep_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
         (-1.0, 1.0, -1.0, 1.0),  # type: ignore[arg-type]
     )
     _record_sweep_centroid_pass(
-        ctx,
+        ctx,  # pyright: ignore[reportArgumentType]
         2,
         Phase.FINE,
         Offset(0.1, 0.0),
@@ -322,7 +326,7 @@ def test_save_preview_plot(requires_plotly):
         recorder = SessionRecorder(trace=False, plots=True)
         ctx = SimpleNamespace(recorder=recorder)
         _record_sweep_centroid_pass(
-            ctx,
+            ctx,  # pyright: ignore[reportArgumentType]
             pass_num,
             phase,
             center,

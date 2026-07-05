@@ -130,7 +130,7 @@ class EddySeek(SeekHost):
         )
 
     def add_sensor_client(self, callback) -> None:
-        self._sensor.add_client(callback)  # type: ignore[arg-type]
+        self._sensor.add_client(callback)
 
     def refresh_console(self, gcmd: GCodeCommand) -> KConsole:
         self.console = console_for_gcmd(gcmd, self.seek_config)
@@ -157,7 +157,7 @@ class EddySeek(SeekHost):
         """Start LDC1612 bulk sampling while a seek session or query needs data."""
         self._stream_refs += 1
         if self._stream_refs == 1 and not self._batch_client_added:
-            self._sensor.add_client(self._handle_batch)  # type: ignore[arg-type]
+            self._sensor.add_client(self._handle_batch)
             self._batch_client_added = True
             logger.info(f"eddy_seek: started sensor stream on {self._sensor.name!r}")
         try:

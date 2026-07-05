@@ -120,9 +120,9 @@ def lookup_toolhead_position(toolhead: ToolHead, print_time: float) -> Position:
     kin = toolhead.get_kinematics()
     kin_spos = {
         s.get_name(): s.mcu_to_commanded_position(s.get_past_mcu_position(print_time))
-        for s in kin.get_steppers()  # type: ignore[union-attr]
+        for s in kin.get_steppers()  # pyright: ignore[reportAttributeAccessIssue]
     }
-    pos = kin.calc_position(kin_spos)  # type: ignore[union-attr]
+    pos = kin.calc_position(kin_spos)  # pyright: ignore[reportAttributeAccessIssue]
     return Position.from_pair(pos)
 
 
@@ -368,13 +368,13 @@ class MotionHandler(_SessionMotionBase):
                     "eddy_seek: LDC1612 sensor outage during sweep "
                     f"(no data by t={capture_end:.3f})"
                 )
-            reactor.pause(systime + 0.010)  # type: ignore[union-attr]
+            reactor.pause(systime + 0.010)  # pyright: ignore[reportAttributeAccessIssue]
             self._process_buffered_data()
 
     def _sensor_outage(self, systime: float, end_time: float) -> bool:
         try:
             mcu = self._printer.lookup_object("mcu")
-            est = mcu.estimated_print_time(systime)  # type: ignore[union-attr]
+            est = mcu.estimated_print_time(systime)  # pyright: ignore[reportAttributeAccessIssue]
             return est > end_time + 1.0
         except Exception:
             return False

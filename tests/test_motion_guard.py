@@ -79,7 +79,7 @@ def _known_state_printer() -> FakePrinter:
 
 def test_clear_gcode_offset_xy_zeros_xy():
     printer = FakePrinter(gcode=FakeGcode())
-    clear_gcode_offset_xy(printer)  # type: ignore[arg-type]
+    clear_gcode_offset_xy(printer)  # pyright: ignore[reportArgumentType]
     assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=0.0 Y=0.0"]
 
 
@@ -87,7 +87,7 @@ def test_known_kinematic_limits_does_not_touch_gcode_offset():
     gcode = FakeGcode()
     printer = FakePrinter(gcode=gcode, toolhead=_FakeToolhead())
 
-    with KnownKinematicLimits(printer):  # type: ignore[arg-type]
+    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
         pass
 
     assert gcode.scripts == []
@@ -100,7 +100,7 @@ def test_known_kinematic_limits_caps_scv_and_restores_toolhead_limits():
     toolhead.square_corner_velocity = 15.0
     toolhead.min_cruise_ratio = 0.5
 
-    with KnownKinematicLimits(printer):  # type: ignore[arg-type]
+    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
         assert toolhead.square_corner_velocity == 9.0
         assert toolhead.min_cruise_ratio == 0.5
         assert _FakeToolhead.calc_calls == 1
@@ -117,7 +117,7 @@ def test_known_kinematic_limits_leaves_scv_unchanged_when_below_cap():
     toolhead.square_corner_velocity = 5.0
     toolhead.min_cruise_ratio = 0.5
 
-    with KnownKinematicLimits(printer):  # type: ignore[arg-type]
+    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
         assert toolhead.square_corner_velocity == 5.0
         assert toolhead.min_cruise_ratio == 0.5
 
@@ -130,7 +130,7 @@ def test_known_kinematic_limits_caps_accel_and_restores():
     toolhead = printer.lookup_object("toolhead")
     toolhead.max_accel = 5000.0
 
-    with KnownKinematicLimits(printer):  # type: ignore[arg-type]
+    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
         assert toolhead.max_accel == MAX_ACCEL
 
     assert toolhead.max_accel == 5000.0
@@ -141,7 +141,7 @@ def test_known_kinematic_limits_leaves_accel_unchanged_when_below_cap():
     toolhead = printer.lookup_object("toolhead")
     toolhead.max_accel = 1500.0
 
-    with KnownKinematicLimits(printer):  # type: ignore[arg-type]
+    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
         assert toolhead.max_accel == 1500.0
 
     assert toolhead.max_accel == 1500.0
@@ -167,7 +167,7 @@ def test_known_kinematic_limits_legacy_toolhead_caps_and_restores():
     toolhead.square_corner_velocity = 15.0
     toolhead.max_accel = 5000.0
 
-    with KnownKinematicLimits(printer):  # type: ignore[arg-type]
+    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
         assert toolhead.square_corner_velocity == 9.0
         assert toolhead.max_accel == MAX_ACCEL
         assert _LegacyFakeToolhead.calc_calls == 1
@@ -182,7 +182,7 @@ def test_known_kinematic_limits_disables_and_enables_input_shaper():
     _FakeInputShaper.enable_calls = 0
     printer = _known_state_printer()
 
-    with KnownKinematicLimits(printer):  # type: ignore[arg-type]
+    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
         assert _FakeInputShaper.disable_calls == 1
         assert _FakeInputShaper.enable_calls == 0
 

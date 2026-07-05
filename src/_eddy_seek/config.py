@@ -323,7 +323,7 @@ def load_seek_config(config: ConfigWrapper) -> SeekConfig:
             if spec.metadata.get("bool"):
                 values[name] = config.getboolean(name, default)
             elif "enum" in spec.metadata:
-                values[name] = config.get(name, default).lower()  # type: ignore[union-attr]
+                values[name] = config.get(name, default).lower()
             elif isinstance(default, int):
                 values[name] = config.getint(name, default)
             elif spec.metadata.get("speed"):

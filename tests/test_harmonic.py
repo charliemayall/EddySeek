@@ -331,8 +331,11 @@ def test_circle_harmonic_slope_only_search_continues_to_circles():
             return Offset(0.1, 0.0)
         return best
 
-    strategy._step = fake_step  # type: ignore[method-assign]
-    best, passes_run = strategy.search(_SlopeOnlySession(), _FakeReporter())  # type: ignore[arg-type]
+    strategy._step = fake_step  # pyright: ignore[reportAttributeAccessIssue]
+    best, passes_run = strategy.search(
+        _SlopeOnlySession(),
+        _FakeReporter(),  # pyright: ignore[reportArgumentType]
+    )
     assert calls == [1, 2, 3]
     assert passes_run == 3
     assert best.x == pytest.approx(0.1)
@@ -362,8 +365,11 @@ def test_circle_harmonic_search_retries_after_rejected_pass():
             return Offset(0.96, 0.0)
         return best
 
-    strategy._step = fake_step  # type: ignore[method-assign]
-    best, passes_run = strategy.search(_RetrySession(), _FakeReporter())  # type: ignore[arg-type]
+    strategy._step = fake_step  # pyright: ignore[reportAttributeAccessIssue]
+    best, passes_run = strategy.search(
+        _RetrySession(),
+        _FakeReporter(),  # pyright: ignore[reportArgumentType]
+    )
     assert passes_run == 3
     assert calls == [1, 2, 3]
     assert best.x == pytest.approx(0.96)
@@ -398,8 +404,11 @@ def test_circle_harmonic_rejected_pass_holds_best():
         strategy._last_pass_rejected = True
         return best
 
-    strategy._step = fake_step  # type: ignore[method-assign]
-    best, passes_run = strategy.search(_Session(), _FakeReporter())  # type: ignore[arg-type]
+    strategy._step = fake_step  # pyright: ignore[reportAttributeAccessIssue]
+    best, passes_run = strategy.search(
+        _Session(),
+        _FakeReporter(),  # pyright: ignore[reportArgumentType]
+    )
     assert passes_run == 6
     assert best.x == pytest.approx(refined.x)
     assert best.y == pytest.approx(refined.y)
