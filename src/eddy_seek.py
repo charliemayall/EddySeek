@@ -290,23 +290,22 @@ class EddySeek(SeekHost):
         console = self.refresh_console(gcmd)
         prev_count = self._capture_count
         self.reset_capture()
-        console.detail(f"Capture buffer reset (discarded {prev_count} samples)")
+        console.info(f"Capture buffer reset (discarded {prev_count} samples)")
 
     def cmd_EDDY_SEEK_SET(self, gcmd: GCodeCommand) -> None:
         console = self.refresh_console(gcmd)
         changes = self.seek_config.apply_runtime_set(gcmd)
         if not changes:
             logger.info("eddy_seek: EDDY_SEEK_SET query (no changes)")
-            console.detail(self.seek_config.format_seek_config())
-            console.detail(
+            console.info(self.seek_config.format_seek_config())
+            console.info(
                 "Pass STRATEGY=ternary|centroid|sweep_centroid, TOLERANCE=…, etc. "
                 "to override config values (overrides values until restart)"
             )
             return
 
         logger.info(f"eddy_seek: EDDY_SEEK_SET applied: {', '.join(changes)}")
-        fields = [change.split("=", 1)[0] for change in changes]
-        console.info(f"Updated {', '.join(fields)}")
+        console.info(f"Updated {', '.join(changes)}")
 
     def cmd_EDDY_SEEK_START(self, gcmd: GCodeCommand) -> None:
         logger.info("eddy_seek: EDDY_SEEK_START")
@@ -399,7 +398,7 @@ class EddySeek(SeekHost):
         gcode.run_script_from_command("SAVE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY")
 
         cfg = self.seek_config
-        mock_span = min(cfg.max_jog_x, cfg.max_jog_y)
+        mock_span = min(cfg.max_jog_x, cfg.max_jog_y, random.random() * 0.6)
         accuracy_run_id = uuid.uuid4().hex[:8]
         write_at = datetime.now()
         accuracy_recorder = SessionRecorder(trace=False, plots=cfg.save_plots)
