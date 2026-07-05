@@ -71,6 +71,9 @@ class SweepCentroidStrategy(SeekStrategy):
     def _phase_for_pass(self, pass_num: int) -> Phase:
         return Phase.COARSE if pass_num <= _N_COARSE else Phase.FINE
 
+    def should_check_divergence(self, ctx: SeekSession, pass_num: int) -> bool:
+        return self._phase_for_pass(pass_num) is not Phase.COARSE
+
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         cfg = ctx.config
         phase = self._phase_for_pass(pass_num)
