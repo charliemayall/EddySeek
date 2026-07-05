@@ -410,10 +410,9 @@ def report_accuracy_stats(
                 f"mean {mean_t:.1f}s ",
                 console.BR,
                 f"(min {min(durations_s):.1f}s, max {max(durations_s):.1f}s)",
-                console.BR,
             ]
         )
-    console.info("\n".join(output))
+    console.info("".join(output))
     logger.info(
         f"eddy_seek: accuracy report n={n} mean=({stats.mean.x:.4f}, {stats.mean.y:.4f}) "
         f"stdev=({stats.std_x:.4f}, {stats.std_y:.4f}) "
