@@ -21,7 +21,7 @@ from ..harmonic import (
     binned_to_motion_samples,
     circle_arc_legs,
     circle_in_jog_box,
-    circle_radius_for_pass,
+    circle_radius_for_tier,
     fit_first_harmonic,
     harmonic_bootstrap_diverged,
     harmonic_bootstrap_divergence_limit,
@@ -56,8 +56,6 @@ MIN_SAMPLES_PER_SPAN = 3
 
 KALMAN_PROCESS_VAR = 1.0
 KALMAN_MEASURE_VAR = 100.0
-# experiment - repeat radius while passes ok, shrink after first reject
-RADIUS_PLATEAU_MODE = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,16 +209,10 @@ class CircleHarmonicStrategy(SeekStrategy):
     ) -> bool:
         cfg = ctx.config
         if self._last_pass_rejected:
-            if RADIUS_PLATEAU_MODE:
-                logger.info(
-                    f"eddy_seek: {self.name} pass {pass_num} rejected "
-                    f"- continuing at smaller circle"
-                )
-            else:
-                logger.info(
-                    f"eddy_seek: {self.name} pass {pass_num} rejected "
-                    f"- retrying at same radius if passes remain"
-                )
+            logger.info(
+                f"eddy_seek: {self.name} pass {pass_num} rejected "
+                f"- continuing at smaller circle"
+            )
             return True
         if cfg.circle_bootstrap_slope_only and pass_num == 1:
             logger.info(
@@ -231,7 +223,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         return False
 
     def _circle_center(self, best: Offset) -> Offset:
-        if RADIUS_PLATEAU_MODE and self._last_ok is not None:
+        if self._last_ok is not None:
             return self._last_ok
         return best
 
@@ -357,21 +349,12 @@ class CircleHarmonicStrategy(SeekStrategy):
         cfg = ctx.config
         bootstrap = self._bootstrap if self._bootstrap is not None else best
 
-        if RADIUS_PLATEAU_MODE:
-            radius = circle_radius_for_pass(
-                self._radius_tier + 2,
-                radius_start=cfg.circle_radius_start,
-                radius_min=cfg.circle_radius_min,
-                radius_shrink=cfg.circle_shrink,
-            )
-        else:
-            circle_pass_num = pass_num if cfg.circle_skip_bootstrap else pass_num - 1
-            radius = circle_radius_for_pass(
-                circle_pass_num + 1,
-                radius_start=cfg.circle_radius_start,
-                radius_min=cfg.circle_radius_min,
-                radius_shrink=cfg.circle_shrink,
-            )
+        radius = circle_radius_for_tier(
+            self._radius_tier,
+            radius_start=cfg.circle_radius_start,
+            radius_min=cfg.circle_radius_min,
+            radius_shrink=cfg.circle_shrink,
+        )
         trace_center, trace_radius = circle_in_jog_box(
             self._circle_center(best), radius, cfg.max_jog_x, cfg.max_jog_y
         )
@@ -525,7 +508,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         if converged:
             logger.info(f"eddy_seek: circle_harmonic converged at pass {pass_num}")
         at_min = _is_min_radius(trace_radius, cfg.circle_radius_min)
-        if RADIUS_PLATEAU_MODE and at_min:
+        if at_min:
             moved = (result - best).abs_components()
             freeze = moved.x <= cfg.tolerance and moved.y <= cfg.tolerance
             if freeze:
@@ -533,10 +516,8 @@ class CircleHarmonicStrategy(SeekStrategy):
                     f"eddy_seek: circle_harmonic at min radius r={trace_radius:.4f} "
                     f"- stopping (moved {moved.x:.4f}, {moved.y:.4f})"
                 )
-        elif RADIUS_PLATEAU_MODE:
-            freeze = False
         else:
-            freeze = converged
+            freeze = False
         return _outcome_accept(
             result,
             trace_center,
@@ -558,34 +539,27 @@ class CircleHarmonicStrategy(SeekStrategy):
         at_min = _is_min_radius(outcome.trace_radius, ctx.config.circle_radius_min)
         if outcome.rejected:
             self._last_pass_rejected = True
-            if RADIUS_PLATEAU_MODE:
-                if at_min:
-                    hold = (
-                        self._last_ok if self._last_ok is not None else outcome.result
-                    )
-                    self._frozen = hold
-                    logger.info(
-                        f"eddy_seek: circle_harmonic at min radius "
-                        f"r={outcome.trace_radius:.4f} - stopping after rejected pass"
-                    )
-                else:
-                    self._radius_tier += 1
-                    logger.info(
-                        f"eddy_seek: circle_harmonic radius tier -> {self._radius_tier} "
-                        f"(reject)"
-                    )
-        elif RADIUS_PLATEAU_MODE and not outcome.freeze:
+            if at_min:
+                hold = self._last_ok if self._last_ok is not None else outcome.result
+                self._frozen = hold
+                logger.info(
+                    f"eddy_seek: circle_harmonic at min radius "
+                    f"r={outcome.trace_radius:.4f} - stopping after rejected pass"
+                )
+            else:
+                self._radius_tier += 1
+                logger.info(
+                    f"eddy_seek: circle_harmonic radius tier -> {self._radius_tier} "
+                    f"(reject)"
+                )
+        elif not outcome.freeze:
             self._last_ok = outcome.result
         if outcome.freeze:
             self._frozen = outcome.result
         freeze_without_plot = outcome.freeze and not outcome.samples
         if outcome.rejected or (outcome.samples and not freeze_without_plot):
             if outcome.rejected:
-                plot = (
-                    self._last_ok
-                    if RADIUS_PLATEAU_MODE and self._last_ok is not None
-                    else bootstrap
-                )
+                plot = self._last_ok if self._last_ok is not None else bootstrap
             else:
                 plot = outcome.result
             self._record_circle_plot(
@@ -601,7 +575,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 rejected=outcome.rejected,
                 reject_reasons=outcome.reject_reasons,
             )
-        if outcome.rejected and RADIUS_PLATEAU_MODE and self._last_ok is not None:
+        if outcome.rejected and self._last_ok is not None:
             return self._last_ok
         return outcome.result
 

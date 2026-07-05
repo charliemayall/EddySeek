@@ -75,17 +75,13 @@ def test_console_stored_on_host():
             self.seek_config = SeekConfig()
             self.console: KConsole | None = None
 
+        def refresh_console(self, gcmd) -> KConsole:
+            self.console = console_for_gcmd(gcmd, self.seek_config)  # pyright: ignore[reportArgumentType]
+            return self.console
+
     host = _Host()
-    gcmd = FakeGcmd()
-    first = console_for_gcmd(
-        gcmd,
-        host.seek_config,  # pyright: ignore[reportArgumentType]
-    )
+    first = host.refresh_console(FakeGcmd())
     assert host.console is first
 
-    second = console_for_gcmd(
-        FakeGcmd(),
-        host.seek_config,  # pyright: ignore[reportArgumentType]
-    )
-    host.console = second
+    second = host.refresh_console(FakeGcmd())
     assert host.console is second

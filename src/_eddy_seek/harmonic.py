@@ -409,18 +409,15 @@ def harmonic_converged(
     return fit.amplitude < noise_k * fit.noise
 
 
-def circle_radius_for_pass(
-    pass_num: int,
+def circle_radius_for_tier(
+    tier: int,
     *,
     radius_start: float,
     radius_min: float,
     radius_shrink: float,
 ) -> float:
-    """Circle radius for harmonic pass ``pass_num`` (pass 1 = bootstrap, pass 2+ = circle)."""
-    if pass_num < 2:
-        return radius_start
-    exponent = pass_num - 2
-    return max(radius_start * (radius_shrink**exponent), radius_min)
+    """Radius for plateau tier ``tier`` (0 = ``radius_start``; steps down after rejects)."""
+    return max(radius_start * (radius_shrink**tier), radius_min)
 
 
 def _axis_radial_slope(

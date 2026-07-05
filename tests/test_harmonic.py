@@ -18,6 +18,7 @@ from _eddy_seek.harmonic import (
     binned_to_motion_samples,
     circle_arc_legs,
     circle_in_jog_box,
+    circle_radius_for_tier,
     fit_first_harmonic,
     fit_second_harmonic_amplitude,
     harmonic_bootstrap_diverged,
@@ -67,6 +68,158 @@ def test_circle_in_jog_box_clips_boundary():
 def test_circle_arc_legs_segment_count():
     assert len(circle_arc_legs(Offset.zero(), 1.0, 1.0)) == 6
     assert len(circle_arc_legs(Offset.zero(), 0.5, 1.0)) == 3
+
+
+def test_circle_radius_for_tier():
+    assert (
+        circle_radius_for_tier(0, radius_start=2.0, radius_min=0.5, radius_shrink=0.4)
+        == 2.0
+    )
+    assert circle_radius_for_tier(
+        1, radius_start=2.0, radius_min=0.5, radius_shrink=0.4
+    ) == pytest.approx(0.8)
+    assert (
+        circle_radius_for_tier(99, radius_start=2.0, radius_min=0.5, radius_shrink=0.4)
+        == 0.5
+    )
+
+
+def _harmonic_fit_stub() -> HarmonicFit:
+    return HarmonicFit(c0=50.0, a=1.0, b=0.5, amplitude=1.12, noise=0.1, n=36)
+
+
+def _plateau_ctx(**overrides):
+    from unittest.mock import MagicMock
+
+    ctx = MagicMock()
+    ctx.config = SeekConfig(
+        circle_radius_start=2.0,
+        circle_radius_min=0.5,
+        circle_shrink=0.4,
+        tolerance=0.05,
+        **overrides,
+    )
+    ctx.recorder.record_if_active = MagicMock()
+    return ctx
+
+
+def test_circle_center_uses_last_ok():
+    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
+
+    strategy = CircleHarmonicStrategy()
+    strategy._last_ok = Offset(1.0, 2.0)
+    assert strategy._circle_center(Offset.zero()) == Offset(1.0, 2.0)
+
+
+def test_finish_circle_pass_accept_sets_last_ok():
+    from _eddy_seek.strategy.circle_harmonic import (
+        CircleHarmonicStrategy,
+        _outcome_accept,
+    )
+
+    strategy = CircleHarmonicStrategy()
+    ctx = _plateau_ctx()
+    result = Offset(0.1, 0.05)
+    outcome = _outcome_accept(
+        result,
+        Offset.zero(),
+        2.0,
+        [],
+        [],
+        _harmonic_fit_stub(),
+        freeze=False,
+    )
+    ret = strategy._finish_circle_pass(ctx, 2, Offset.zero(), outcome)
+    assert strategy._last_ok == result
+    assert strategy._radius_tier == 0
+    assert ret == result
+
+
+def test_finish_circle_pass_reject_bumps_tier():
+    from _eddy_seek.strategy.circle_harmonic import (
+        CircleHarmonicStrategy,
+        _outcome_reject,
+    )
+
+    strategy = CircleHarmonicStrategy()
+    ctx = _plateau_ctx()
+    outcome = _outcome_reject(
+        Offset.zero(),
+        Offset.zero(),
+        2.0,
+        [],
+        [],
+        fit=None,
+        reason="fit failed",
+    )
+    strategy._finish_circle_pass(ctx, 2, Offset.zero(), outcome)
+    assert strategy._radius_tier == 1
+    assert strategy._last_pass_rejected
+
+
+def test_finish_circle_pass_reject_at_min_freezes():
+    from _eddy_seek.strategy.circle_harmonic import (
+        CircleHarmonicStrategy,
+        _outcome_reject,
+    )
+
+    strategy = CircleHarmonicStrategy()
+    strategy._last_ok = Offset(0.1, 0.2)
+    ctx = _plateau_ctx()
+    outcome = _outcome_reject(
+        Offset.zero(),
+        Offset.zero(),
+        0.5,
+        [],
+        [],
+        fit=None,
+        reason="bad model",
+    )
+    strategy._finish_circle_pass(ctx, 3, Offset.zero(), outcome)
+    assert strategy._frozen == Offset(0.1, 0.2)
+
+
+def test_finish_circle_pass_reject_returns_last_ok():
+    from _eddy_seek.strategy.circle_harmonic import (
+        CircleHarmonicStrategy,
+        _outcome_reject,
+    )
+
+    strategy = CircleHarmonicStrategy()
+    strategy._last_ok = Offset(0.5, 0.3)
+    ctx = _plateau_ctx()
+    outcome = _outcome_reject(
+        Offset.zero(),
+        Offset.zero(),
+        2.0,
+        [],
+        [],
+        fit=None,
+        reason="fit failed",
+    )
+    ret = strategy._finish_circle_pass(ctx, 2, Offset.zero(), outcome)
+    assert ret == Offset(0.5, 0.3)
+
+
+def test_finish_circle_pass_accept_does_not_freeze_at_large_radius():
+    from _eddy_seek.strategy.circle_harmonic import (
+        CircleHarmonicStrategy,
+        _outcome_accept,
+    )
+
+    strategy = CircleHarmonicStrategy()
+    ctx = _plateau_ctx()
+    outcome = _outcome_accept(
+        Offset(0.01, 0.01),
+        Offset.zero(),
+        2.0,
+        [],
+        [],
+        _harmonic_fit_stub(),
+        freeze=False,
+    )
+    strategy._finish_circle_pass(ctx, 2, Offset.zero(), outcome)
+    assert strategy._frozen is None
 
 
 def test_fit_first_harmonic_recovers_known_offset():

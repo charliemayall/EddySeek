@@ -37,7 +37,7 @@ def test_validate_var():
 def test_apply_runtime_set():
     cfg = SeekConfig()
     changed = cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "centroid"}))
-    assert changed == ["strategy=centroid"]
+    assert changed == ["strategy --> centroid"]
     assert cfg.strategy == "centroid"
 
     with raises(CommandError):
@@ -50,7 +50,7 @@ def test_apply_runtime_set():
         cfg.apply_runtime_set(FakeGcmd({"DEBUG": "1"}))
 
     changed = cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "debug_scan"}))
-    assert changed == ["strategy=debug_scan"]
+    assert changed == ["strategy --> debug_scan"]
     assert cfg.strategy == "debug_scan"
 
 

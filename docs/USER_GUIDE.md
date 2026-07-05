@@ -118,16 +118,16 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 
 ### `[eddy_seek]` - `strategy: circle_harmonic` options
 
-| Option                  | Default | Description                                      |
-| ----------------------- | ------- | ------------------------------------------------ |
-| `circle_radius_start`   | `2`     | First circle radius (mm)                         |
-| `circle_radius_min`     | `0.5`   | Smallest circle radius (mm)                      |
-| `circle_shrink`         | `0.4`   | Radius multiplier each pass                      |
-| `circle_arc_resolution` | `0.1`   | Arc segment length along the circle (mm)         |
-| `circle_speed`          | `10`    | Circle trace feedrate (mm/s)                     |
-| `noise_k`               | `1`     | SNR threshold (amplitude vs noise) for model fit |
-| `harmonic_step_gain`    | `0.15`  | Fraction of fitted offset applied each pass      |
-| `harmonic_min_quality`  | `0.5`   | Minimum fit quality to accept a pass             |
+| Option                  | Default | Description                                                       |
+| ----------------------- | ------- | ----------------------------------------------------------------- |
+| `circle_radius_start`   | `2`     | First circle radius (mm)                                          |
+| `circle_radius_min`     | `0.5`   | Smallest circle radius (mm)                                       |
+| `circle_shrink`         | `0.4`   | Radius multiplier when stepping down a tier after a rejected pass |
+| `circle_arc_resolution` | `0.1`   | Arc segment length along the circle (mm)                          |
+| `circle_speed`          | `10`    | Circle trace feedrate (mm/s)                                      |
+| `noise_k`               | `1`     | SNR threshold (amplitude vs noise) for model fit                  |
+| `harmonic_step_gain`    | `0.15`  | Fraction of fitted offset applied each pass                       |
+| `harmonic_min_quality`  | `0.5`   | Minimum fit quality to accept a pass                              |
 
 > **Speed units:** All speed values are in mm/s in `printer.cfg` and `EDDY_SEEK_SET`.
 
@@ -232,7 +232,7 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 ### Sweep centroid (`strategy: sweep_centroid`) - default
 
-Continuous axis sweeps (like bed mesh `rapid_scan`). Coarse bidirectional sweeps, then finer passes; samples merged into a frequency-weighted 2D centroid. Best compromise between speed and reliability.
+Continuous axis sweeps (like Klipper's bed mesh `rapid_scan` method). Coarse bidirectional sweeps, then finer passes; samples merged into a frequency-weighted 2D centroid. Best compromise between speed and reliability.
 
 ### Centroid (`strategy: centroid`)
 
@@ -240,7 +240,11 @@ Continuous axis sweeps (like bed mesh `rapid_scan`). Coarse bidirectional sweeps
 
 ### Circle harmonic (`strategy: circle_harmonic`)
 
-Bootstrap axis sweeps, then traces shrinking circles and fits a harmonic model to refine the centre. Fastest strategy, and very accurate, but is **extremely intolerant of larger initial misalignment** - `sensor_x`/`sensor_y` and `max_jog` must put the nozzle close to the true centre, and the misalignment of the nozzle itself must be small.
+Initial axis sweep, then circles at a fixed radius while passes are accepted. After a rejected pass the radius steps down by `circle_shrink`. Search stops at `circle_radius_min` when the correction is within tolerance, or immediately on reject at min radius. Does not stop on harmonic convergence alone at larger radii.
+
+Fastest strategy, and very accurate, but it can be **sensitive to larger initial misalignment** - `sensor_x`/`sensor_y` and `max_jog` must put the nozzle close to the true centre, and the misalignment of the nozzle itself must be small.
+
+Worth trying, but may need some tuning to make it reliable.
 
 ### Debug scan (`strategy: debug_scan`)
 
