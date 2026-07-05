@@ -24,7 +24,7 @@ from ._eddy_seek.config import load_seek_config
 from ._eddy_seek.kconsole import KConsole, console_for_gcmd
 from ._eddy_seek.movement.guard import clear_gcode_offset_xy
 from ._eddy_seek.plotting import (
-    accuracy as _accuracy_plot,  # noqa: F401 — registers plotter
+    accuracy as _accuracy_plot,  # noqa: F401 - registers plotter
 )
 from ._eddy_seek.plotting import render_session_plot, write_figure
 from ._eddy_seek.plotting.primitives import AccuracyRepeatRecord
@@ -235,8 +235,8 @@ class EddySeek(SeekHost):
         logger.info(f"eddy_seek: capture mean={mean:.2f} Hz from {len(buf)} samples")
         return mean
 
-    def get_status(self, eventtime: float) -> dict:
-        # Used by klipper, do not remove parameter eventtime
+    def get_status(self, eventtime: float | None = None) -> dict:
+        """called by klipper, do not remove parameters"""
         smooth_mean = (
             sum(self._status_samples) / len(self._status_samples)
             if self._status_samples
@@ -270,6 +270,7 @@ class EddySeek(SeekHost):
         with self.acquire_sensor_stream():
             toolhead = self.printer.lookup_object("toolhead")
             before = self._total_samples
+            self.reset_capture()
             toolhead.dwell(_QUERY_RATE_DWELL)
             toolhead.wait_moves()
             gained = self._total_samples - before
@@ -277,6 +278,7 @@ class EddySeek(SeekHost):
                 count=gained, duration_s=_QUERY_RATE_DWELL
             )
             self._sample_rate_hz = round(measured, 1) if measured is not None else None
+            self._capturing = False
             status = self.get_status(0)
             rate = status["sample_rate_hz"]
             rate_text = f"{rate:.0f} Hz" if rate is not None else "n/a"

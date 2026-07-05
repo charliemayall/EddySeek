@@ -138,3 +138,16 @@ def test_sample_rate_from_count():
 
     assert _sample_rate_from_count(count=0, duration_s=0.2) is None
     assert _sample_rate_from_count(count=80, duration_s=0.2) == pytest.approx(400.0)
+
+
+def test_handle_batch_capture_only_when_capturing(eddy_seek_mod):
+    host = _stream_host(eddy_seek_mod)
+    host._stream_refs = 1
+    host._handle_batch({"data": [[0, 100.0], [0, 200.0]]})
+    assert host._total_samples == 2
+    assert host._capture_count == 0
+
+    host.reset_capture()
+    host._handle_batch({"data": [[0, 300.0], [0, 400.0]]})
+    assert host._capture_count == 2
+    assert host._capture_buf == [300.0, 400.0]
