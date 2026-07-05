@@ -404,7 +404,6 @@ class CircleHarmonicStrategy(SeekStrategy):
         leg_batches = get_samples_from_capture_legs(
             ctx, legs, clamped_speed, flat=False
         )
-        # ponytail: log-only on short legs — no auto-retry yet
         for i, batch in enumerate(leg_batches):
             if len(batch) < MIN_SAMPLES_PER_SPAN:
                 logger.warning(
