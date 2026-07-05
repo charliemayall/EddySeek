@@ -357,10 +357,11 @@ class CircleHarmonicStrategy(SeekStrategy):
             return _outcome_hold(best, trace_center, trace_radius)
 
         circumference = 2 * math.pi * trace_radius
+        segment_span = circumference / len(legs)
         clamped_speed = get_clamped_speed_for_min_samples_over_span(
             requested_mm_min=cfg.circle_speed,
-            span_mm=circumference,
-            min_samples=max(cfg.min_sweep_samples, MIN_SAMPLES_PER_SPAN * len(legs)),
+            span_mm=segment_span,
+            min_samples=MIN_SAMPLES_PER_SPAN,
         )
         logger.info(
             f"eddy_seek: circle_harmonic pass {pass_num} "
@@ -370,14 +371,30 @@ class CircleHarmonicStrategy(SeekStrategy):
         if cfg.circle_refresh_sweeps:
             self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
-        samples = get_samples_from_capture_legs(ctx, legs, clamped_speed, flat=True)
+        leg_batches = get_samples_from_capture_legs(
+            ctx, legs, clamped_speed, flat=False
+        )
+        # ponytail: log-only on short legs — no auto-retry yet
+        for i, batch in enumerate(leg_batches):
+            if len(batch) < MIN_SAMPLES_PER_SPAN:
+                logger.warning(
+                    f"eddy_seek: circle_harmonic pass {pass_num} "
+                    f"leg {i} has {len(batch)} samples "
+                    f"(need >= {MIN_SAMPLES_PER_SPAN})"
+                )
+        samples = [s for batch in leg_batches for s in batch]
         samples = kalman_filter_freqs(
             samples,
             process_var=KALMAN_PROCESS_VAR,
             measure_var=KALMAN_MEASURE_VAR,
         )
+        leg_counts = [len(batch) for batch in leg_batches]
+        min_per_leg = min(leg_counts) if leg_counts else 0
+        empty_legs = sum(1 for n in leg_counts if n == 0)
         logger.info(
-            f"eddy_seek: circle_harmonic pass {pass_num} collected {len(samples)} samples --> {len(samples) / len(legs):.2f} samples per segment"
+            f"eddy_seek: circle_harmonic pass {pass_num} collected "
+            f"{len(samples)} samples — samples per segment: "
+            f"avg={len(samples) / len(legs):.1f} min={min_per_leg} empty={empty_legs}"
         )
 
         if len(samples) < 3:
