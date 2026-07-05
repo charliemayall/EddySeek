@@ -10,6 +10,7 @@ from fakes import FakeGcode, FakePrinter
 
 from _eddy_seek.movement.guard import (
     MAX_ACCEL,
+    MAX_SCV,
     KnownKinematicLimits,
     clear_gcode_offset_xy,
 )
@@ -101,7 +102,7 @@ def test_known_kinematic_limits_caps_scv_and_restores_toolhead_limits():
     toolhead.min_cruise_ratio = 0.5
 
     with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
-        assert toolhead.square_corner_velocity == 9.0
+        assert toolhead.square_corner_velocity == MAX_SCV
         assert toolhead.min_cruise_ratio == 0.5
         assert _FakeToolhead.calc_calls == 1
 
@@ -168,7 +169,7 @@ def test_known_kinematic_limits_legacy_toolhead_caps_and_restores():
     toolhead.max_accel = 5000.0
 
     with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
-        assert toolhead.square_corner_velocity == 9.0
+        assert toolhead.square_corner_velocity == MAX_SCV
         assert toolhead.max_accel == MAX_ACCEL
         assert _LegacyFakeToolhead.calc_calls == 1
 

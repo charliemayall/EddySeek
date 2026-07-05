@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
-SCV_CAP = 10.0
+MAX_SCV = 10.0
 MAX_ACCEL = 3000.0
 MCR_DEFAULT = 0.5
 
@@ -87,7 +87,7 @@ class KnownKinematicLimits:
         self._saved_scv = toolhead.square_corner_velocity
         self._saved_mcr = getattr(toolhead, "min_cruise_ratio", None)
         self._saved_accel = _read_max_accel(toolhead)
-        applied_scv = min(SCV_CAP, self._saved_scv)
+        applied_scv = min(MAX_SCV, self._saved_scv)
         applied_accel = min(MAX_ACCEL, self._saved_accel)
 
         logger.info(
