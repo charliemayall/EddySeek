@@ -16,7 +16,7 @@ from _eddy_seek.kconsole import KConsole, console_for_gcmd
 
 def test_console_prefix_mapping():
     gcmd = FakeGcmd()
-    console = KConsole(gcmd)
+    console = KConsole(gcmd)  # pyright: ignore[reportArgumentType]
 
     console.info("Pass 1: X=+0.12 Y=-0.06 mm")
     console.entry("Seeking nozzle centre (sweep_centroid)…")
@@ -33,31 +33,37 @@ def test_console_prefix_mapping():
 
 def test_console_detail_gated_on_verbose():
     gcmd = FakeGcmd()
-    quiet = KConsole(gcmd, verbose=False)
+    quiet = KConsole(gcmd, verbose=False)  # pyright: ignore[reportArgumentType]
     quiet.detail("internal config dump")
     assert gcmd.raw == []
 
     gcmd.raw.clear()
-    loud = KConsole(gcmd, verbose=True)
+    loud = KConsole(gcmd, verbose=True)  # pyright: ignore[reportArgumentType]
     loud.detail("internal config dump")
     assert gcmd.raw == ["echo: internal config dump"]
 
 
 def test_console_for_verbose_gcode_param():
     gcmd = FakeGcmd(VERBOSE="1")
-    console = console_for_gcmd(gcmd, SeekConfig())
+    console = console_for_gcmd(
+        gcmd,
+        SeekConfig(),  # pyright: ignore[reportArgumentType]
+    )
     assert console.verbose is True
 
 
 def test_console_for_verbose_from_config():
     gcmd = FakeGcmd()
-    console = console_for_gcmd(gcmd, SeekConfig(debug=True))
+    console = console_for_gcmd(
+        gcmd,
+        SeekConfig(debug=True),  # pyright: ignore[reportArgumentType]
+    )
     assert console.verbose is True
 
 
 def test_console_plot_saved():
     gcmd = FakeGcmd()
-    console = KConsole(gcmd)
+    console = KConsole(gcmd)  # pyright: ignore[reportArgumentType]
     plot_path = Path("/tmp/eddy_seek_results") / PLOT_HTML_SUFFIX
     console.plot_saved(plot_path)
     assert gcmd.raw == [f"echo: 📊 Plot saved: {plot_path}"]
@@ -71,10 +77,15 @@ def test_console_stored_on_host():
 
     host = _Host()
     gcmd = FakeGcmd()
-    first = console_for_gcmd(gcmd, host.seek_config)
-    host.console = first
+    first = console_for_gcmd(
+        gcmd,
+        host.seek_config,  # pyright: ignore[reportArgumentType]
+    )
     assert host.console is first
 
-    second = console_for_gcmd(FakeGcmd(), host.seek_config)
+    second = console_for_gcmd(
+        FakeGcmd(),
+        host.seek_config,  # pyright: ignore[reportArgumentType]
+    )
     host.console = second
     assert host.console is second
