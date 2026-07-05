@@ -11,6 +11,7 @@ eddy_seek.py  -  Klipper extra for nozzle alignment via LDC1612.
 from __future__ import annotations
 
 import logging
+import random
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -386,7 +387,11 @@ class EddySeek(SeekHost):
 
     def cmd_EDDY_SEEK_ACCURACY(self, gcmd: GCodeCommand) -> None:
         repeats = gcmd.get_int("REPEATS", 3, minval=2, maxval=50)
-        logger.info(f"eddy_seek: EDDY_SEEK_ACCURACY repeats={repeats}")
+
+        mock_enabled = bool(gcmd.get_int("MOCK", 0, minval=0, maxval=1))
+        logger.info(
+            f"eddy_seek: EDDY_SEEK_ACCURACY repeats={repeats} mock={mock_enabled}"
+        )
         console = self.refresh_console(gcmd)
         console.entry(f"Running {repeats} seek repeat(s) from current position")
 
@@ -394,6 +399,7 @@ class EddySeek(SeekHost):
         gcode.run_script_from_command("SAVE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY")
 
         cfg = self.seek_config
+        mock_span = min(cfg.max_jog_x, cfg.max_jog_y)
         accuracy_run_id = uuid.uuid4().hex[:8]
         write_at = datetime.now()
         accuracy_recorder = SessionRecorder(trace=False, plots=cfg.save_plots)
@@ -405,6 +411,20 @@ class EddySeek(SeekHost):
                     gcode.run_script_from_command(
                         "RESTORE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY MOVE=1"
                     )
+
+                if mock_enabled:
+                    mock_offset = Offset(
+                        (random.random() * 2 - 1) * mock_span,
+                        (random.random() * 2 - 1) * mock_span,
+                    )
+                    console.info(f"Mock offset: {mock_offset.to_delta_str()}")
+                    toolhead = self.printer.lookup_object("toolhead")
+                    pos = toolhead.get_position()
+                    toolhead.manual_move(
+                        [pos[0] + mock_offset.x, pos[1] + mock_offset.y],
+                        cfg.jog_speed / 60.0,
+                    )
+                    toolhead.wait_moves()
 
                 console.info(f"Repeat {repeat}/{repeats}")
                 session = SeekSession(
