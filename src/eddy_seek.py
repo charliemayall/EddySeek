@@ -305,7 +305,8 @@ class EddySeek(SeekHost):
             return
 
         logger.info(f"eddy_seek: EDDY_SEEK_SET applied: {', '.join(changes)}")
-        console.info(f"Updated {', '.join(changes)}")
+        fields = [change.split("=", 1)[0] for change in changes]
+        console.info(f"Updated {', '.join(fields)}")
 
     def cmd_EDDY_SEEK_START(self, gcmd: GCodeCommand) -> None:
         logger.info("eddy_seek: EDDY_SEEK_START")
