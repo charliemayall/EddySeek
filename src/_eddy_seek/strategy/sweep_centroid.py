@@ -49,7 +49,7 @@ from .base import SeekStrategy
 
 logger = logging.getLogger(__name__)
 
-_N_COARSE = 1
+_N_COARSE = 2
 
 
 class SweepCentroidStrategy(SeekStrategy):
