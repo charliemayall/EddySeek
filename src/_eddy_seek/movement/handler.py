@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 from ..common import Axis, Offset, Position
 
@@ -271,6 +271,7 @@ class MotionHandler(_SessionMotionBase):
             raise RuntimeError("eddy_seek: continuous motion not active")
         if self._last_move_end is None or line_start != self._last_move_end:
             self._manual_move(line_start, speed)
+            self._last_move_end = line_start
 
         capture_start_t = self.th.get_last_move_time()
         self._manual_move(line_end, speed)
@@ -378,13 +379,23 @@ class MotionHandler(_SessionMotionBase):
         except Exception:
             return False
 
-    def collect_samples(self) -> list[MotionSample]:
+    @overload
+    def collect_samples(self, flat: Literal[True]) -> list[MotionSample]: ...
+    @overload
+    def collect_samples(
+        self, flat: Literal[False] = False
+    ) -> list[list[MotionSample]]: ...
+    def collect_samples(self, flat: bool = False):
         self._wait_for_pending()
-        flat: list[MotionSample] = []
-        for batch in self._results:
-            flat.extend(batch)
+        if flat:
+            flat_samples: list[MotionSample] = []
+            for batch in self._results:
+                flat_samples.extend(batch)
+            self._results.clear()
+            return flat_samples
+        res_copy = self._results[::]
         self._results.clear()
-        return flat
+        return res_copy
 
 
 def _assert_speed_clamp_for_min_samples() -> None:

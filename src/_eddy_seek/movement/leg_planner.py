@@ -134,12 +134,21 @@ def get_samples_from_capture_legs(
     legs: Sequence[tuple[Offset, Offset]],
     speed: float,
 ) -> list[MotionSample]:
-    """Run continuous capture legs and return merged session-relative samples."""
+    """Run continuous capture legs and return merged session-relative samples.
+
+    Args:
+        ctx: The seek session context.
+        legs: [Offset(startx, starty), Offset(endx, endy)]
+        speed: The speed to run the capture legs at [mm/s]
+
+    Returns:
+        A list of motion samples (MotionSample)
+    """
     handler = ctx.motion
     handler.begin(ctx.session_start)
     handler.run_capture_legs(legs, speed)
     ctx.sync_offset(handler.position)
-    return handler.collect_samples()
+    return handler.collect_samples(flat=True)
 
 
 def sweep_axis(
@@ -153,7 +162,7 @@ def sweep_axis(
     phase: Phase,
     pass_num: int,
 ) -> tuple[list[tuple[float, float]], list[MotionSample]]:
-    """Continuous ± traverses on ``axis``; merged profile in session offsets."""
+    """Continuous +/- traverses on ``axis``; merged profile in session offsets."""
     cfg = ctx.config
     if hi < lo:
         lo, hi = hi, lo

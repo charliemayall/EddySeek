@@ -51,6 +51,8 @@ from .base import SeekStrategy
 
 logger = logging.getLogger(__name__)
 
+MIN_SAMPLES_PER_SPAN = 3
+
 
 @dataclass(frozen=True, slots=True)
 class _CirclePassOutcome:
@@ -355,7 +357,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         clamped_speed = get_clamped_speed_for_min_samples_over_span(
             requested_mm_min=cfg.circle_speed,
             span_mm=circumference,
-            min_samples=max(cfg.min_sweep_samples, 2 * len(legs)),
+            min_samples=max(cfg.min_sweep_samples, MIN_SAMPLES_PER_SPAN * len(legs)),
         )
         logger.info(
             f"eddy_seek: circle_harmonic pass {pass_num} "
