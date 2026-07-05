@@ -384,7 +384,7 @@ def report_accuracy_stats(
         if durations_s is not None and i <= len(durations_s):
             line += f"  t={durations_s[i - 1]:.1f}s"
         console.detail(line)
-    output.append(
+    output.extend(
         [
             f"Repeatability ({n} runs):",
             console.BR,
@@ -402,7 +402,7 @@ def report_accuracy_stats(
 
     if durations_s:
         mean_t = sum(durations_s) / len(durations_s)
-        output.append(
+        output.extend(
             [
                 console.BR,
                 f"Seek time ({len(durations_s)} runs): ",
