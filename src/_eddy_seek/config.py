@@ -54,22 +54,20 @@ class SeekConfig:
         default="max",
         metadata={"gcode": "SEARCH_FOR", "enum": ("min", "max")},
     )
-    strategy: Literal[
-        "ternary", "centroid", "sweep_centroid", "debug_scan", "circle_harmonic"
-    ] = field(
-        default="sweep_centroid",
-        metadata={
-            "gcode": "STRATEGY",
-            "enum": (
-                "ternary",
-                "centroid",
-                "sweep_centroid",
-                "debug_scan",
-                "circle_harmonic",
-            ),
-        },
+    strategy: Literal["centroid", "sweep_centroid", "debug_scan", "circle_harmonic"] = (
+        field(
+            default="sweep_centroid",
+            metadata={
+                "gcode": "STRATEGY",
+                "enum": (
+                    "centroid",
+                    "sweep_centroid",
+                    "debug_scan",
+                    "circle_harmonic",
+                ),
+            },
+        )
     )
-    max_iter: int = field(default=10, metadata={"gcode": "MAX_ITER", "min": 1})
     max_passes: int = field(default=6, metadata={"gcode": "MAX_PASSES", "min": 1})
     save_session_trace: bool = field(
         default=False, metadata={"gcode": "SAVE_SESSION_TRACE", "bool": True}

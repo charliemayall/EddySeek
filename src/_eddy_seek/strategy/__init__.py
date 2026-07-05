@@ -16,10 +16,8 @@ from .centroid import CentroidStrategy
 from .circle_harmonic import CircleHarmonicStrategy
 from .debug_scan import DebugScanStrategy
 from .sweep_centroid import SweepCentroidStrategy
-from .ternary import TernaryStrategy
 
 _STRATEGIES: dict[str, type[SeekStrategy]] = {
-    "ternary": TernaryStrategy,
     "centroid": CentroidStrategy,
     "sweep_centroid": SweepCentroidStrategy,
     "debug_scan": DebugScanStrategy,
@@ -43,6 +41,5 @@ __all__ = [
     "DebugScanStrategy",
     "SeekStrategy",
     "SweepCentroidStrategy",
-    "TernaryStrategy",
     "strategy_for",
 ]

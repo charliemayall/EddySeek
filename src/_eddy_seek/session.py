@@ -78,6 +78,7 @@ class SeekSession:
         host: SeekHost,
         *,
         run_id: str | None = None,
+        run_label: str = "run",
         artifact_label: str = "",
         artifact_write_at: datetime | None = None,
     ) -> None:
@@ -87,6 +88,7 @@ class SeekSession:
         self._gcode = self._printer.lookup_object("gcode")
         self.session_id = str(uuid.uuid4())
         self.run_id = run_id
+        self.run_label = run_label
         self.artifact_label = artifact_label
         self._artifact_write_at = artifact_write_at
         self.start_time = time.time()
@@ -243,6 +245,7 @@ class SeekSession:
                 result,
                 self.recorder.to_probe_dicts(),
                 run_id=self.run_id,
+                run_label=self.run_label,
                 suffix=self.artifact_suffix(strategy.name),
                 write_at=self.artifact_write_at,
             )
@@ -273,15 +276,16 @@ def _write_seek_trace(
     probes: list[dict[str, Any]],
     *,
     run_id: str | None = None,
+    run_label: str = "run",
     suffix: str = "",
     write_at: datetime | None = None,
 ) -> str | None:
     results_dir = Path(host.seek_config.result_folder)
     results_dir.mkdir(parents=True, exist_ok=True)
     out = results_dir / session_artifact_filename(
-        result.session_id,
         write_at or datetime.now(),
         suffix=suffix,
+        run_label=run_label,
         run_id=run_id,
         ext="json",
     )

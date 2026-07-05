@@ -15,12 +15,13 @@ import random
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import fields
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ._eddy_seek.common import Offset, Position
-from ._eddy_seek.config import load_seek_config
+from ._eddy_seek.config import SeekConfig, load_seek_config
 from ._eddy_seek.kconsole import KConsole, console_for_gcmd
 from ._eddy_seek.movement.guard import clear_gcode_offset_xy
 from ._eddy_seek.plotting import (
@@ -300,15 +301,22 @@ class EddySeek(SeekHost):
         if not changes:
             logger.info("eddy_seek: EDDY_SEEK_SET query (no changes)")
             console.info(self.seek_config.format_seek_config())
+            strategies = "|".join(
+                sorted(
+                    next(
+                        f for f in fields(SeekConfig) if f.name == "strategy"
+                    ).metadata["enum"]
+                )
+            )
             console.info(
-                "Pass STRATEGY=ternary|centroid|sweep_centroid, TOLERANCE=…, etc. "
+                f"Pass STRATEGY={strategies}, TOLERANCE=…, etc. "
                 "to override config values (overrides values until restart)"
             )
             return
 
         logger.info(f"eddy_seek: EDDY_SEEK_SET applied: {', '.join(changes)}")
-        fields = [change.split("=", 1)[0] for change in changes]
-        console.info(f"Updated {', '.join(fields)}")
+        config_fields = [change.split("=", 1)[0] for change in changes]
+        console.info(f"Updated {', '.join(config_fields)}")
 
     def cmd_EDDY_SEEK_START(self, gcmd: GCodeCommand) -> None:
         logger.info("eddy_seek: EDDY_SEEK_START")
@@ -319,6 +327,7 @@ class EddySeek(SeekHost):
         SeekSession(
             self,
             run_id=run_id,
+            run_label="start",
             artifact_label="start",
             artifact_write_at=write_at,
         ).run(gcmd, strategy_for(self.seek_config.strategy))
@@ -343,6 +352,7 @@ class EddySeek(SeekHost):
                 self._tool0_center,
                 console=console,
                 run_id=run_id,
+                run_label="tool",
                 artifact_write_at=write_at,
             )
             if error is not None:
@@ -433,6 +443,7 @@ class EddySeek(SeekHost):
                 session = SeekSession(
                     self,
                     run_id=accuracy_run_id,
+                    run_label="accuracy",
                     artifact_label=f"r{repeat}",
                     artifact_write_at=write_at,
                 )
@@ -479,10 +490,10 @@ class EddySeek(SeekHost):
                 if fig is not None:
                     accuracy_plot_path = write_figure(
                         Path(cfg.result_folder),
-                        accuracy_run_id,
                         fig,
                         write_at=write_at,
                         suffix="accuracy",
+                        run_label="accuracy",
                         run_id=accuracy_run_id,
                     )
                     if accuracy_plot_path is not None:

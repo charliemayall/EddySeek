@@ -13,9 +13,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from fakes import PLOT_HTML_SUFFIX, PLOT_SESSION_ID, PLOT_WRITE_AT
+from fakes import PLOT_HTML_SUFFIX, PLOT_RUN_DIR, PLOT_WRITE_AT
 
-from _eddy_seek.common import Axis, Offset, Phase
+from _eddy_seek.common import Offset, Phase
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.harmonic import HarmonicFit
 from _eddy_seek.movement.handler import MotionSample
@@ -32,7 +32,6 @@ from _eddy_seek.plotting.primitives import (
     CircleHarmonicPassRecord,
     HeatmapRecord,
     PassMove,
-    TernaryStep,
     XYCloud,
 )
 from _eddy_seek.plotting.recorder import SessionRecorder
@@ -41,7 +40,6 @@ from _eddy_seek.strategy import (  # noqa: F401
     circle_harmonic,
     debug_scan,
     sweep_centroid,
-    ternary,
 )
 from _eddy_seek.strategy.centroid import CentroidStrategy, _record_centroid_pass
 from _eddy_seek.strategy.sweep_centroid import _record_sweep_centroid_pass
@@ -49,37 +47,34 @@ from _eddy_seek.strategy.sweep_centroid import _record_sweep_centroid_pass
 
 def test_plot_filename():
     when = PLOT_WRITE_AT
+    assert plot_filename(when) == f"{PLOT_RUN_DIR}/session.html"
     assert (
-        plot_filename("abcd1234-session", when)
-        == "14_30_02_07_26_abcd1234/session.html"
+        plot_filename(when, suffix="accuracy", run_label="accuracy", run_id="abcd1234")
+        == "2026-07-02_14-30-00_accuracy_abcd1234/accuracy.html"
     )
     assert (
-        plot_filename("abcd1234-session", when, suffix="accuracy")
-        == "14_30_02_07_26_abcd1234/accuracy.html"
-    )
-    assert (
-        plot_filename("abcd1234-session", when, suffix="start_ternary")
-        == "14_30_02_07_26_abcd1234/start_ternary.html"
+        plot_filename(when, suffix="start_sweep_centroid", run_label="start")
+        == "2026-07-02_14-30-00_start/start_sweep_centroid.html"
     )
     assert (
         plot_filename(
-            "full-session-id",
             when,
-            suffix="tools_t0_ternary",
+            suffix="tools_t0_centroid",
+            run_label="tools",
             run_id="batch999",
         )
-        == "14_30_02_07_26_batch999/tools_t0_ternary.html"
+        == "2026-07-02_14-30-00_tools_batch999/tools_t0_centroid.html"
     )
 
 
 def _write_strategy_plot(tmp_path, strategy_name: str, records, *, search_for="max"):
     fig = render_session_plot(strategy_name, records, search_for=search_for)
     assert fig is not None
-    return write_figure(tmp_path, PLOT_SESSION_ID, fig, write_at=PLOT_WRITE_AT)
+    return write_figure(tmp_path, fig, write_at=PLOT_WRITE_AT)
 
 
 def test_accuracy_plot_writes_html(requires_plotly, plot_tmp):
-    tmp_path, session_id, write_at = plot_tmp
+    tmp_path, _, write_at = plot_tmp
     records = (
         AccuracyRepeatRecord(
             1, Offset(0.01, 0.02), session_plot_path="/tmp/repeat1.html"
@@ -89,14 +84,15 @@ def test_accuracy_plot_writes_html(requires_plotly, plot_tmp):
     )
     path = write_figure(
         tmp_path,
-        session_id,
         render_session_plot("accuracy", records, search_for="max"),
         write_at=write_at,
         suffix="accuracy",
+        run_label="accuracy",
+        run_id="abcd1234",
     )
     assert path is not None
     assert os.path.isfile(path)
-    assert path.endswith("14_30_02_07_26_abcd1234/accuracy.html")
+    assert path.endswith("2026-07-02_14-30-00_accuracy_abcd1234/accuracy.html")
 
 
 def test_accuracy_plot_needs_two_repeats(requires_plotly, tmp_path):
@@ -158,7 +154,7 @@ def test_write_figure_creates_results_dir(requires_plotly, tmp_path):
         search_for="max",
     )
     assert fig is not None
-    write_figure(results_dir, "test-session-id", fig)
+    write_figure(results_dir, fig)
     assert results_dir.is_dir()
     assert any(results_dir.iterdir())
 
@@ -169,7 +165,7 @@ def test_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
         (Offset(0.0, 0.0), 200.0),
         (Offset(1.0, 1.0), 100.0),
     ]
-    tmp_path, session_id, write_at = plot_tmp
+    tmp_path, _, write_at = plot_tmp
     recorder = SessionRecorder(trace=False, plots=True)
     ctx = SimpleNamespace(recorder=recorder)
     _record_centroid_pass(
@@ -180,7 +176,6 @@ def test_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
     )  # type: ignore[arg-type]
     path = write_figure(
         tmp_path,
-        session_id,
         render_session_plot("centroid", recorder.records(), search_for="max"),
         write_at=write_at,
     )
@@ -214,7 +209,7 @@ def test_sweep_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
         for x in (-1.0, 0.0, 1.0)
         for y in (-1.0, 0.0, 1.0)
     ]
-    tmp_path, session_id, write_at = plot_tmp
+    tmp_path, _, write_at = plot_tmp
     recorder = SessionRecorder(trace=False, plots=True)
     ctx = SimpleNamespace(recorder=recorder)
     _record_sweep_centroid_pass(
@@ -239,7 +234,6 @@ def test_sweep_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
     )
     path = write_figure(
         tmp_path,
-        session_id,
         render_session_plot("sweep_centroid", recorder.records(), search_for="max"),
         write_at=write_at,
     )
@@ -409,7 +403,7 @@ def test_debug_scan_plot_writes_html(requires_plotly, plot_tmp):
     z, x_centers, y_centers = bin_frequencies(
         samples, box, tolerance=0.5, center=Offset.zero(), search_for="max"
     )
-    tmp_path, session_id, write_at = plot_tmp
+    tmp_path, _, write_at = plot_tmp
     records = (
         HeatmapRecord(
             move=PassMove.compute(Offset.zero(), Offset(0.01, 0.02)),
@@ -422,7 +416,6 @@ def test_debug_scan_plot_writes_html(requires_plotly, plot_tmp):
     )
     path = write_figure(
         tmp_path,
-        session_id,
         render_session_plot("debug_scan", records, search_for="max"),
         write_at=write_at,
     )
@@ -475,57 +468,6 @@ def test_save_preview_debug_scan_plot(requires_plotly):
     print(f"preview plot: {path}")
 
 
-def test_ternary_plot_writes_session_html(requires_plotly, plot_tmp):
-    from _eddy_seek.strategy.ternary import _record_ternary_pass
-
-    steps = [
-        TernaryStep(
-            axis=Axis.X,
-            iteration=0,
-            lo=-1.0,
-            hi=1.0,
-            m1=-0.33,
-            m2=0.33,
-            f1=90.0,
-            f2=80.0,
-        )
-    ]
-    probes = [(Offset(-0.33, 0.0), 90.0), (Offset(0.33, 0.0), 80.0)]
-    tmp_path, session_id, write_at = plot_tmp
-    recorder = SessionRecorder(trace=False, plots=True)
-    ctx = SimpleNamespace(recorder=recorder)
-    _record_ternary_pass(
-        ctx,
-        1,
-        Offset.zero(),
-        Offset(0.1, 0.0),
-        Offset(0.1, 0.0),
-        steps,
-        [],
-        probes,
-    )  # type: ignore[arg-type]
-    _record_ternary_pass(
-        ctx,
-        2,
-        Offset(0.1, 0.0),
-        Offset(0.0, 0.0),
-        Offset(0.1, 0.0),
-        steps,
-        steps,
-        probes,
-    )  # type: ignore[arg-type]
-    path = write_figure(
-        tmp_path,
-        session_id,
-        render_session_plot("ternary", recorder.records(), search_for="max"),
-        write_at=write_at,
-    )
-    assert path is not None
-    assert os.path.isfile(path)
-    assert path.endswith(PLOT_HTML_SUFFIX)
-    assert recorder.pass_count() == 2
-
-
 def test_render_returns_none_without_plotly(tmp_path):
     with patch("_eddy_seek.strategy.centroid.plotly_available", return_value=False):
         recorder = SessionRecorder(trace=False, plots=True)
@@ -542,79 +484,6 @@ def test_render_returns_none_without_plotly(tmp_path):
             render_session_plot("centroid", recorder.records(), search_for="max")
             is None
         )
-
-
-def test_ternary_plot_pass_bands_do_not_overlap(requires_plotly):
-    def _steps(axis: Axis, count: int) -> list[TernaryStep]:
-        return [
-            TernaryStep(
-                axis=axis,
-                iteration=i,
-                lo=-1.0,
-                hi=1.0,
-                m1=-0.33,
-                m2=0.33,
-                f1=90.0,
-                f2=80.0,
-            )
-            for i in range(count)
-        ]
-
-    from _eddy_seek.strategy.ternary import _record_ternary_pass
-
-    def _steps(axis: Axis, count: int) -> list[TernaryStep]:
-        return [
-            TernaryStep(
-                axis=axis,
-                iteration=i,
-                lo=-1.0,
-                hi=1.0,
-                m1=-0.33,
-                m2=0.33,
-                f1=90.0,
-                f2=80.0,
-            )
-            for i in range(count)
-        ]
-
-    recorder = SessionRecorder(trace=False, plots=True)
-    ctx = SimpleNamespace(recorder=recorder)
-    _record_ternary_pass(
-        ctx,
-        1,
-        Offset.zero(),
-        Offset(0.1, 0.0),
-        Offset(0.1, 0.0),
-        _steps(Axis.X, 3),
-        _steps(Axis.Y, 2),
-        [],  # type: ignore[arg-type]
-    )
-    _record_ternary_pass(
-        ctx,
-        2,
-        Offset(0.1, 0.0),
-        Offset(0.0, 0.0),
-        Offset(0.1, 0.0),
-        _steps(Axis.X, 2),
-        _steps(Axis.Y, 3),
-        [],  # type: ignore[arg-type]
-    )
-    fig = render_session_plot("ternary", recorder.records(), search_for="max")
-    assert fig is not None
-
-    x_bracket_ranges: list[tuple[float, float]] = []
-    for trace in fig.data:
-        ys = trace.y
-        if ys is None or len(ys) != 5:
-            continue
-        if getattr(trace, "yaxis", "y") != "y2":
-            continue
-        x_bracket_ranges.append((min(ys), max(ys)))
-
-    assert len(x_bracket_ranges) == 5  # 3 pass-1 + 2 pass-2 x brackets
-    pass1_max = max(end for _, end in x_bracket_ranges[:3])
-    pass2_min = min(start for start, _ in x_bracket_ranges[3:])
-    assert pass2_min > pass1_max
 
 
 def test_circle_harmonic_plot_writes_session_html(requires_plotly, plot_tmp):
@@ -667,10 +536,9 @@ def test_circle_harmonic_plot_writes_session_html(requires_plotly, plot_tmp):
             reject_reasons="snr (amp=50.00 < 2×noise=2.00)",
         ),
     )
-    tmp_path, session_id, write_at = plot_tmp
+    tmp_path, _, write_at = plot_tmp
     path = write_figure(
         tmp_path,
-        session_id,
         render_session_plot("circle_harmonic", records, search_for="max"),
         write_at=write_at,
     )
@@ -716,6 +584,7 @@ def test_centroid_on_session_end_returns_plot_path(requires_plotly, tmp_path):
             "config": cfg,
             "session_id": "abcd1234-session",
             "run_id": "batch123",
+            "run_label": "tools",
             "artifact_label": "tools_t0",
             "artifact_write_at": PLOT_WRITE_AT,
             "artifact_suffix": lambda _self, name: f"tools_t0_{name}",
@@ -732,6 +601,6 @@ def test_centroid_on_session_end_returns_plot_path(requires_plotly, tmp_path):
     )
     path = strategy.on_session_end(ctx)  # type: ignore[arg-type]
     assert path is not None
-    assert path.endswith("14_30_02_07_26_batch123/tools_t0_centroid.html")
+    assert path.endswith("2026-07-02_14-30-00_tools_batch123/tools_t0_centroid.html")
     assert os.path.isfile(path)
     assert recorder.pass_count() == 1

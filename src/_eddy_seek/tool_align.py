@@ -93,6 +93,7 @@ def align_tool(
     gcmd,
     *,
     run_id: str | None = None,
+    run_label: str = "run",
     artifact_label: str = "",
     artifact_write_at: datetime | None = None,
 ) -> SeekSessionResult:
@@ -101,6 +102,7 @@ def align_tool(
     return SeekSession(
         host,
         run_id=run_id,
+        run_label=run_label,
         artifact_label=artifact_label,
         artifact_write_at=artifact_write_at,
     ).run(gcmd, strategy, boundaries=False, announce_plot=False)
@@ -112,6 +114,7 @@ def align_tool_at(
     start_pos: Position,
     *,
     run_id: str | None = None,
+    run_label: str = "run",
     artifact_label: str = "",
     artifact_write_at: datetime | None = None,
 ) -> SeekSessionResult:
@@ -122,6 +125,7 @@ def align_tool_at(
         host,
         gcmd,
         run_id=run_id,
+        run_label=run_label,
         artifact_label=artifact_label,
         artifact_write_at=artifact_write_at,
     )
@@ -137,6 +141,7 @@ def align_tool_number(
     console: KConsole,
     load_tool: bool = False,
     run_id: str | None = None,
+    run_label: str = "run",
     artifact_write_at: datetime | None = None,
     batch: bool = False,
 ) -> tuple[Tool | None, Position | None, str | None]:
@@ -162,6 +167,7 @@ def align_tool_number(
     artifact_label = f"tools_t{tool_number}" if batch else f"tool{tool_number}"
     seek_kw = {
         "run_id": run_id,
+        "run_label": run_label,
         "artifact_label": artifact_label,
         "artifact_write_at": artifact_write_at,
     }
@@ -247,6 +253,7 @@ def align_all_tools(
                 console=console,
                 load_tool=True,
                 run_id=run_id,
+                run_label="tools",
                 artifact_write_at=write_at,
                 batch=True,
             )

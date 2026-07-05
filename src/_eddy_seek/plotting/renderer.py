@@ -37,7 +37,6 @@ from .primitives import (
     ScatterRecord,
     StatsRecord,
     SweepCentroidPassRecord,
-    TernaryPassRecord,
     _Record,
     record_pass_num,
 )
@@ -84,13 +83,6 @@ def pass_record_stats(record: _Record) -> PassGroupStats:
             result=record.move.result,
             sample_count=len(record.probes.xs),
         )
-    if isinstance(record, TernaryPassRecord):
-        return PassGroupStats(
-            freqs=(),
-            moved=record.move.moved,
-            result=record.move.result,
-            sample_count=len(record.probes.xs),
-        )
     raise TypeError(f"unsupported pass record type: {type(record).__name__}")
 
 
@@ -105,9 +97,7 @@ def group_by_pass(records: Sequence[_Record]) -> dict[int, list[_Record]]:
 
 def pass_group_stats(group: Sequence[Any]) -> PassGroupStats:
     for record in group:
-        if isinstance(
-            record, (SweepCentroidPassRecord, CentroidPassRecord, TernaryPassRecord)
-        ):
+        if isinstance(record, (SweepCentroidPassRecord, CentroidPassRecord)):
             return pass_record_stats(record)
     raise ValueError("no pass record found in group")
 
@@ -143,14 +133,18 @@ def final_result_marker(passes: dict[int, list[Any]]) -> MarkerRecord | None:
 
 
 def plot_filename(
-    session_id: str,
     when: datetime | None = None,
     *,
     suffix: str = "",
+    run_label: str = "run",
     run_id: str | None = None,
 ) -> str:
     return session_artifact_filename(
-        session_id, when, suffix=suffix, run_id=run_id, ext="html"
+        when,
+        suffix=suffix,
+        run_label=run_label,
+        run_id=run_id,
+        ext="html",
     )
 
 
@@ -270,17 +264,20 @@ def layout_with_stats(
 
 def write_figure(
     results_dir: Path,
-    session_id: str,
     fig: Any,
     *,
     write_at: datetime | None = None,
     suffix: str = "",
+    run_label: str = "run",
     run_id: str | None = None,
 ) -> str | None:
     if not plotly_available() or fig is None:
         return None
     out_path = results_dir / plot_filename(
-        session_id, write_at, suffix=suffix, run_id=run_id
+        write_at,
+        suffix=suffix,
+        run_label=run_label,
+        run_id=run_id,
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if not write_html(str(out_path), fig):
@@ -304,9 +301,9 @@ def finalize_strategy_plot(ctx: SeekSession, strategy_name: str) -> str | None:
         return None
     return write_figure(
         Path(ctx.config.result_folder),
-        ctx.session_id,
         fig,
         write_at=ctx.artifact_write_at,
         suffix=ctx.artifact_suffix(strategy_name),
+        run_label=ctx.run_label,
         run_id=ctx.run_id,
     )

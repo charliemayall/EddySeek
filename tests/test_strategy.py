@@ -21,8 +21,9 @@ from _eddy_seek.optimizer import (
 )
 from _eddy_seek.plotting.recorder import SessionRecorder
 from _eddy_seek.session import SeekSession, _sample_stdev
-from _eddy_seek.strategy import TernaryStrategy, strategy_for
+from _eddy_seek.strategy import strategy_for
 from _eddy_seek.strategy.base import SeekStrategy, _check_pass_divergence
+from _eddy_seek.strategy.centroid import CentroidStrategy
 
 
 def _test_cfg(**overrides) -> SeekConfig:
@@ -36,7 +37,7 @@ class _FakeReporter:
 
 class _RecordingSearchSession:
     def __init__(self) -> None:
-        self.config = _test_cfg(max_iter=1, max_passes=1)
+        self.config = _test_cfg(max_passes=1)
         self.positions: list[Offset] = []
         self.recorder = SessionRecorder(trace=False, plots=False)
 
@@ -47,7 +48,7 @@ class _RecordingSearchSession:
 
 def test_strategy_search_uses_positions():
     session = _RecordingSearchSession()
-    best, passes_run = TernaryStrategy().search(session, _FakeReporter())  # type: ignore[arg-type]
+    best, passes_run = CentroidStrategy().search(session, _FakeReporter())  # type: ignore[arg-type]
 
     assert isinstance(best, Offset)
     assert passes_run == 1
@@ -77,7 +78,7 @@ def test_strategy_weights_and_runtime_set():
     with raises(CommandError, match="unknown parameter 'GRD_STEP_X'"):
         cfg.apply_runtime_set(FakeGcmd({"GRD_STEP_X": "2.5"}))
 
-    assert strategy_for("ternary").name == "ternary"
+    assert strategy_for("circle_harmonic").name == "circle_harmonic"
     assert strategy_for("centroid").name == "centroid"
     assert strategy_for("sweep_centroid").name == "sweep_centroid"
     assert strategy_for("debug_scan").name == "debug_scan"

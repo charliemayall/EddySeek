@@ -256,7 +256,7 @@ Requires plotly on the Klipper host:
 ~/klippy-env/bin/pip3 install plotly
 ```
 
-With `save_plots: True`, HTML plots land under `{result_folder}/HH_MM_DD_MM_YY_{run_id}/`. Download and open in a browser (Mainsail shows source, not the plot).
+With `save_plots: True`, HTML plots land under `{result_folder}/YYYY-MM-DD_HH-MM-SS_{run_label}_{run_id}/` (for example `2026-07-02_14-30-26_start_a1b2c3d4/`). Download and open in a browser (Mainsail shows source, not the plot).
 
 ---
 

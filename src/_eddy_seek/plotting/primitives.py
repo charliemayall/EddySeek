@@ -103,22 +103,6 @@ class AxisSpan:
 
 
 @dataclass(frozen=True, slots=True)
-class TernaryStep:
-    axis: Axis
-    iteration: int
-    lo: float
-    hi: float
-    m1: float
-    m2: float
-    f1: float
-    f2: float
-
-    @property
-    def span(self) -> AxisSpan:
-        return AxisSpan(self.axis, self.lo, self.hi)
-
-
-@dataclass(frozen=True, slots=True)
 class BinnedProfile:
     thetas: tuple[float, ...]
     freqs: tuple[float, ...]
@@ -284,24 +268,6 @@ class CentroidPassRecord(_Record):
 
 
 @dataclass(frozen=True, slots=True)
-class TernaryPassRecord(_Record):
-    _KIND = "ternary_pass"
-
-    pass_num: int
-    move: PassMove
-    probes: XYCloud
-    steps: tuple[TernaryStep, ...]
-
-    def to_trace_dict(self) -> dict[str, Any]:
-        return {
-            "type": self._KIND,
-            "pass_num": self.pass_num,
-            "result": _json_value(asdict(self.move.result)),
-            "steps": [_json_value(asdict(step)) for step in self.steps],
-        }
-
-
-@dataclass(frozen=True, slots=True)
 class CircleBootstrapRecord(_Record):
     _KIND = "circle_bootstrap_pass"
 
@@ -372,7 +338,6 @@ SessionRecord: TypeAlias = (
     | SweepGridTraceRecord
     | SweepCentroidPassRecord
     | CentroidPassRecord
-    | TernaryPassRecord
     | CircleBootstrapRecord
     | CircleHarmonicPassRecord
     | AccuracyRepeatRecord

@@ -28,5 +28,5 @@ def plot_tmp(tmp_path):
     return tmp_path, PLOT_SESSION_ID, PLOT_WRITE_AT
 
 
-def write_plot_tmp(tmp_path: Path, session_id: str, fig, *, write_at=PLOT_WRITE_AT):
-    return write_figure(tmp_path, session_id, fig, write_at=write_at)
+def write_plot_tmp(tmp_path: Path, fig, *, write_at=PLOT_WRITE_AT):
+    return write_figure(tmp_path, fig, write_at=write_at)
