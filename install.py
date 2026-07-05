@@ -42,7 +42,7 @@ def restart_klipper() -> None:
     if not sys.stdin.isatty():
         return
     ans = input("Restart Klipper? (y/n): ")
-    if ans == "y":
+    if ans.lower() == "y":
         subprocess.run(["sudo", "systemctl", "restart", "klipper"], check=True)
         print("Klipper restarted")
 
