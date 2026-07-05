@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
-SCV_CAP = 30.0
+SCV_CAP = 10.0
 MAX_ACCEL = 3000.0
 MCR_DEFAULT = 0.5
 
