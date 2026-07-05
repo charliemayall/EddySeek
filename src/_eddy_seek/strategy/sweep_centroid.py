@@ -17,7 +17,11 @@ from typing import Any, Literal
 from ..common import Offset, Phase
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample
-from ..movement.leg_planner import axis_sweep_centroid
+from ..movement.leg_planner import (
+    MotionCapture,
+    SweepSettings,
+    axis_sweep_centroid,
+)
 from ..plotting._plotly import go, plotly_available
 from ..plotting.primitives import (
     Bounds,
@@ -80,15 +84,19 @@ class SweepCentroidStrategy(SeekStrategy):
         half_x = cfg.max_jog_x * shrink
         half_y = cfg.max_jog_y * shrink
 
+        capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
+        settings = SweepSettings.from_config(cfg)
         sweep = axis_sweep_centroid(
-            ctx,
+            capture,
+            settings,
             best,
             half_x=half_x,
             half_y=half_y,
-            speed=speed,
+            speed_mm_min=speed,
             phase=phase,
             pass_num=pass_num,
             label=f"sweep_centroid pass {pass_num}",
+            recorder=ctx.recorder,
         )
         in_box = sweep.in_box
         x_profile = sweep.x_profile

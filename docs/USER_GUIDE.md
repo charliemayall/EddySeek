@@ -95,7 +95,7 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | `max_jog_x` / `max_jog_y` | `2.5`                                     | Max search radius from start (mm)                                                      |
 | `tolerance`               | `0.05`                                    | Stop when both axes move less than this (mm)                                           |
 | `dwell_time`              | `0.5`                                     | Seconds at each probe point (grid strategies only)                                     |
-| `jog_speed`               | `10`                                      | Feedrate for search jogs (mm/s)                                                        |
+| `jog_speed`               | `80`                                      | Feedrate for search jogs (mm/s)                                                        |
 | `search_for`              | `max`                                     | `max` or `min` - which frequency extreme marks the nozzle centre, `max` for most users |
 | `strategy`                | `sweep_centroid`                          | `sweep_centroid`, `centroid`, `circle_harmonic`, or `debug_scan` (diag only)           |
 | `max_passes`              | `6`                                       | Search passes before giving up                                                         |

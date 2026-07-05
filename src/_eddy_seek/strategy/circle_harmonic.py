@@ -34,10 +34,11 @@ from ..harmonic import (
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample, get_clamped_speed_for_min_samples_over_span
 from ..movement.leg_planner import (
-    _axis_sweep_profiles,
-    axis_sweep_centroid,
-    get_samples_from_capture_legs,
+    MotionCapture,
+    SweepSettings,
+    axis_sweep_profiles,
 )
+from ..optimizer import decoupled_centroid
 from ..plotting.primitives import (
     BinnedProfile,
     Bounds,
@@ -264,21 +265,34 @@ class CircleHarmonicStrategy(SeekStrategy):
         best: Offset,
     ) -> Offset:
         cfg = ctx.config
-        sweep = axis_sweep_centroid(
-            ctx,
+        half_x = cfg.max_jog_x
+        half_y = cfg.max_jog_y
+        capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
+        settings = SweepSettings.from_config(cfg)
+        profiles = axis_sweep_profiles(
+            capture,
+            settings,
             best,
-            half_x=cfg.max_jog_x,
-            half_y=cfg.max_jog_y,
-            speed=cfg.sweep_coarse_speed,
+            half_x=half_x,
+            half_y=half_y,
+            speed_mm_min=cfg.sweep_coarse_speed,
             phase=Phase.COARSE,
             pass_num=pass_num,
-            label="circle_harmonic bootstrap",
+            recorder=ctx.recorder,
         )
-        self._x_profile = sweep.x_profile
-        self._y_profile = sweep.y_profile
-        result_or_none = sweep.centroid
-        box = sweep.box
-        in_box = sweep.in_box
+        box = profiles.box
+        in_box = profiles.in_box
+        x_profile = profiles.x_profile
+        y_profile = profiles.y_profile
+        if len(in_box) < cfg.min_sweep_samples:
+            raise RuntimeError(
+                f"eddy_seek: circle_harmonic bootstrap collected {len(in_box)} in-range samples "
+                f"(need >= {cfg.min_sweep_samples}). "
+                "Check sensor and sweep speed."
+            )
+        self._x_profile = x_profile
+        self._y_profile = y_profile
+        result_or_none = decoupled_centroid(x_profile, y_profile, cfg.search_for)
 
         if cfg.circle_bootstrap_slope_only:
             self._bootstrap = best
@@ -384,9 +398,8 @@ class CircleHarmonicStrategy(SeekStrategy):
         if cfg.circle_refresh_sweeps:
             self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
-        leg_batches = get_samples_from_capture_legs(
-            ctx, legs, clamped_speed, flat=False
-        )
+        capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
+        leg_batches = capture.collect_legs(legs, clamped_speed, flat=False)
         for i, batch in enumerate(leg_batches):
             if len(batch) < MIN_SAMPLES_PER_SPAN:
                 logger.warning(
@@ -639,12 +652,18 @@ class CircleHarmonicStrategy(SeekStrategy):
         center: Offset,
         radius: float,
     ) -> None:
-        _, self._x_profile, self._y_profile, _ = _axis_sweep_profiles(
-            ctx,
+        capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
+        settings = SweepSettings.from_config(ctx.config)
+        profiles = axis_sweep_profiles(
+            capture,
+            settings,
             center,
             half_x=radius,
             half_y=radius,
-            speed=ctx.config.sweep_coarse_speed,
+            speed_mm_min=ctx.config.sweep_coarse_speed,
             phase=Phase.FINE,
             pass_num=pass_num,
+            recorder=ctx.recorder,
         )
+        self._x_profile = profiles.x_profile
+        self._y_profile = profiles.y_profile

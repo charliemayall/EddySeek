@@ -17,7 +17,7 @@ from typing import Any, Literal
 from ..common import Offset
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample
-from ..movement.leg_planner import sweep_grid
+from ..movement.leg_planner import MotionCapture, SweepSettings, sweep_grid
 from ..optimizer import bin_frequencies, peak_bin_center
 from ..plotting.debug_scan import render_debug_scan_figure
 from ..plotting.primitives import (
@@ -64,11 +64,15 @@ class DebugScanStrategy(SeekStrategy):
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         cfg = ctx.config
 
+        capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
+        settings = SweepSettings.from_config(cfg)
         samples, box = sweep_grid(
-            ctx,
+            capture,
+            settings,
             best,
             cfg.sweep_coarse_speed,
             cfg.tolerance,
+            recorder=ctx.recorder,
         )
         if len(samples) < cfg.min_sweep_samples:
             raise RuntimeError(

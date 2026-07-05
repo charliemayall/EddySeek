@@ -21,6 +21,8 @@ from _eddy_seek.movement.handler import (
     get_clamped_speed_for_min_samples_over_span,
 )
 from _eddy_seek.movement.leg_planner import (
+    MotionCapture,
+    SweepSettings,
     axis_sweep_centroid,
     iter_cross_offsets,
     sweep_axis,
@@ -35,6 +37,12 @@ def _make_handler(printer, origin: Position = Position.zero()) -> MotionHandler:
     config.dwell_time = 0.5
     config.min_sweep_samples = 1
     return MotionHandler(printer, host, config, origin)
+
+
+def _capture(
+    handler: MotionHandler, origin: Position = Position.zero()
+) -> MotionCapture:
+    return MotionCapture(handler, origin)
 
 
 def test_iter_cross_offsets_three_passes():
@@ -161,26 +169,98 @@ def test_speed_clamp_for_min_samples_leaves_slow_request():
     )
 
 
-def test_sweep_axis_passes_speed_through():
-    """Speed clamping is the caller's job; sweep_axis must not alter it."""
-    ctx = MagicMock()
-    ctx.config.min_sweep_samples = 20
-    ctx.config.sweep_overscan = 1.0
-    ctx.session_start = Position.zero()
-    handler = MagicMock()
-    ctx.motion = handler
-    handler.collect_samples.return_value = []
+def test_sweep_axis_clamps_speed_for_min_samples():
+    settings = SweepSettings.from_config(
+        SeekConfig(
+            max_jog_x=2.5,
+            max_jog_y=2.5,
+            min_sweep_samples=20,
+            sweep_cross_passes=1,
+        )
+    )
+    capture = MagicMock()
+    capture.collect_legs.return_value = [
+        MotionSample(Offset(-0.1 + i * 0.01, 0.0), 100.0, 0.0) for i in range(21)
+    ]
+
+    sweep_axis(
+        capture,
+        settings,
+        axis=Axis.X,
+        lo=-0.1,
+        hi=0.1,
+        cross_center=0.0,
+        speed_mm_min=3000.0,
+        phase=Phase.COARSE,
+        pass_num=1,
+    )
+
+    # span=0.2 mm -> cap = 0.2 * 400 Hz * 60 / 20 = 240 mm/min
+    assert capture.collect_legs.call_args.args[1] == 240.0
+
+
+def test_sweep_axis_honors_cross_pass_override():
+    settings = SweepSettings.from_config(
+        SeekConfig(sweep_cross_passes=3, min_sweep_samples=3)
+    )
+    capture = MagicMock()
+    capture.collect_legs.return_value = [
+        MotionSample(Offset(i * 0.01, 0.0), 100.0, 0.0) for i in range(3)
+    ]
+
+    with patch(
+        "_eddy_seek.movement.leg_planner.plan_axis_legs",
+        return_value=[],
+    ) as plan_legs:
+        sweep_axis(
+            capture,
+            settings,
+            axis=Axis.X,
+            lo=-1.0,
+            hi=1.0,
+            cross_center=0.0,
+            speed_mm_min=600.0,
+            phase=Phase.COARSE,
+            pass_num=1,
+            cross_passes=1,
+            clamp_speed=False,
+        )
+
+    assert plan_legs.call_args.args[4] == [0.0]
+
+
+def test_sweep_axis_without_clamp_passes_speed_through():
+    settings = SweepSettings.from_config(SeekConfig(min_sweep_samples=3))
+    capture = MagicMock()
+    capture.collect_legs.return_value = [
+        MotionSample(Offset(0.5, 0.0), 100.0, 0.0),
+        MotionSample(Offset(1.0, 0.0), 100.0, 0.0),
+        MotionSample(Offset(1.5, 0.0), 100.0, 0.0),
+    ]
 
     speed = 1800.0
-    sweep_axis(ctx, Axis.X, 0.5, 1.5, 0.0, [0.0], speed, Phase.FINE, 2)
+    sweep_axis(
+        capture,
+        settings,
+        axis=Axis.X,
+        lo=0.5,
+        hi=1.5,
+        cross_center=0.0,
+        speed_mm_min=speed,
+        phase=Phase.FINE,
+        pass_num=2,
+        clamp_speed=False,
+    )
 
-    handler.run_capture_legs.assert_called_once()
-    assert handler.run_capture_legs.call_args.args[1] == speed
+    capture.collect_legs.assert_called_once()
+    assert capture.collect_legs.call_args.args[1] == speed
 
 
 def test_axis_sweep_centroid_builds_profiles_and_centroid():
-    ctx = MagicMock()
-    ctx.config = SeekConfig(search_for="max", min_sweep_samples=5)
+    settings = SweepSettings.from_config(
+        SeekConfig(search_for="max", min_sweep_samples=5)
+    )
+    capture = MagicMock()
 
     samples_x = [
         MotionSample(Offset(x, 0.0), 100.0 - 5.0 * x * x, 0.0)
@@ -192,15 +272,16 @@ def test_axis_sweep_centroid_builds_profiles_and_centroid():
     ]
 
     with patch(
-        "_eddy_seek.movement.leg_planner.clamped_sweep_axis",
-        side_effect=[([], samples_x), ([], samples_y)],
+        "_eddy_seek.movement.leg_planner.sweep_axis",
+        side_effect=[samples_x, samples_y],
     ):
         result = axis_sweep_centroid(
-            ctx,
+            capture,
+            settings,
             Offset.zero(),
             half_x=5.0,
             half_y=5.0,
-            speed=3000.0,
+            speed_mm_min=3000.0,
             phase=Phase.COARSE,
             pass_num=1,
             label="test",
@@ -215,8 +296,8 @@ def test_axis_sweep_centroid_builds_profiles_and_centroid():
 
 
 def test_axis_sweep_centroid_raises_when_too_few_samples():
-    ctx = MagicMock()
-    ctx.config = SeekConfig(min_sweep_samples=50)
+    settings = SweepSettings.from_config(SeekConfig(min_sweep_samples=50))
+    capture = MagicMock()
 
     samples_x = [
         MotionSample(Offset(x, 0.0), 100.0, 0.0) for x in [i * 0.1 for i in range(5)]
@@ -226,16 +307,17 @@ def test_axis_sweep_centroid_raises_when_too_few_samples():
     ]
 
     with patch(
-        "_eddy_seek.movement.leg_planner.clamped_sweep_axis",
-        side_effect=[([], samples_x), ([], samples_y)],
+        "_eddy_seek.movement.leg_planner.sweep_axis",
+        side_effect=[samples_x, samples_y],
     ):
         with raises(RuntimeError, match="test collected 10 in-range samples"):
             axis_sweep_centroid(
-                ctx,
+                capture,
+                settings,
                 Offset.zero(),
                 half_x=5.0,
                 half_y=5.0,
-                speed=3000.0,
+                speed_mm_min=3000.0,
                 phase=Phase.COARSE,
                 pass_num=1,
                 label="test",

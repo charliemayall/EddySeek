@@ -47,7 +47,7 @@ class SeekConfig:
         default=0.5, metadata={"gcode": "DWELL_TIME", "positive": True}
     )
     jog_speed: float = field(
-        default=600.0,
+        default=80 * 60.0,
         metadata={"gcode": "JOG_SPEED", "positive": True, "speed": True},
     )
     search_for: Literal["min", "max"] = field(
@@ -78,11 +78,11 @@ class SeekConfig:
     result_folder: str = field(default="~/printer_data/config/eddy_seek_results")
 
     sweep_coarse_speed: float = field(
-        default=1200.0,
+        default=20 * 60.0,
         metadata={"gcode": "SWEEP_COARSE_SPEED", "positive": True, "speed": True},
     )
     sweep_fine_speed: float = field(
-        default=600.0,
+        default=10 * 60.0,
         metadata={"gcode": "SWEEP_FINE_SPEED", "positive": True, "speed": True},
     )
     sweep_overscan: float = field(
@@ -113,7 +113,7 @@ class SeekConfig:
         default=0.1, metadata={"gcode": "CIRCLE_ARC_RESOLUTION", "positive": True}
     )
     circle_speed: float = field(
-        default=600.0,
+        default=10 * 60.0,
         metadata={"gcode": "CIRCLE_SPEED", "positive": True, "speed": True},
     )
     noise_k: float = field(default=1.0, metadata={"gcode": "NOISE_K", "positive": True})
