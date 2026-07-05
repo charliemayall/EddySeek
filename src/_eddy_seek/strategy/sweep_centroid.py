@@ -150,20 +150,13 @@ def _record_sweep_centroid_pass(
     samples: list[MotionSample],
     box: tuple[float, float, float, float],
 ) -> None:
-    rec = ctx.recorder
-    if not rec.active:
-        return
-    rec.record(
+    ctx.recorder.record_if_active(
         SweepCentroidPassRecord(
             pass_num=pass_num,
             phase=phase.value,
             move=PassMove.compute(center, result),
             bounds=Bounds.from_box(box),
-            samples=XYCloud(
-                tuple(sample.offset.x for sample in samples),
-                tuple(sample.offset.y for sample in samples),
-                tuple(sample.freq for sample in samples),
-            ),
+            samples=XYCloud.from_samples(samples),
         )
     )
 

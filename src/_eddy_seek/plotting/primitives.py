@@ -10,12 +10,14 @@ Shared session/plot record primitives — JSON-serializable, consumed by recorde
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from typing import Any, ClassVar, TypeAlias
 
 from ..common import Axis, Offset
 from ..harmonic import HarmonicFit
+from ..movement.handler import MotionSample
 
 PASS_COLORS = (
     "#636EFA",
@@ -70,6 +72,27 @@ class XYCloud:
     xs: tuple[float, ...]
     ys: tuple[float, ...]
     freqs: tuple[float, ...] | None = None
+
+    @classmethod
+    def from_samples(cls, samples: Sequence[MotionSample]) -> XYCloud:
+        return cls(
+            tuple(sample.offset.x for sample in samples),
+            tuple(sample.offset.y for sample in samples),
+            tuple(sample.freq for sample in samples),
+        )
+
+    @classmethod
+    def from_probes(
+        cls,
+        probes: Sequence[tuple[Offset, float]],
+        *,
+        freqs: bool = True,
+    ) -> XYCloud:
+        xs = tuple(position.x for position, _ in probes)
+        ys = tuple(position.y for position, _ in probes)
+        if freqs:
+            return cls(xs, ys, tuple(freq for _, freq in probes))
+        return cls(xs, ys)
 
 
 @dataclass(frozen=True, slots=True)
@@ -406,6 +429,18 @@ def _test_primitives() -> None:
     assert pass_color(1) == PASS_COLORS[0]
     assert PassMove.compute(Offset.zero(), Offset(1.0, 0.0)).moved.x == 1.0
     assert record_pass_num(AccuracyRepeatRecord(2, Offset.zero())) == 2
+
+    from ..movement.handler import MotionSample
+
+    samples = [
+        MotionSample(Offset(1.0, 2.0), 100.0, 0.0),
+        MotionSample(Offset(3.0, 4.0), 101.0, 0.1),
+    ]
+    cloud = XYCloud.from_samples(samples)
+    assert cloud == XYCloud((1.0, 3.0), (2.0, 4.0), (100.0, 101.0))
+    probes = [(Offset(1.0, 2.0), 100.0), (Offset(3.0, 4.0), 101.0)]
+    assert XYCloud.from_probes(probes) == cloud
+    assert XYCloud.from_probes(probes, freqs=False) == XYCloud((1.0, 3.0), (2.0, 4.0))
 
     circle = CircleHarmonicPassRecord(
         2,

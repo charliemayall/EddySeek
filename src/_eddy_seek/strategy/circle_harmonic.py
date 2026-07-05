@@ -14,7 +14,7 @@ import logging
 import math
 from dataclasses import dataclass
 
-from ..common import Axis, Offset, Phase, samples_in_box, search_box
+from ..common import Offset, Phase
 from ..harmonic import (
     HarmonicFit,
     bin_samples_by_angle,
@@ -33,8 +33,8 @@ from ..harmonic import (
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample, get_clamped_speed_for_min_samples_over_span
 from ..movement.leg_planner import (
+    _axis_sweep_profiles,
     axis_sweep_centroid,
-    clamped_sweep_axis,
     get_samples_from_capture_legs,
 )
 from ..plotting.primitives import (
@@ -55,7 +55,6 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class _CirclePassOutcome:
     result: Offset
-    plot_result: Offset
     trace_center: Offset
     trace_radius: float
     samples: list[MotionSample]
@@ -64,7 +63,76 @@ class _CirclePassOutcome:
     rejected: bool
     reject_reasons: str
     freeze: bool
-    record: bool
+
+
+def _outcome_hold(
+    best: Offset,
+    trace_center: Offset,
+    trace_radius: float,
+    *,
+    samples: list[MotionSample] | None = None,
+    binned: list[tuple[float, float]] | None = None,
+) -> _CirclePassOutcome:
+    """Radius too small / no legs — freeze, no plot."""
+    return _CirclePassOutcome(
+        result=best,
+        trace_center=trace_center,
+        trace_radius=trace_radius,
+        samples=samples or [],
+        binned=binned or [],
+        fit=None,
+        rejected=False,
+        reject_reasons="",
+        freeze=True,
+    )
+
+
+def _outcome_reject(
+    best: Offset,
+    trace_center: Offset,
+    trace_radius: float,
+    samples: list[MotionSample],
+    binned: list[tuple[float, float]],
+    *,
+    fit: HarmonicFit | None,
+    reason: str,
+) -> _CirclePassOutcome:
+    """Rejected fit — hold best, plot bootstrap."""
+    return _CirclePassOutcome(
+        result=best,
+        trace_center=trace_center,
+        trace_radius=trace_radius,
+        samples=samples,
+        binned=binned,
+        fit=fit,
+        rejected=True,
+        reject_reasons=reason,
+        freeze=False,
+    )
+
+
+def _outcome_accept(
+    result: Offset,
+    trace_center: Offset,
+    trace_radius: float,
+    samples: list[MotionSample],
+    binned: list[tuple[float, float]],
+    fit: HarmonicFit,
+    *,
+    converged: bool,
+) -> _CirclePassOutcome:
+    """Successful step — plot result, freeze if converged."""
+    return _CirclePassOutcome(
+        result=result,
+        trace_center=trace_center,
+        trace_radius=trace_radius,
+        samples=samples,
+        binned=binned,
+        fit=fit,
+        rejected=False,
+        reject_reasons="",
+        freeze=converged,
+    )
 
 
 class CircleHarmonicStrategy(SeekStrategy):
@@ -141,18 +209,17 @@ class CircleHarmonicStrategy(SeekStrategy):
         return False
 
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
-        if self._frozen is not None:
-            return self._frozen
-
         if ctx.config.circle_skip_bootstrap:
             if self._bootstrap is None:
                 self._bootstrap = best
-            return self._circle_pass(ctx, pass_num, best)
+            outcome = self._compute_circle_pass(ctx, pass_num, best)
+            return self._finish_circle_pass(ctx, pass_num, best, outcome)
 
         if pass_num == 1:
             return self._bootstrap_pass(ctx, pass_num, best)
 
-        return self._circle_pass(ctx, pass_num, best)
+        outcome = self._compute_circle_pass(ctx, pass_num, best)
+        return self._finish_circle_pass(ctx, pass_num, best, outcome)
 
     def _pass_message(
         self,
@@ -254,15 +321,6 @@ class CircleHarmonicStrategy(SeekStrategy):
         )
         return result
 
-    def _circle_pass(
-        self,
-        ctx: SeekSession,
-        pass_num: int,
-        best: Offset,
-    ) -> Offset:
-        outcome = self._compute_circle_pass(ctx, pass_num, best)
-        return self._finish_circle_pass(ctx, pass_num, best, outcome)
-
     def _compute_circle_pass(
         self,
         ctx: SeekSession,
@@ -287,35 +345,11 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"eddy_seek: circle_harmonic pass {pass_num} radius {trace_radius:.4f} "
                 f"< min {cfg.circle_radius_min} - holding bootstrap"
             )
-            return _CirclePassOutcome(
-                result=best,
-                plot_result=best,
-                trace_center=trace_center,
-                trace_radius=trace_radius,
-                samples=[],
-                binned=[],
-                fit=None,
-                rejected=False,
-                reject_reasons="",
-                freeze=True,
-                record=False,
-            )
+            return _outcome_hold(best, trace_center, trace_radius)
 
         legs = circle_arc_legs(trace_center, trace_radius, cfg.circle_arc_resolution)
         if not legs:
-            return _CirclePassOutcome(
-                result=best,
-                plot_result=best,
-                trace_center=trace_center,
-                trace_radius=trace_radius,
-                samples=[],
-                binned=[],
-                fit=None,
-                rejected=False,
-                reject_reasons="",
-                freeze=True,
-                record=False,
-            )
+            return _outcome_hold(best, trace_center, trace_radius)
 
         circumference = 2 * math.pi * trace_radius
         clamped_speed = get_clamped_speed_for_min_samples_over_span(
@@ -351,18 +385,14 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"eddy_seek: circle_harmonic pass {pass_num} fit failed "
                 f"(r={trace_radius:.3f}) - holding bootstrap"
             )
-            return _CirclePassOutcome(
-                result=best,
-                plot_result=bootstrap,
-                trace_center=trace_center,
-                trace_radius=trace_radius,
-                samples=samples,
-                binned=binned,
+            return _outcome_reject(
+                best,
+                trace_center,
+                trace_radius,
+                samples,
+                binned,
                 fit=None,
-                rejected=True,
-                reject_reasons="fit failed",
-                freeze=False,
-                record=True,
+                reason="fit failed",
             )
 
         reject_reasons = harmonic_reject_reasons(
@@ -377,18 +407,14 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"(r={trace_radius:.3f} amp={fit.amplitude:.4f} "
                 f"noise={fit.noise:.4f}): {', '.join(reject_reasons)}"
             )
-            return _CirclePassOutcome(
-                result=best,
-                plot_result=bootstrap,
-                trace_center=trace_center,
-                trace_radius=trace_radius,
-                samples=samples,
-                binned=binned,
+            return _outcome_reject(
+                best,
+                trace_center,
+                trace_radius,
+                samples,
+                binned,
                 fit=fit,
-                rejected=True,
-                reject_reasons=", ".join(reject_reasons),
-                freeze=False,
-                record=True,
+                reason=", ".join(reject_reasons),
             )
 
         f_prime = radial_slope(
@@ -427,37 +453,29 @@ class CircleHarmonicStrategy(SeekStrategy):
                 f"Δ={divergence:.4f} > limit {divergence_limit:.4f} "
                 f"({result.x:.4f}, {result.y:.4f}) vs ({bootstrap.x:.4f}, {bootstrap.y:.4f})"
             )
-            return _CirclePassOutcome(
-                result=best,
-                plot_result=bootstrap,
-                trace_center=trace_center,
-                trace_radius=trace_radius,
-                samples=samples,
-                binned=binned,
+            return _outcome_reject(
+                best,
+                trace_center,
+                trace_radius,
+                samples,
+                binned,
                 fit=fit,
-                rejected=True,
-                reject_reasons=(
+                reason=(
                     f"diverged from bootstrap (Δ={divergence:.4f} > {divergence_limit:.4f})"
                 ),
-                freeze=False,
-                record=True,
             )
 
         converged = harmonic_converged(fit, step, cfg.tolerance, cfg.noise_k)
         if converged:
             logger.info(f"eddy_seek: circle_harmonic converged at pass {pass_num}")
-        return _CirclePassOutcome(
-            result=result,
-            plot_result=result,
-            trace_center=trace_center,
-            trace_radius=trace_radius,
-            samples=samples,
-            binned=binned,
-            fit=fit,
-            rejected=False,
-            reject_reasons="",
-            freeze=converged,
-            record=True,
+        return _outcome_accept(
+            result,
+            trace_center,
+            trace_radius,
+            samples,
+            binned,
+            fit,
+            converged=converged,
         )
 
     def _finish_circle_pass(
@@ -467,16 +485,19 @@ class CircleHarmonicStrategy(SeekStrategy):
         best: Offset,
         outcome: _CirclePassOutcome,
     ) -> Offset:
+        bootstrap = self._bootstrap if self._bootstrap is not None else best
         if outcome.rejected:
             self._last_pass_rejected = True
         if outcome.freeze:
             self._frozen = outcome.result
-        if outcome.record:
+        freeze_without_plot = outcome.freeze and not outcome.samples
+        if outcome.rejected or (outcome.samples and not freeze_without_plot):
+            plot = bootstrap if outcome.rejected else outcome.result
             self._record_circle_plot(
                 ctx,
                 pass_num,
                 best,
-                outcome.plot_result,
+                plot,
                 outcome.trace_center,
                 outcome.trace_radius,
                 outcome.samples,
@@ -498,18 +519,11 @@ class CircleHarmonicStrategy(SeekStrategy):
         *,
         skipped: Offset | None = None,
     ) -> None:
-        rec = ctx.recorder
-        if not rec.active:
-            return
-        rec.record(
+        ctx.recorder.record_if_active(
             CircleBootstrapRecord(
                 pass_num=pass_num,
                 move=PassMove.compute(center, result),
-                samples=XYCloud(
-                    tuple(sample.offset.x for sample in samples),
-                    tuple(sample.offset.y for sample in samples),
-                    tuple(sample.freq for sample in samples),
-                ),
+                samples=XYCloud.from_samples(samples),
                 bounds=Bounds.from_box(box),
                 skipped=skipped,
             )
@@ -530,20 +544,13 @@ class CircleHarmonicStrategy(SeekStrategy):
         rejected: bool,
         reject_reasons: str = "",
     ) -> None:
-        rec = ctx.recorder
-        if not rec.active:
-            return
-        rec.record(
+        ctx.recorder.record_if_active(
             CircleHarmonicPassRecord(
                 pass_num=pass_num,
                 trace_center=trace_center,
                 radius=trace_radius,
                 move=PassMove.compute(best, result),
-                samples=XYCloud(
-                    tuple(sample.offset.x for sample in samples),
-                    tuple(sample.offset.y for sample in samples),
-                    tuple(sample.freq for sample in samples),
-                ),
+                samples=XYCloud.from_samples(samples),
                 binned=BinnedProfile(
                     tuple(theta for theta, _ in binned),
                     tuple(freq for _, freq in binned),
@@ -561,35 +568,12 @@ class CircleHarmonicStrategy(SeekStrategy):
         center: Offset,
         radius: float,
     ) -> None:
-        cfg = ctx.config
-        speed = cfg.sweep_coarse_speed
-        length = abs(radius)
-
-        clamped_speed = get_clamped_speed_for_min_samples_over_span(
-            requested_mm_min=speed,
-            span_mm=length,
-            min_samples=cfg.min_sweep_samples,
-        )
-        _, samples_x = clamped_sweep_axis(
+        _, self._x_profile, self._y_profile, _ = _axis_sweep_profiles(
             ctx,
-            Axis.X,
-            center.x,
-            radius,
-            center.y,
-            clamped_speed,
-            Phase.FINE,
-            pass_num,
+            center,
+            half_x=radius,
+            half_y=radius,
+            speed=ctx.config.sweep_coarse_speed,
+            phase=Phase.FINE,
+            pass_num=pass_num,
         )
-        _, samples_y = clamped_sweep_axis(
-            ctx,
-            Axis.Y,
-            center.y,
-            radius,
-            center.x,
-            clamped_speed,
-            Phase.FINE,
-            pass_num,
-        )
-        box = search_box(center, radius, radius, cfg.max_jog_x, cfg.max_jog_y)
-        self._x_profile = [(s.offset.x, s.freq) for s in samples_in_box(samples_x, box)]
-        self._y_profile = [(s.offset.y, s.freq) for s in samples_in_box(samples_y, box)]

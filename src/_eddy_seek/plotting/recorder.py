@@ -42,6 +42,12 @@ class SessionRecorder:
             return
         self._records.append(entry)
 
+    def record_if_active(self, entry: SessionRecord) -> bool:
+        if not self.active:
+            return False
+        self._records.append(entry)
+        return True
+
     def records(self) -> tuple[SessionRecord, ...]:
         return tuple(self._records)
 

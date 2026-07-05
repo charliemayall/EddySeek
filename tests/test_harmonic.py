@@ -293,13 +293,15 @@ def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one()
     ctx.config = SeekConfig(circle_skip_bootstrap=True)
 
     with patch.object(strategy, "_bootstrap_pass") as bootstrap:
-        with patch.object(
-            strategy, "_circle_pass", return_value=Offset.zero()
-        ) as circle:
-            result = strategy._step(ctx, 1, Offset.zero())
+        with patch.object(strategy, "_compute_circle_pass") as compute:
+            with patch.object(
+                strategy, "_finish_circle_pass", return_value=Offset.zero()
+            ) as finish:
+                result = strategy._step(ctx, 1, Offset.zero())
 
     bootstrap.assert_not_called()
-    circle.assert_called_once_with(ctx, 1, Offset.zero())
+    compute.assert_called_once_with(ctx, 1, Offset.zero())
+    finish.assert_called_once()
     assert strategy._bootstrap == Offset.zero()
     assert result == Offset.zero()
 
@@ -418,7 +420,7 @@ def test_circle_harmonic_skips_refresh_sweeps_when_disabled():
             ctx.motion, "run_capture_legs", side_effect=RuntimeError("stop")
         ):
             with pytest.raises(RuntimeError, match="stop"):
-                strategy._circle_pass(ctx, 2, Offset(1.0, 0.0))
+                strategy._compute_circle_pass(ctx, 2, Offset(1.0, 0.0))
 
     refresh.assert_not_called()
 
@@ -438,7 +440,7 @@ def test_circle_harmonic_runs_refresh_sweeps_when_enabled():
             ctx.motion, "run_capture_legs", side_effect=RuntimeError("stop")
         ):
             with pytest.raises(RuntimeError, match="stop"):
-                strategy._circle_pass(ctx, 2, Offset(1.0, 0.0))
+                strategy._compute_circle_pass(ctx, 2, Offset(1.0, 0.0))
 
     refresh.assert_called_once()
 

@@ -121,22 +121,14 @@ def _record_debug_scan(
     x_centers: list[float],
     y_centers: list[float],
 ) -> None:
-    rec = ctx.recorder
-    if not rec.active:
-        return
-
-    rec.record(
+    ctx.recorder.record_if_active(
         HeatmapRecord(
             move=PassMove.compute(center, result),
             bounds=Bounds.from_box(box),
             z=tuple(tuple(row) for row in z),
             x_centers=tuple(x_centers),
             y_centers=tuple(y_centers),
-            samples=XYCloud(
-                tuple(sample.offset.x for sample in samples),
-                tuple(sample.offset.y for sample in samples),
-                tuple(sample.freq for sample in samples),
-            ),
+            samples=XYCloud.from_samples(samples),
         )
     )
 

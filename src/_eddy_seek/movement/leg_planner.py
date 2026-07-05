@@ -222,15 +222,41 @@ def clamped_sweep_axis(
 @dataclass(frozen=True, slots=True)
 class AxisSweepCentroidResult:
     box: tuple[float, float, float, float]
-    in_box_x: list[MotionSample]
-    in_box_y: list[MotionSample]
+    in_box: list[MotionSample]
     x_profile: list[tuple[float, float]]
     y_profile: list[tuple[float, float]]
     centroid: Offset | None
 
-    @property
-    def in_box(self) -> list[MotionSample]:
-        return [*self.in_box_x, *self.in_box_y]
+
+def _axis_sweep_profiles(
+    ctx: SeekSession,
+    center: Offset,
+    *,
+    half_x: float,
+    half_y: float,
+    speed: float,
+    phase: Phase,
+    pass_num: int,
+) -> tuple[
+    tuple[float, float, float, float],
+    list[tuple[float, float]],
+    list[tuple[float, float]],
+    list[MotionSample],
+]:
+    """X/Y sweeps and box-filtered axis profiles (no centroid)."""
+    cfg = ctx.config
+    _, samples_x = clamped_sweep_axis(
+        ctx, Axis.X, center.x, half_x, center.y, speed, phase, pass_num
+    )
+    _, samples_y = clamped_sweep_axis(
+        ctx, Axis.Y, center.y, half_y, center.x, speed, phase, pass_num
+    )
+    box = search_box(center, half_x, half_y, cfg.max_jog_x, cfg.max_jog_y)
+    in_box_x = samples_in_box(samples_x, box)
+    in_box_y = samples_in_box(samples_y, box)
+    x_profile = [(sample.offset.x, sample.freq) for sample in in_box_x]
+    y_profile = [(sample.offset.y, sample.freq) for sample in in_box_y]
+    return box, x_profile, y_profile, [*in_box_x, *in_box_y]
 
 
 def axis_sweep_centroid(
@@ -246,16 +272,15 @@ def axis_sweep_centroid(
 ) -> AxisSweepCentroidResult:
     """X/Y sweeps, box filter, and decoupled centroid from axis profiles."""
     cfg = ctx.config
-    _, samples_x = clamped_sweep_axis(
-        ctx, Axis.X, center.x, half_x, center.y, speed, phase, pass_num
+    box, x_profile, y_profile, in_box = _axis_sweep_profiles(
+        ctx,
+        center,
+        half_x=half_x,
+        half_y=half_y,
+        speed=speed,
+        phase=phase,
+        pass_num=pass_num,
     )
-    _, samples_y = clamped_sweep_axis(
-        ctx, Axis.Y, center.y, half_y, center.x, speed, phase, pass_num
-    )
-    box = search_box(center, half_x, half_y, cfg.max_jog_x, cfg.max_jog_y)
-    in_box_x = samples_in_box(samples_x, box)
-    in_box_y = samples_in_box(samples_y, box)
-    in_box = [*in_box_x, *in_box_y]
 
     if len(in_box) < cfg.min_sweep_samples:
         raise RuntimeError(
@@ -264,13 +289,10 @@ def axis_sweep_centroid(
             "Check sensor and sweep speed."
         )
 
-    x_profile = [(sample.offset.x, sample.freq) for sample in in_box_x]
-    y_profile = [(sample.offset.y, sample.freq) for sample in in_box_y]
     centroid = decoupled_centroid(x_profile, y_profile, cfg.search_for)
     return AxisSweepCentroidResult(
         box=box,
-        in_box_x=in_box_x,
-        in_box_y=in_box_y,
+        in_box=in_box,
         x_profile=x_profile,
         y_profile=y_profile,
         centroid=centroid,

@@ -137,18 +137,11 @@ def _record_centroid_pass(
     moved: Offset,
     probes: list[tuple[Offset, float]],
 ) -> None:
-    rec = ctx.recorder
-    if not rec.active:
-        return
-    rec.record(
+    ctx.recorder.record_if_active(
         CentroidPassRecord(
             pass_num=pass_num,
             move=PassMove.compute(center, result),
-            probes=XYCloud(
-                tuple(position.x for position, _ in probes),
-                tuple(position.y for position, _ in probes),
-                tuple(freq for _, freq in probes),
-            ),
+            probes=XYCloud.from_probes(probes),
         )
     )
 
