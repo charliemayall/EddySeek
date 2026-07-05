@@ -367,24 +367,60 @@ def compute_accuracy_stats(offsets: list[Offset]) -> AccuracyStats:
     )
 
 
-def report_accuracy_stats(console: KConsole, offsets: list[Offset]) -> None:
+def report_accuracy_stats(
+    console: KConsole,
+    offsets: list[Offset],
+    *,
+    durations_s: list[float] | None = None,
+) -> None:
     n = len(offsets)
     stats = compute_accuracy_stats(offsets)
-
+    output = []
     for i, offset in enumerate(offsets, start=1):
-        console.detail(
+        line = (
             f"  #{i}  X={offset.x:+.4f} mm  Y={offset.y:+.4f} mm  "
             f"radial={stats.radial[i - 1]:.4f} mm"
         )
-    console.info(
-        f"Repeatability ({n} runs): mean X={stats.mean.x:+.4f} "
-        f"Y={stats.mean.y:+.4f} mm, σ X={stats.std_x:.3f} Y={stats.std_y:.3f} mm"
+        if durations_s is not None and i <= len(durations_s):
+            line += f"  t={durations_s[i - 1]:.1f}s"
+        console.detail(line)
+    output.append(
+        [
+            f"Repeatability ({n} runs):",
+            console.BR,
+            f"mean X={stats.mean.x:+.4f} Y={stats.mean.y:+.4f} mm",
+            console.BR,
+            f"σ X={stats.std_x:.3f} Y={stats.std_y:.3f} mm",
+            console.BR,
+            console.BR,
+            f"Max scatter: {stats.max_radial:.3f} mm",
+            console.BR,
+            f" Max pairwise {stats.max_pair:.3f} mm",
+            console.BR,
+        ]
     )
-    console.info(
-        f"Max scatter {stats.max_radial:.3f} mm - max pairwise {stats.max_pair:.3f} mm"
-    )
+
+    if durations_s:
+        mean_t = sum(durations_s) / len(durations_s)
+        output.append(
+            [
+                console.BR,
+                f"Seek time ({len(durations_s)} runs): ",
+                console.BR,
+                f"mean {mean_t:.1f}s ",
+                console.BR,
+                f"(min {min(durations_s):.1f}s, max {max(durations_s):.1f}s)",
+                console.BR,
+            ]
+        )
+    console.info("\n".join(output))
     logger.info(
         f"eddy_seek: accuracy report n={n} mean=({stats.mean.x:.4f}, {stats.mean.y:.4f}) "
         f"stdev=({stats.std_x:.4f}, {stats.std_y:.4f}) "
         f"max_radial={stats.max_radial:.4f} max_pair={stats.max_pair:.4f}"
+        + (
+            f" seek_time_mean={sum(durations_s) / len(durations_s):.2f}s"
+            if durations_s
+            else ""
+        )
     )

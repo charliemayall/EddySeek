@@ -405,6 +405,7 @@ class EddySeek(SeekHost):
         accuracy_recorder = SessionRecorder(trace=False, plots=cfg.save_plots)
 
         offsets: list[Offset] = []
+        durations_s: list[float] = []
         try:
             for repeat in range(1, repeats + 1):
                 if repeat > 1:
@@ -448,6 +449,7 @@ class EddySeek(SeekHost):
                     break
 
                 offsets.append(result.offset)
+                durations_s.append(result.end_time - result.start_time)
                 accuracy_recorder.record(
                     AccuracyRepeatRecord(
                         repeat_num=repeat,
@@ -457,14 +459,15 @@ class EddySeek(SeekHost):
                 )
                 console.info(
                     f"Repeat {repeat} - X={result.offset.x:+.4f} "
-                    f"Y={result.offset.y:+.4f} mm"
+                    f"Y={result.offset.y:+.4f} mm "
+                    f"({durations_s[-1]:.1f}s)"
                 )
 
             if len(offsets) < 2:
                 console.error("Need at least 2 successful repeats for deviation report")
                 return
 
-            report_accuracy_stats(console, offsets)
+            report_accuracy_stats(console, offsets, durations_s=durations_s)
             if cfg.save_plots and len(offsets) >= 2:
                 fig = render_session_plot(
                     "accuracy",
