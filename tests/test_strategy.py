@@ -8,7 +8,6 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 
 import math
 
-from fakes import CommandError, FakeGcmd
 from pytest import raises
 
 from _eddy_seek.common import Offset
@@ -56,7 +55,7 @@ def test_strategy_search_uses_positions():
     assert all(isinstance(position, Offset) for position in session.positions)
 
 
-def test_strategy_weights_and_runtime_set():
+def test_strategy_weights():
     cfg = _test_cfg()
     session = SeekSession.__new__(SeekSession)
     session.config = cfg
@@ -69,22 +68,10 @@ def test_strategy_weights_and_runtime_set():
     assert frequency_is_better(70.0, 80.0, session.config.search_for) is False
     assert _sample_stdev([1.0, 3.0], 2.0) == math.sqrt(2.0)
 
-    cfg = _test_cfg()
-    changed = cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "centroid"}))
-    assert changed == ["strategy=centroid"]
-    assert cfg.strategy == "centroid"
-    with raises(CommandError):
-        cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "bogus"}))
-    with raises(CommandError, match="unknown parameter 'GRD_STEP_X'"):
-        cfg.apply_runtime_set(FakeGcmd({"GRD_STEP_X": "2.5"}))
-
     assert strategy_for("circle_harmonic").name == "circle_harmonic"
     assert strategy_for("centroid").name == "centroid"
     assert strategy_for("sweep_centroid").name == "sweep_centroid"
     assert strategy_for("debug_scan").name == "debug_scan"
-    changed = cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "debug_scan"}))
-    assert changed == ["strategy=debug_scan"]
-    assert cfg.strategy == "debug_scan"
     with raises(ValueError):
         strategy_for("bogus")
 

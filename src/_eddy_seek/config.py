@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from dataclasses import Field, asdict, dataclass, field, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 if TYPE_CHECKING:
     from klippy.extras.configfile import ConfigWrapper
@@ -172,33 +172,31 @@ class SeekConfig:
         """
         Apply ``EDDY_SEEK_SET`` parameters in place.
 
-        Only keys present on the G-code command line are changed.  Returns a
-        list of ``field=value`` strings describing what changed.  Raises
-        ``gcmd.error`` (``CommandError``) on invalid input.
+        Only keys present on the G-code command line are changed.
+
+        Returns:
+          list[str]: A list of ``field=value`` strings describing what changed.
         """
         params = gcmd.get_command_parameters()
         changes: list[str] = []
         if not params:
             return changes
-
-        gcode_map = _gcode_to_field()
-        for key, raw in params.items():
-            gcode_key = key.upper()
-            field_name = gcode_map.get(gcode_key)
-            if field_name is None:
-                raise gcmd.error(
-                    f"EDDY_SEEK_SET: unknown parameter {key!r} "
-                    f"(known: {', '.join(sorted(gcode_map))})"
-                )
+        gcode_map = _runtime_settable_map()
+        for gcode_key, gcode_raw in params.items():
+            gcode_key = gcode_key.upper()
+            check = _can_set_key(gcode_key)
+            if not check.is_field or not check.is_settable:
+                raise gcmd.error(f"EDDY_SEEK_SET: {check.error}")
+            config_field_name = gcode_map[gcode_key]
             try:
-                value = _parse_runtime_value(field_name, gcode_key, raw)
+                value = _parse_runtime_value(config_field_name, gcode_key, gcode_raw)
             except ValueError as exc:
                 raise gcmd.error(
-                    f"EDDY_SEEK_SET: invalid {key}={raw!r} ({exc})"
+                    f"EDDY_SEEK_SET: invalid {gcode_key}={gcode_raw!r} ({exc})"
                 ) from exc
-            setattr(self, field_name, value)
-            display = value / 60.0 if _is_speed_field(field_name) else value
-            changes.append(f"{field_name}={display}")
+            setattr(self, config_field_name, value)
+            display = value / 60.0 if _is_speed_field(config_field_name) else value
+            changes.append(f"{config_field_name}={display}")
         try:
             _validate(self)
         except ValueError as exc:
@@ -223,7 +221,8 @@ def _mm_s_to_mm_min(mm_s: float) -> float:
     return mm_s * 60.0
 
 
-def _gcode_to_field() -> dict[str, str]:
+def _runtime_settable_map() -> dict[str, str]:
+    """Get the map of G-code keys to SeekConfig field names, for fields with a "gcode" metadata key (runtime settable)"""
     return {
         spec.metadata["gcode"]: spec.name
         for spec in fields(SeekConfig)
@@ -231,14 +230,37 @@ def _gcode_to_field() -> dict[str, str]:
     }
 
 
-def _field_name_for_key(key: str) -> str:
+class SetKeyCheck(NamedTuple):
+    is_field: bool
+    is_settable: bool
+    error: str | None = None
+
+
+def _can_set_key(key: str) -> SetKeyCheck:
+    """
+    Check whether a G-code key names a SeekConfig field and may be set at runtime.
+
+    Some fields exist only in printer.cfg (no ``gcode`` metadata); others are unknown.
+    """
     gcode_key = key.upper()
-    gcode_map = _gcode_to_field()
-    if gcode_key in gcode_map:
-        return gcode_map[gcode_key]
-    if gcode_key.lower() in {spec.name for spec in fields(SeekConfig)}:
-        return gcode_key.lower()
-    raise ValueError(f"EDDY_SEEK_SET: unknown parameter {key!r}")
+    gcode_map = _runtime_settable_map()
+    is_field = gcode_key.lower() in {spec.name for spec in fields(SeekConfig)}
+    is_settable = gcode_key in gcode_map
+    if not is_field:
+        return SetKeyCheck(
+            is_field=False,
+            is_settable=False,
+            error=(
+                f"Unknown parameter {key!r}</br>Known: {', '.join(sorted(gcode_map))}"
+            ),
+        )
+    if not is_settable:
+        return SetKeyCheck(
+            is_field=True,
+            is_settable=False,
+            error=f"{key!r} Can only be set via your config file",
+        )
+    return SetKeyCheck(is_field=True, is_settable=True)
 
 
 def _parse_runtime_value(field_name: str, label: str, raw: Any) -> Any:
@@ -265,6 +287,16 @@ def _parse_runtime_value(field_name: str, label: str, raw: Any) -> Any:
             return _mm_s_to_mm_min(parsed)
         return parsed
     raise ValueError(f"EDDY_SEEK_SET: invalid {label}={raw!r}")
+
+
+def _field_name_for_key(gcode_key: str) -> str:
+    gcode_key = gcode_key.upper()
+    gcode_map = _runtime_settable_map()
+    if gcode_key in gcode_map:
+        return gcode_map[gcode_key]
+    if gcode_key.lower() in {spec.name for spec in fields(SeekConfig)}:
+        return gcode_key.lower()
+    raise ValueError(f"unknown parameter {gcode_key!r}")
 
 
 def _parse_bool(raw: Any, label: str) -> bool:

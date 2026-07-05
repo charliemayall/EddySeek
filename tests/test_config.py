@@ -8,7 +8,7 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 
 from datetime import datetime
 
-from fakes import FakeKlipperConfig
+from fakes import CommandError, FakeGcmd, FakeKlipperConfig
 from pytest import raises
 
 from _eddy_seek.common import session_artifact_run_dir
@@ -32,6 +32,26 @@ def test_validate_var():
     assert cfg._var_ok("search_for", "bogus") is False
     assert cfg._var_ok("strategy", "bogus") is False
     assert cfg._var_ok("max_passes", -1) is False
+
+
+def test_apply_runtime_set():
+    cfg = SeekConfig()
+    changed = cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "centroid"}))
+    assert changed == ["strategy=centroid"]
+    assert cfg.strategy == "centroid"
+
+    with raises(CommandError):
+        cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "bogus"}))
+
+    with raises(CommandError, match=r"Unknown parameter 'GRD_STEP_X'"):
+        cfg.apply_runtime_set(FakeGcmd({"GRD_STEP_X": "2.5"}))
+
+    with raises(CommandError, match="Can only be set via your config file"):
+        cfg.apply_runtime_set(FakeGcmd({"DEBUG": "1"}))
+
+    changed = cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "debug_scan"}))
+    assert changed == ["strategy=debug_scan"]
+    assert cfg.strategy == "debug_scan"
 
 
 def test_grid_step_derived_from_max_jog():
