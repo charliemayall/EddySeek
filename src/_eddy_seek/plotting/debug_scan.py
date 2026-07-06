@@ -95,23 +95,6 @@ def _z_for_display(z: list[list[float | None]]) -> list[list[float]]:
     ]
 
 
-def _peak_bin_indices(
-    z: list[list[float | None]],
-) -> tuple[int, int, float] | None:
-    best_value: float | None = None
-    best_ix: int | None = None
-    best_iy: int | None = None
-    for iy, row in enumerate(z):
-        for ix, value in enumerate(row):
-            if value is None:
-                continue
-            if best_value is None or value > best_value:
-                best_value, best_ix, best_iy = value, ix, iy
-    if best_ix is None or best_iy is None or best_value is None or best_value < 1e-9:
-        return None
-    return best_ix, best_iy, best_value
-
-
 def _marginal_slice(
     z: list[list[float | None]],
     x_centers: list[float],
@@ -215,37 +198,16 @@ def _fwhm(profile: list[tuple[float, float]]) -> float | None:
     return width if width > 0.0 else None
 
 
-def _bin_sample_counts(
-    samples: list[MotionSample],
-    box: tuple[float, float, float, float],
-    tolerance: float,
-    center: Offset,
-) -> list[list[int]]:
-    x_lo, x_hi, y_lo, y_hi = box
-    n_x_min = math.ceil((x_lo - center.x) / tolerance - 0.5)
-    n_x_max = math.floor((x_hi - center.x) / tolerance + 0.5)
-    n_y_min = math.ceil((y_lo - center.y) / tolerance - 0.5)
-    n_y_max = math.floor((y_hi - center.y) / tolerance + 0.5)
-    nx = n_x_max - n_x_min + 1
-    ny = n_y_max - n_y_min + 1
-    counts = [[0] * nx for _ in range(ny)]
-    for sample in samples:
-        x = sample.offset.x
-        y = sample.offset.y
-        if not (x_lo <= x <= x_hi and y_lo <= y <= y_hi):
-            continue
-        ix = math.floor((x - center.x) / tolerance + 0.5) - n_x_min
-        iy = math.floor((y - center.y) / tolerance + 0.5) - n_y_min
-        if 0 <= ix < nx and 0 <= iy < ny:
-            counts[iy][ix] += 1
-    return counts
-
-
 def analyze_debug_scan(
     heatmap: HeatmapRecord,
     search_for: Literal["min", "max"],
 ) -> DebugScanAnalysis:
-    from ..optimizer import axis_weighted_centroid, weighted_centroid
+    from ..optimizer import (
+        axis_weighted_centroid,
+        bin_sample_counts,
+        peak_bin_indices,
+        weighted_centroid,
+    )
 
     center = heatmap.move.center
     result = heatmap.move.result
@@ -256,9 +218,9 @@ def analyze_debug_scan(
     samples = _motion_samples(heatmap.samples)
 
     tolerance = _grid_tolerance(x_centers, y_centers, box)
-    peak = _peak_bin_indices(z)
+    peak = peak_bin_indices(z)
     if peak is None:
-        density = _bin_sample_counts(samples, box, tolerance, center)
+        density = bin_sample_counts(samples, box, tolerance, center)
         return DebugScanAnalysis(
             bin_peak=result,
             centroid=None,
@@ -310,7 +272,7 @@ def analyze_debug_scan(
         peak_iy=peak_iy,
         x_marginal=x_profile,
         y_marginal=y_profile,
-        density=_bin_sample_counts(samples, box, tolerance, center),
+        density=bin_sample_counts(samples, box, tolerance, center),
     )
 
 

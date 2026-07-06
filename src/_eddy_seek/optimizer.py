@@ -86,14 +86,11 @@ def decoupled_centroid(
     return Offset(centroid_x, centroid_y)
 
 
-def bin_frequencies(
-    samples: list[MotionSample],
+def _grid_indices(
     box: tuple[float, float, float, float],
     tolerance: float,
     center: Offset,
-    search_for: Literal["min", "max"],
-) -> tuple[list[list[float | None]], list[float], list[float]]:
-    """Return ``(z[ny][nx] mean weight or None, x_centers, y_centers)``."""
+) -> tuple[int, int, int, int, list[float], list[float]]:
     x_lo, x_hi, y_lo, y_hi = box
     if tolerance <= 0.0:
         raise ValueError("tolerance must be positive")
@@ -105,6 +102,43 @@ def bin_frequencies(
     y_centers = [center.y + index * tolerance for index in range(n_y_min, n_y_max + 1)]
     nx = len(x_centers)
     ny = len(y_centers)
+    return n_x_min, n_y_min, nx, ny, x_centers, y_centers
+
+
+def bin_sample_counts(
+    samples: list[MotionSample],
+    box: tuple[float, float, float, float],
+    tolerance: float,
+    center: Offset,
+) -> list[list[int]]:
+    """Per-bin sample counts on the same grid as ``bin_frequencies``."""
+    n_x_min, n_y_min, nx, ny, _, _ = _grid_indices(box, tolerance, center)
+    x_lo, x_hi, y_lo, y_hi = box
+    counts = [[0] * nx for _ in range(ny)]
+    for sample in samples:
+        x = sample.offset.x
+        y = sample.offset.y
+        if not (x_lo <= x <= x_hi and y_lo <= y <= y_hi):
+            continue
+        ix = math.floor((x - center.x) / tolerance + 0.5) - n_x_min
+        iy = math.floor((y - center.y) / tolerance + 0.5) - n_y_min
+        if 0 <= ix < nx and 0 <= iy < ny:
+            counts[iy][ix] += 1
+    return counts
+
+
+def bin_frequencies(
+    samples: list[MotionSample],
+    box: tuple[float, float, float, float],
+    tolerance: float,
+    center: Offset,
+    search_for: Literal["min", "max"],
+) -> tuple[list[list[float | None]], list[float], list[float]]:
+    """Return ``(z[ny][nx] mean weight or None, x_centers, y_centers)``."""
+    n_x_min, n_y_min, nx, ny, x_centers, y_centers = _grid_indices(
+        box, tolerance, center
+    )
+    x_lo, x_hi, y_lo, y_hi = box
 
     in_box_freqs = [
         sample.freq
@@ -139,12 +173,10 @@ def bin_frequencies(
     return z, x_centers, y_centers
 
 
-def peak_bin_center(
+def peak_bin_indices(
     z: list[list[float | None]],
-    x_centers: list[float],
-    y_centers: list[float],
-) -> Offset | None:
-    """Bin with highest mean weight. Skip empty bins and flat response."""
+) -> tuple[int, int, float] | None:
+    """Index and value of the bin with highest mean weight."""
     best_value: float | None = None
     best_ix: int | None = None
     best_iy: int | None = None
@@ -154,8 +186,21 @@ def peak_bin_center(
                 continue
             if best_value is None or value > best_value:
                 best_value, best_ix, best_iy = value, ix, iy
-    if best_ix is None or best_iy is None or best_value < 1e-9:
+    if best_ix is None or best_iy is None or best_value is None or best_value < 1e-9:
         return None
+    return best_ix, best_iy, best_value
+
+
+def peak_bin_center(
+    z: list[list[float | None]],
+    x_centers: list[float],
+    y_centers: list[float],
+) -> Offset | None:
+    """Bin with highest mean weight. Skip empty bins and flat response."""
+    peak = peak_bin_indices(z)
+    if peak is None:
+        return None
+    best_ix, best_iy, _ = peak
     return Offset(x_centers[best_ix], y_centers[best_iy])
 
 
