@@ -479,7 +479,7 @@ def test_save_preview_debug_scan_plot(requires_plotly):
 
 
 def test_render_returns_none_without_plotly(tmp_path):
-    with patch("_eddy_seek.strategy.centroid.plotly_available", return_value=False):
+    with patch("_eddy_seek.plotting.centroid.plotly_available", return_value=False):
         recorder = SessionRecorder(trace=False, plots=True)
         ctx = SimpleNamespace(recorder=recorder)
         _record_centroid_pass(

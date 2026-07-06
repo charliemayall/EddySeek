@@ -11,8 +11,6 @@ Continuous sweep motion with frequency-weighted centroid peak finding.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
-from typing import Any, Literal
 
 from ..common import Offset, Phase
 from ..kconsole import KConsole
@@ -22,27 +20,12 @@ from ..movement.leg_planner import (
     SweepSettings,
     axis_sweep_centroid,
 )
-from ..plotting._plotly import go, plotly_available
 from ..plotting.artifacts import finalize_strategy_plot
 from ..plotting.primitives import (
     Bounds,
     PassMove,
     SweepCentroidPassRecord,
     XYCloud,
-    pass_color,
-)
-from ..plotting.registry import StrategyPlotter, register_plotter
-from ..plotting.renderer import (
-    BoxRecord,
-    MarkerRecord,
-    ScatterRecord,
-    StatsRecord,
-    add_box,
-    add_marker,
-    add_scatter,
-    final_result_offset,
-    layout_with_stats,
-    pass_group_stats,
 )
 from ..session import SeekSession
 from .base import SeekStrategy
@@ -170,84 +153,3 @@ def _record_sweep_centroid_pass(
             samples=XYCloud.from_samples(samples),
         )
     )
-
-
-@register_plotter("sweep_centroid")
-class SweepCentroidPlotter(StrategyPlotter):
-    def render(
-        self,
-        records: Sequence[Any],
-        *,
-        search_for: Literal["min", "max"],
-    ) -> Any | None:
-        if not plotly_available() or go is None:
-            return None
-
-        pass_records = [
-            record for record in records if isinstance(record, SweepCentroidPassRecord)
-        ]
-        if not pass_records:
-            return None
-
-        fig = go.Figure()
-        pass_rows: list[dict[str, str]] = []
-        for record in sorted(pass_records, key=lambda item: item.pass_num):
-            pass_num = record.pass_num
-            color = pass_color(pass_num)
-            label = f"pass {pass_num} ({record.phase})"
-            add_scatter(
-                fig,
-                ScatterRecord(
-                    pass_num,
-                    f"{label} samples",
-                    record.samples,
-                ),
-                search_for,
-                color,
-            )
-            add_box(fig, BoxRecord(pass_num, record.bounds), color)
-            add_marker(
-                fig,
-                MarkerRecord(pass_num, f"{label} centre", record.move.center, "x"),
-                color,
-                size=10,
-            )
-            add_marker(
-                fig,
-                MarkerRecord(pass_num, f"{label} result", record.move.result, "star"),
-                color,
-                size=11,
-            )
-            stats = pass_group_stats([record])
-            pass_rows.append(
-                {
-                    "pass": str(pass_num),
-                    "phase": record.phase,
-                    "result": stats.format_result(),
-                    "moved": stats.format_moved(),
-                    "samples": str(stats.sample_count),
-                    "freq": stats.format_freq_range(),
-                }
-            )
-
-        final = final_result_offset(pass_records)
-        layout_with_stats(
-            fig,
-            StatsRecord(
-                title=(
-                    f"Sweep centroid ({len(pass_records)} pass"
-                    f"{'' if len(pass_records) == 1 else 'es'})  search={search_for}"
-                ),
-                columns=(
-                    ("pass", "Pass"),
-                    ("phase", "Phase"),
-                    ("result", "Result (mm)"),
-                    ("moved", "Moved (mm)"),
-                    ("samples", "Samples"),
-                    ("freq", "Freq (Hz)"),
-                ),
-                rows=tuple(pass_rows),
-                footer=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
-            ),
-        )
-        return fig

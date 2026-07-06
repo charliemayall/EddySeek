@@ -11,6 +11,7 @@ Debug scan heatmap analysis and figure builders.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -28,6 +29,7 @@ from ._plotly import (
     plotly_available,
 )
 from .primitives import HeatmapRecord, XYCloud
+from .registry import StrategyPlotter, register_plotter
 
 ALT_BIN_SCALES = (2, 4, 8)
 
@@ -773,3 +775,20 @@ def render_debug_scan_figure(
     fig.update_yaxes(title_text="weight", row=3, col=2)
     apply_axes_theme(fig)
     return fig
+
+
+@register_plotter("debug_scan")
+class DebugScanPlotter(StrategyPlotter):
+    def render(
+        self,
+        records: Sequence[Any],
+        *,
+        search_for: Literal["min", "max"],
+    ) -> Any | None:
+        heatmap = next(
+            (record for record in records if isinstance(record, HeatmapRecord)),
+            None,
+        )
+        if heatmap is None:
+            return None
+        return render_debug_scan_figure(heatmap, search_for=search_for)

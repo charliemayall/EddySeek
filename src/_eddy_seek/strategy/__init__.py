@@ -10,7 +10,6 @@ XY search algorithms for eddy_seek.
 
 from __future__ import annotations
 
-from . import circle_harmonic_plotter  # noqa: F401 - register plotter
 from .base import SeekStrategy
 from .centroid import CentroidStrategy
 from .circle_harmonic import CircleHarmonicStrategy

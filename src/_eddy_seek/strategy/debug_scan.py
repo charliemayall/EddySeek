@@ -11,8 +11,6 @@ Debug scan grid sweep strategy: implements spatial binning and peak pick across 
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
-from typing import Any, Literal
 
 from ..common import Offset
 from ..kconsole import KConsole
@@ -20,14 +18,12 @@ from ..movement.handler import MotionSample
 from ..movement.leg_planner import MotionCapture, SweepSettings, sweep_grid
 from ..optimizer import bin_frequencies, peak_bin_center
 from ..plotting.artifacts import finalize_strategy_plot
-from ..plotting.debug_scan import render_debug_scan_figure
 from ..plotting.primitives import (
     Bounds,
     HeatmapRecord,
     PassMove,
     XYCloud,
 )
-from ..plotting.registry import StrategyPlotter, register_plotter
 from ..session import SeekSession
 from .base import SeekStrategy
 
@@ -135,20 +131,3 @@ def _record_debug_scan(
             samples=XYCloud.from_samples(samples),
         )
     )
-
-
-@register_plotter("debug_scan")
-class DebugScanPlotter(StrategyPlotter):
-    def render(
-        self,
-        records: Sequence[Any],
-        *,
-        search_for: Literal["min", "max"],
-    ) -> Any | None:
-        heatmap = next(
-            (record for record in records if isinstance(record, HeatmapRecord)),
-            None,
-        )
-        if heatmap is None:
-            return None
-        return render_debug_scan_figure(heatmap, search_for=search_for)

@@ -9,31 +9,15 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
-from typing import Any, Literal
 
 from ..common import Offset
 from ..kconsole import KConsole
 from ..optimizer import weighted_centroid
-from ..plotting._plotly import go, plotly_available
 from ..plotting.artifacts import finalize_strategy_plot
 from ..plotting.primitives import (
     CentroidPassRecord,
     PassMove,
     XYCloud,
-    pass_color,
-)
-from ..plotting.registry import StrategyPlotter, register_plotter
-from ..plotting.renderer import (
-    MarkerRecord,
-    ScatterMode,
-    ScatterRecord,
-    StatsRecord,
-    add_marker,
-    add_scatter,
-    final_result_offset,
-    layout_with_stats,
-    pass_group_stats,
 )
 from ..session import SeekSession
 from .base import SeekStrategy
@@ -144,82 +128,3 @@ def _record_centroid_pass(
             probes=XYCloud.from_probes(probes),
         )
     )
-
-
-@register_plotter("centroid")
-class CentroidPlotter(StrategyPlotter):
-    def render(
-        self,
-        records: Sequence[Any],
-        *,
-        search_for: Literal["min", "max"],
-    ) -> Any | None:
-        if not plotly_available() or go is None:
-            return None
-
-        pass_records = [
-            record for record in records if isinstance(record, CentroidPassRecord)
-        ]
-        if not pass_records:
-            return None
-
-        fig = go.Figure()
-        pass_rows: list[dict[str, str]] = []
-        pass_nums = sorted(record.pass_num for record in pass_records)
-        for record in sorted(pass_records, key=lambda item: item.pass_num):
-            pass_num = record.pass_num
-            color = pass_color(pass_num)
-            label = f"pass {pass_num}"
-            add_scatter(
-                fig,
-                ScatterRecord(
-                    pass_num,
-                    f"{label} probes",
-                    record.probes,
-                    mode=ScatterMode.MARKERS_LINES,
-                ),
-                search_for,
-                color,
-            )
-            add_marker(
-                fig,
-                MarkerRecord(pass_num, f"{label} centre", record.move.center, "x"),
-                color,
-                size=10,
-            )
-            star_size = 14 if pass_num == pass_nums[-1] else 11
-            add_marker(
-                fig,
-                MarkerRecord(pass_num, f"{label} result", record.move.result, "star"),
-                color,
-                size=star_size,
-            )
-            stats = pass_group_stats([record])
-            pass_rows.append(
-                {
-                    "pass": str(pass_num),
-                    "result": stats.format_result(),
-                    "moved": stats.format_moved(),
-                    "freq": stats.format_freq_range(),
-                }
-            )
-
-        final = final_result_offset(pass_records)
-        layout_with_stats(
-            fig,
-            StatsRecord(
-                title=(
-                    f"Centroid alignment ({len(pass_records)} pass"
-                    f"{'' if len(pass_records) == 1 else 'es'})  search={search_for}"
-                ),
-                columns=(
-                    ("pass", "Pass"),
-                    ("result", "Result (mm)"),
-                    ("moved", "Moved (mm)"),
-                    ("freq", "Freq (Hz)"),
-                ),
-                rows=tuple(pass_rows),
-                footer=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
-            ),
-        )
-        return fig

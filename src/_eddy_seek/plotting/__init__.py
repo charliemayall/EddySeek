@@ -10,6 +10,10 @@ Optional HTML debug plots for alignment strategies.
 
 from __future__ import annotations
 
+from . import centroid as _centroid  # noqa: F401 - register plotter
+from . import circle_harmonic as _circle_harmonic  # noqa: F401 - register plotter
+from . import debug_scan as _debug_scan  # noqa: F401 - register plotter
+from . import sweep_centroid as _sweep_centroid  # noqa: F401 - register plotter
 from ._plotly import plotly_available, write_html
 from .artifacts import finalize_strategy_plot, generate_plot_filename, write_figure
 from .primitives import PASS_COLORS, pass_color

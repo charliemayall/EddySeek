@@ -30,6 +30,7 @@ from .primitives import (
     SweepCentroidPassRecord,
     XYCloud,
     _Record,
+    pass_color,
     record_pass_num,
 )
 
@@ -248,3 +249,94 @@ def layout_with_stats(
         ),
     )
     apply_axes_theme(fig)
+
+
+def render_pass_xy_figure(
+    pass_records: Sequence[CentroidPassRecord | SweepCentroidPassRecord],
+    *,
+    search_for: Literal["min", "max"],
+    draw_bounds: bool,
+    extra_columns: tuple[tuple[str, str], ...],
+    title_prefix: str,
+) -> Any | None:
+    if go is None or not pass_records:
+        return None
+
+    fig = go.Figure()
+    pass_rows: list[dict[str, str]] = []
+    pass_nums = sorted(record.pass_num for record in pass_records)
+    base_columns = (
+        ("pass", "Pass"),
+        *extra_columns,
+        ("result", "Result (mm)"),
+        ("moved", "Moved (mm)"),
+        ("freq", "Freq (Hz)"),
+    )
+
+    for record in sorted(pass_records, key=lambda item: item.pass_num):
+        pass_num = record.pass_num
+        color = pass_color(pass_num)
+        if isinstance(record, CentroidPassRecord):
+            label = f"pass {pass_num}"
+            cloud = record.probes
+            scatter_suffix = "probes"
+            scatter_mode = ScatterMode.MARKERS_LINES
+            result_star_size = 14 if pass_num == pass_nums[-1] else 11
+        else:
+            label = f"pass {pass_num} ({record.phase})"
+            cloud = record.samples
+            scatter_suffix = "samples"
+            scatter_mode = ScatterMode.MARKERS
+            result_star_size = 11
+
+        add_scatter(
+            fig,
+            ScatterRecord(
+                pass_num,
+                f"{label} {scatter_suffix}",
+                cloud,
+                mode=scatter_mode,
+            ),
+            search_for,
+            color,
+        )
+        if draw_bounds and isinstance(record, SweepCentroidPassRecord):
+            add_box(fig, BoxRecord(pass_num, record.bounds), color)
+        add_marker(
+            fig,
+            MarkerRecord(pass_num, f"{label} centre", record.move.center, "x"),
+            color,
+            size=10,
+        )
+        add_marker(
+            fig,
+            MarkerRecord(pass_num, f"{label} result", record.move.result, "star"),
+            color,
+            size=result_star_size,
+        )
+        stats = pass_group_stats([record])
+        row: dict[str, str] = {
+            "pass": str(pass_num),
+            "result": stats.format_result(),
+            "moved": stats.format_moved(),
+            "freq": stats.format_freq_range(),
+        }
+        if isinstance(record, SweepCentroidPassRecord):
+            row["phase"] = record.phase
+            row["samples"] = str(stats.sample_count)
+        pass_rows.append(row)
+
+    final = final_result_offset(pass_records)
+    layout_with_stats(
+        fig,
+        StatsRecord(
+            title=(
+                f"{title_prefix} ({len(pass_records)} pass"
+                f"{'' if len(pass_records) == 1 else 'es'})  search={search_for}"
+            ),
+            columns=base_columns,
+            rows=tuple(pass_rows),
+            footer=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
+        ),
+    )
+    return fig
