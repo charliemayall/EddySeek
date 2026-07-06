@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 from ..common import Axis, Offset, Position
 from .kinematic_guard import MAX_SCV
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from klippy.toolhead import ToolHead
 
     from ..config import SeekConfig
+    from ..plotting.primitives import ProbeRecord
     from ..session import SeekHost
 
 
@@ -176,7 +177,7 @@ class MotionHandler(_SessionMotionBase):
         host: SeekHost,
         config: SeekConfig,
         origin: Position,
-        trace_cb: Callable[[dict[str, Any]], None] | None = None,
+        trace_cb: Callable[[ProbeRecord], None] | None = None,
     ) -> None:
         super().__init__(printer, origin, config.jog_speed)
         self._host = host
@@ -229,12 +230,11 @@ class MotionHandler(_SessionMotionBase):
         )
         if self._trace_cb is not None:
             self._trace_cb(
-                {
-                    "x": offset.x,
-                    "y": offset.y,
-                    "mean_hz": mean,
-                    "samples_hz": self._host.peek_capture_samples(),
-                }
+                ProbeRecord(
+                    at=offset,
+                    mean_hz=mean,
+                    samples_hz=tuple(self._host.peek_capture_samples()),
+                )
             )
         return mean
 

@@ -178,7 +178,7 @@ class SeekSession:
                     self._host,
                     self.config,
                     self._session_start,
-                    self._record_probe if self.recorder.trace else None,
+                    self._get_single_sample if self.recorder.trace else None,
                 )
                 best, passes_run = strategy.search(self, console)
                 self._motion.jog(best)
@@ -262,14 +262,8 @@ class SeekSession:
         )
         return result
 
-    def _record_probe(self, probe: dict[str, Any]) -> None:
-        self.recorder.record(
-            ProbeRecord(
-                at=Offset(float(probe["x"]), float(probe["y"])),
-                mean_hz=float(probe["mean_hz"]),
-                samples_hz=tuple(probe["samples_hz"]),
-            )
-        )
+    def _get_single_sample(self, probe: ProbeRecord) -> None:
+        self.recorder.record(probe)
 
     def measure_at(self, offset: Offset) -> float:
         return self.motion.sample(offset)

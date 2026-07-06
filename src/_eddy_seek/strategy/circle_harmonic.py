@@ -76,6 +76,10 @@ def _is_min_radius(trace_radius: float, radius_min: float) -> bool:
     return trace_radius <= radius_min + 1e-9
 
 
+def _is_below_min_radius(trace_radius: float, radius_min: float) -> bool:
+    return trace_radius < radius_min - 1e-9
+
+
 def _outcome_hold(
     best: Offset,
     trace_center: Offset,
@@ -367,7 +371,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         trace_center, trace_radius = circle_in_jog_box(
             self._circle_center(best), radius, cfg.max_jog_x, cfg.max_jog_y
         )
-        if trace_radius < cfg.circle_radius_min:
+        if _is_below_min_radius(trace_radius, cfg.circle_radius_min):
             logger.warning(
                 f"eddy_seek: circle_harmonic pass {pass_num} radius {trace_radius:.4f} "
                 f"< min {cfg.circle_radius_min} - holding bootstrap"
