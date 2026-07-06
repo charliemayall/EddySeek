@@ -10,40 +10,63 @@ Shared Plotly builders for session record primitives.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from enum import Enum
+from typing import Any, Literal
 
-from ..common import Offset, session_artifact_filename
+from ..common import Offset
 from ._plotly import (
     apply_axes_theme,
     freq_marker,
     go,
     header_table,
     marker_outline,
-    plotly_available,
     single_xy_layout,
-    write_html,
 )
 from .primitives import (
-    BoxRecord,
+    Bounds,
     CentroidPassRecord,
-    MarkerRecord,
-    ScatterMode,
-    ScatterRecord,
-    StatsRecord,
     SweepCentroidPassRecord,
+    XYCloud,
     _Record,
     record_pass_num,
 )
 
-if TYPE_CHECKING:
-    from ..session import SeekSession
 
-logger = logging.getLogger(__name__)
+class ScatterMode(str, Enum):
+    MARKERS = "markers"
+    MARKERS_LINES = "markers+lines"
+
+
+@dataclass(frozen=True, slots=True)
+class ScatterRecord:
+    pass_num: int
+    label: str
+    cloud: XYCloud
+    mode: ScatterMode = ScatterMode.MARKERS
+
+
+@dataclass(frozen=True, slots=True)
+class MarkerRecord:
+    pass_num: int
+    label: str
+    at: Offset
+    symbol: str
+
+
+@dataclass(frozen=True, slots=True)
+class BoxRecord:
+    pass_num: int
+    bounds: Bounds
+
+
+@dataclass(frozen=True, slots=True)
+class StatsRecord:
+    title: str
+    columns: tuple[tuple[str, str], ...]
+    rows: tuple[dict[str, str], ...]
+    footer: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,28 +129,14 @@ def final_result_offset(records: Sequence[_Record]) -> Offset:
     return best_result
 
 
-def plot_filename(
-    when: datetime | None = None,
-    *,
-    suffix: str = "",
-    run_label: str = "run",
-    run_id: str | None = None,
-) -> str:
-    return session_artifact_filename(
-        when,
-        suffix=suffix,
-        run_label=run_label,
-        run_id=run_id,
-        ext="html",
-    )
-
-
 def add_scatter(
     fig: Any,
     record: ScatterRecord,
     search_for: Literal["min", "max"],
     color: str,
     *,
+    marker_size: int = 7,
+    marker_opacity: float = 1.0,
     row: int | None = None,
     col: int | None = None,
 ) -> None:
@@ -137,9 +146,14 @@ def add_scatter(
     freqs = record.cloud.freqs
     marker: dict[str, Any]
     if freqs is not None:
-        marker = freq_marker(list(freqs), search_for, size=7, opacity=1.0)
+        marker = freq_marker(
+            list(freqs),
+            search_for,
+            size=marker_size,
+            opacity=marker_opacity,
+        )
     else:
-        marker = {"size": 7, "color": color}
+        marker = {"size": marker_size, "color": color, "opacity": marker_opacity}
     trace = go.Scatter(
         x=list(record.cloud.xs),
         y=list(record.cloud.ys),
@@ -234,50 +248,3 @@ def layout_with_stats(
         ),
     )
     apply_axes_theme(fig)
-
-
-def write_figure(
-    results_dir: Path,
-    fig: Any,
-    *,
-    write_at: datetime | None = None,
-    suffix: str = "",
-    run_label: str = "run",
-    run_id: str | None = None,
-) -> str | None:
-    if not plotly_available() or fig is None:
-        return None
-    out_path = results_dir / plot_filename(
-        write_at,
-        suffix=suffix,
-        run_label=run_label,
-        run_id=run_id,
-    )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    if not write_html(str(out_path), fig):
-        logger.warning(f"eddy_seek: failed to write plot to {out_path}")
-        return None
-    logger.info(f"eddy_seek: debug plot saved to {out_path}")
-    return str(out_path)
-
-
-def finalize_strategy_plot(ctx: SeekSession, strategy_name: str) -> str | None:
-    from .registry import render_session_plot
-
-    if not ctx.config.save_plots:
-        return None
-    fig = render_session_plot(
-        strategy_name,
-        ctx.recorder.records(),
-        search_for=ctx.config.search_for,
-    )
-    if fig is None:
-        return None
-    return write_figure(
-        Path(ctx.config.result_folder),
-        fig,
-        write_at=ctx.artifact_write_at,
-        suffix=ctx.artifact_suffix(strategy_name),
-        run_label=ctx.run_label,
-        run_id=ctx.run_id,
-    )

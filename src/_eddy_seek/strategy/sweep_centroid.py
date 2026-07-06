@@ -23,24 +23,24 @@ from ..movement.leg_planner import (
     axis_sweep_centroid,
 )
 from ..plotting._plotly import go, plotly_available
+from ..plotting.artifacts import finalize_strategy_plot
 from ..plotting.primitives import (
     Bounds,
-    BoxRecord,
-    MarkerRecord,
     PassMove,
-    ScatterRecord,
-    StatsRecord,
     SweepCentroidPassRecord,
     XYCloud,
     pass_color,
 )
 from ..plotting.registry import StrategyPlotter, register_plotter
 from ..plotting.renderer import (
+    BoxRecord,
+    MarkerRecord,
+    ScatterRecord,
+    StatsRecord,
     add_box,
     add_marker,
     add_scatter,
     final_result_offset,
-    finalize_strategy_plot,
     layout_with_stats,
     pass_group_stats,
 )

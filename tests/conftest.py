@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from fakes import PLOT_SESSION_ID, PLOT_WRITE_AT
 
-from _eddy_seek.plotting.renderer import write_figure
+from _eddy_seek.plotting.artifacts import write_figure
 
 
 @pytest.fixture

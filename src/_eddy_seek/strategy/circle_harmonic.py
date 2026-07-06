@@ -39,6 +39,7 @@ from ..movement.leg_planner import (
     axis_sweep_profiles,
 )
 from ..optimizer import decoupled_centroid
+from ..plotting.artifacts import finalize_strategy_plot
 from ..plotting.primitives import (
     BinnedProfile,
     Bounds,
@@ -47,7 +48,6 @@ from ..plotting.primitives import (
     PassMove,
     XYCloud,
 )
-from ..plotting.renderer import finalize_strategy_plot
 from ..session import SeekSession
 from .base import SeekStrategy
 

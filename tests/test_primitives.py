@@ -16,15 +16,11 @@ from _eddy_seek.plotting.primitives import (
     AccuracyRepeatRecord,
     BinnedProfile,
     Bounds,
-    BoxRecord,
     CentroidPassRecord,
     CircleHarmonicPassRecord,
     HeatmapRecord,
-    MarkerRecord,
     PassMove,
     ProbeRecord,
-    ScatterRecord,
-    StatsRecord,
     SweepCentroidPassRecord,
     XYCloud,
     pass_color,
@@ -33,26 +29,11 @@ from _eddy_seek.plotting.primitives import (
 
 
 def test_primitives_serialization():
-    scatter = ScatterRecord(
-        1,
-        "pts",
-        XYCloud((1.0, 2.0), (3.0, 4.0), (100.0, 101.0)),
-    )
-    scatter_no_freqs = ScatterRecord(1, "pts", XYCloud((1.0,), (2.0,)))
-    marker = MarkerRecord(1, "best", Offset(1.0, 2.0), "star")
-    box = BoxRecord(1, Bounds.from_box((0.0, 1.0, 0.0, 1.0)))
-    stats = StatsRecord("title", (("k", "K"),), ({"k": "v"},))
     probe = ProbeRecord(Offset(1.0, 2.0), 100.0, (99.0, 101.0))
 
-    assert scatter.to_dict()["type"] == "scatter"
-    assert scatter.to_dict()["cloud"]["freqs"] == [100.0, 101.0]
-    assert "freqs" not in scatter_no_freqs.to_dict()["cloud"]
-    assert marker.to_dict()["at"] == {"x": 1.0, "y": 2.0}
-    assert box.to_dict()["bounds"]["lo"] == {"x": 0.0, "y": 0.0}
     assert probe.to_dict()["mean_hz"] == 100.0
 
-    for record in (scatter, scatter_no_freqs, marker, box, stats, probe):
-        json.dumps(record.to_dict())
+    json.dumps(probe.to_dict())
 
     assert pass_color(1) == PASS_COLORS[0]
     assert PassMove.compute(Offset.zero(), Offset(1.0, 0.0)).moved.x == 1.0

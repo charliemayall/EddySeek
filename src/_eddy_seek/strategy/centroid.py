@@ -16,22 +16,22 @@ from ..common import Offset
 from ..kconsole import KConsole
 from ..optimizer import weighted_centroid
 from ..plotting._plotly import go, plotly_available
+from ..plotting.artifacts import finalize_strategy_plot
 from ..plotting.primitives import (
     CentroidPassRecord,
-    MarkerRecord,
     PassMove,
-    ScatterMode,
-    ScatterRecord,
-    StatsRecord,
     XYCloud,
     pass_color,
 )
 from ..plotting.registry import StrategyPlotter, register_plotter
 from ..plotting.renderer import (
+    MarkerRecord,
+    ScatterMode,
+    ScatterRecord,
+    StatsRecord,
     add_marker,
     add_scatter,
     final_result_offset,
-    finalize_strategy_plot,
     layout_with_stats,
     pass_group_stats,
 )

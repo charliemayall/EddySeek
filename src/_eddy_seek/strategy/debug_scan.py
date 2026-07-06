@@ -19,6 +19,7 @@ from ..kconsole import KConsole
 from ..movement.handler import MotionSample
 from ..movement.leg_planner import MotionCapture, SweepSettings, sweep_grid
 from ..optimizer import bin_frequencies, peak_bin_center
+from ..plotting.artifacts import finalize_strategy_plot
 from ..plotting.debug_scan import render_debug_scan_figure
 from ..plotting.primitives import (
     Bounds,
@@ -27,7 +28,6 @@ from ..plotting.primitives import (
     XYCloud,
 )
 from ..plotting.registry import StrategyPlotter, register_plotter
-from ..plotting.renderer import finalize_strategy_plot
 from ..session import SeekSession
 from .base import SeekStrategy
 

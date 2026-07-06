@@ -33,11 +33,6 @@ PASS_COLORS = (
 )
 
 
-class ScatterMode(str, Enum):
-    MARKERS = "markers"
-    MARKERS_LINES = "markers+lines"
-
-
 def pass_color(pass_num: int) -> str:
     return PASS_COLORS[(pass_num - 1) % len(PASS_COLORS)]
 
@@ -125,44 +120,6 @@ def record_pass_num(record: _Record) -> int | None:
         return pass_num
     repeat = getattr(record, "repeat_num", None)
     return repeat if isinstance(repeat, int) else None
-
-
-@dataclass(frozen=True, slots=True)
-class ScatterRecord(_Record):
-    _KIND = "scatter"
-
-    pass_num: int
-    label: str
-    cloud: XYCloud
-    mode: ScatterMode = ScatterMode.MARKERS
-
-
-@dataclass(frozen=True, slots=True)
-class MarkerRecord(_Record):
-    _KIND = "marker"
-
-    pass_num: int
-    label: str
-    at: Offset
-    symbol: str
-
-
-@dataclass(frozen=True, slots=True)
-class BoxRecord(_Record):
-    _KIND = "box"
-
-    pass_num: int
-    bounds: Bounds
-
-
-@dataclass(frozen=True, slots=True)
-class StatsRecord(_Record):
-    _KIND = "stats"
-
-    title: str
-    columns: tuple[tuple[str, str], ...]
-    rows: tuple[dict[str, str], ...]
-    footer: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -362,6 +319,4 @@ def _record_to_dict(record: _Record) -> dict[str, Any]:
     out = _json_value(asdict(record))
     if record._KIND:
         out["type"] = record._KIND
-    if isinstance(record, ScatterRecord) and record.cloud.freqs is None:
-        out.get("cloud", {}).pop("freqs", None)
     return out

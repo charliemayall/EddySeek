@@ -11,17 +11,17 @@ Optional HTML debug plots for alignment strategies.
 from __future__ import annotations
 
 from ._plotly import plotly_available, write_html
+from .artifacts import finalize_strategy_plot, generate_plot_filename, write_figure
 from .primitives import PASS_COLORS, pass_color
 from .recorder import SessionRecorder
 from .registry import register_plotter, render_session_plot
-from .renderer import finalize_strategy_plot, plot_filename, write_figure
 
 __all__ = [
     "PASS_COLORS",
     "SessionRecorder",
     "finalize_strategy_plot",
+    "generate_plot_filename",
     "pass_color",
-    "plot_filename",
     "plotly_available",
     "register_plotter",
     "render_session_plot",

@@ -21,7 +21,11 @@ from _eddy_seek.harmonic import HarmonicFit
 from _eddy_seek.movement.handler import MotionSample
 from _eddy_seek.optimizer import bin_frequencies
 from _eddy_seek.plotting import accuracy as _accuracy_plot  # noqa: F401
-from _eddy_seek.plotting import plot_filename, render_session_plot, write_figure
+from _eddy_seek.plotting import (
+    generate_plot_filename,
+    render_session_plot,
+    write_figure,
+)
 from _eddy_seek.plotting._plotly import THEME_COLORS, write_html
 from _eddy_seek.plotting.debug_scan import render_debug_scan_figure
 from _eddy_seek.plotting.primitives import (
@@ -41,17 +45,19 @@ from _eddy_seek.strategy.sweep_centroid import _record_sweep_centroid_pass
 
 def test_plot_filename():
     when = PLOT_WRITE_AT
-    assert plot_filename(when) == f"{PLOT_RUN_DIR}/session.html"
+    assert generate_plot_filename(when) == f"{PLOT_RUN_DIR}/session.html"
     assert (
-        plot_filename(when, suffix="accuracy", run_label="accuracy", run_id="abcd1234")
+        generate_plot_filename(
+            when, suffix="accuracy", run_label="accuracy", run_id="abcd1234"
+        )
         == "2026-07-02_14-30-00_accuracy_abcd1234/accuracy.html"
     )
     assert (
-        plot_filename(when, suffix="start_sweep_centroid", run_label="start")
+        generate_plot_filename(when, suffix="start_sweep_centroid", run_label="start")
         == "2026-07-02_14-30-00_start/start_sweep_centroid.html"
     )
     assert (
-        plot_filename(
+        generate_plot_filename(
             when,
             suffix="tools_t0_centroid",
             run_label="tools",

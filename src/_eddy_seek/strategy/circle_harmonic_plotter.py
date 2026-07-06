@@ -17,11 +17,9 @@ from typing import Any, Literal
 from ..common import Offset
 from ..plotting._plotly import (
     apply_axes_theme,
-    freq_marker,
     go,
     header_table,
     make_subplots,
-    marker_outline,
     multi_panel_layout,
     plotly_available,
 )
@@ -31,6 +29,14 @@ from ..plotting.primitives import (
     pass_color,
 )
 from ..plotting.registry import StrategyPlotter, register_plotter
+from ..plotting.renderer import (
+    BoxRecord,
+    MarkerRecord,
+    ScatterRecord,
+    add_box,
+    add_marker,
+    add_scatter,
+)
 
 
 @register_plotter("circle_harmonic")
@@ -67,48 +73,37 @@ class CircleHarmonicPlotter(StrategyPlotter):
         if bootstrap is not None:
             color = pass_color(bootstrap.pass_num)
             label = f"pass {bootstrap.pass_num} (bootstrap)"
-            freqs = bootstrap.samples.freqs or ()
-            fig.add_trace(
-                go.Scatter(
-                    x=list(bootstrap.samples.xs),
-                    y=list(bootstrap.samples.ys),
-                    mode="markers",
-                    name=f"{label} sweeps",
-                    marker=freq_marker(list(freqs), search_for, size=4, opacity=0.55),
-                    text=[f"{freq:.1f} Hz" for freq in freqs],
-                    hovertemplate=(
-                        f"{label}<br>x=%{{x:.4f}} y=%{{y:.4f}} %{{text}}<extra></extra>"
-                    ),
-                    legendgroup=label,
+            add_scatter(
+                fig,
+                ScatterRecord(
+                    bootstrap.pass_num,
+                    f"{label} sweeps",
+                    bootstrap.samples,
                 ),
+                search_for,
+                color,
+                marker_size=4,
+                marker_opacity=0.55,
                 row=1,
                 col=1,
             )
-            fig.add_shape(
-                type="rect",
-                x0=bootstrap.bounds.lo.x,
-                x1=bootstrap.bounds.hi.x,
-                y0=bootstrap.bounds.lo.y,
-                y1=bootstrap.bounds.hi.y,
-                line={"color": color, "width": 1, "dash": "dot"},
-                fillcolor="rgba(0,0,0,0)",
+            add_box(
+                fig,
+                BoxRecord(bootstrap.pass_num, bootstrap.bounds),
+                color,
                 row=1,
                 col=1,
             )
-            fig.add_trace(
-                go.Scatter(
-                    x=[bootstrap.move.result.x],
-                    y=[bootstrap.move.result.y],
-                    mode="markers",
-                    name=f"{label} result",
-                    marker={
-                        "size": 12,
-                        "symbol": "star",
-                        "color": color,
-                        "line": {"width": 1, "color": marker_outline()},
-                    },
-                    legendgroup=label,
+            add_marker(
+                fig,
+                MarkerRecord(
+                    bootstrap.pass_num,
+                    f"{label} result",
+                    bootstrap.move.result,
+                    "star",
                 ),
+                color,
+                size=12,
                 row=1,
                 col=1,
             )
@@ -129,20 +124,13 @@ class CircleHarmonicPlotter(StrategyPlotter):
         for record in circles:
             color = pass_color(record.pass_num)
             label = f"pass {record.pass_num} (circle r={record.radius:.2f})"
-            freqs = record.samples.freqs or ()
-            fig.add_trace(
-                go.Scatter(
-                    x=list(record.samples.xs),
-                    y=list(record.samples.ys),
-                    mode="markers",
-                    name=f"{label} trace",
-                    marker=freq_marker(list(freqs), search_for, size=3, opacity=0.45),
-                    text=[f"{freq:.1f} Hz" for freq in freqs],
-                    hovertemplate=(
-                        f"{label}<br>x=%{{x:.4f}} y=%{{y:.4f}} %{{text}}<extra></extra>"
-                    ),
-                    legendgroup=label,
-                ),
+            add_scatter(
+                fig,
+                ScatterRecord(record.pass_num, f"{label} trace", record.samples),
+                search_for,
+                color,
+                marker_size=3,
+                marker_opacity=0.45,
                 row=1,
                 col=1,
             )
@@ -190,20 +178,17 @@ class CircleHarmonicPlotter(StrategyPlotter):
                     row=2,
                     col=1,
                 )
-            fig.add_trace(
-                go.Scatter(
-                    x=[record.move.result.x],
-                    y=[record.move.result.y],
-                    mode="markers",
-                    name=f"{label} result",
-                    marker={
-                        "size": 13 if record is circles[-1] else 10,
-                        "symbol": "star",
-                        "color": color,
-                        "line": {"width": 1, "color": marker_outline()},
-                    },
-                    legendgroup=label,
+            star_size = 13 if record is circles[-1] else 10
+            add_marker(
+                fig,
+                MarkerRecord(
+                    record.pass_num,
+                    f"{label} result",
+                    record.move.result,
+                    "star",
                 ),
+                color,
+                size=star_size,
                 row=1,
                 col=1,
             )
