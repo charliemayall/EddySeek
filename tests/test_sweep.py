@@ -199,9 +199,9 @@ def test_sweep_axis_clamps_speed_for_min_samples():
     assert capture.collect_legs.call_args.args[1] == 240.0
 
 
-def test_sweep_axis_honors_cross_pass_override():
+def test_sweep_axis_coarse_uses_settings_cross_passes():
     settings = SweepSettings.from_config(
-        SeekConfig(cross_passes=3, min_sweep_samples=3)
+        SeekConfig(cross_passes=1, min_sweep_samples=3)
     )
     capture = MagicMock()
     capture.collect_legs.return_value = [
@@ -222,8 +222,6 @@ def test_sweep_axis_honors_cross_pass_override():
             speed_mm_min=600.0,
             phase=Phase.COARSE,
             pass_num=1,
-            cross_passes=1,
-            clamp_speed=False,
         )
 
     assert plan_legs.call_args.args[4] == [0.0]
@@ -252,37 +250,9 @@ def test_sweep_axis_fine_phase_uses_single_cross_pass():
             speed_mm_min=600.0,
             phase=Phase.FINE,
             pass_num=3,
-            clamp_speed=False,
         )
 
     assert plan_legs.call_args.args[4] == [0.0]
-
-
-def test_sweep_axis_without_clamp_passes_speed_through():
-    settings = SweepSettings.from_config(SeekConfig(min_sweep_samples=3))
-    capture = MagicMock()
-    capture.collect_legs.return_value = [
-        MotionSample(Offset(0.5, 0.0), 100.0, 0.0),
-        MotionSample(Offset(1.0, 0.0), 100.0, 0.0),
-        MotionSample(Offset(1.5, 0.0), 100.0, 0.0),
-    ]
-
-    speed = 1800.0
-    sweep_axis(
-        capture,
-        settings,
-        axis=Axis.X,
-        lo=0.5,
-        hi=1.5,
-        cross_center=0.0,
-        speed_mm_min=speed,
-        phase=Phase.FINE,
-        pass_num=2,
-        clamp_speed=False,
-    )
-
-    capture.collect_legs.assert_called_once()
-    assert capture.collect_legs.call_args.args[1] == speed
 
 
 def test_axis_sweep_centroid_builds_profiles_and_centroid():

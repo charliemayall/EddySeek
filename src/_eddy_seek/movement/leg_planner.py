@@ -220,21 +220,9 @@ def _axis_span(
     return lo, hi
 
 
-def _resolve_cross(
-    settings: SweepSettings,
-    phase: Phase,
-    *,
-    cross_passes: int | None,
-    cross_offset: float | None,
-) -> list[float]:
-    if phase is Phase.FINE:
-        passes = 1
-    elif cross_passes is None:
-        passes = settings.cross_passes
-    else:
-        passes = cross_passes
-    offset = settings.sweep_cross_offset if cross_offset is None else cross_offset
-    return iter_cross_offsets(passes, offset)
+def _resolve_cross(settings: SweepSettings, phase: Phase) -> list[float]:
+    passes = 1 if phase is Phase.FINE else settings.cross_passes
+    return iter_cross_offsets(passes, settings.sweep_cross_offset)
 
 
 def sweep_axis(
@@ -248,28 +236,18 @@ def sweep_axis(
     speed_mm_min: float,
     phase: Phase,
     pass_num: int,
-    cross_passes: int | None = None,
-    cross_offset: float | None = None,
-    clamp_speed: bool = True,
     recorder: SessionRecorder | None = None,
 ) -> list[MotionSample]:
     """Continuous +/- traverses on ``axis``; returns in-span motion samples."""
     if hi < lo:
         lo, hi = hi, lo
     span_mm = abs(hi - lo)
-    feedrate = speed_mm_min
-    if clamp_speed:
-        feedrate = get_clamped_speed_for_min_samples_over_span(
-            requested_mm_min=speed_mm_min,
-            span_mm=span_mm,
-            min_samples=settings.min_sweep_samples,
-        )
-    cross_offsets = _resolve_cross(
-        settings,
-        phase,
-        cross_passes=cross_passes,
-        cross_offset=cross_offset,
+    feedrate = get_clamped_speed_for_min_samples_over_span(
+        requested_mm_min=speed_mm_min,
+        span_mm=span_mm,
+        min_samples=settings.min_sweep_samples,
     )
+    cross_offsets = _resolve_cross(settings, phase)
     legs = plan_axis_legs(
         axis, lo, hi, cross_center, cross_offsets, settings.sweep_overscan
     )
@@ -317,18 +295,12 @@ def axis_sweep_profiles(
     speed_mm_min: float,
     phase: Phase,
     pass_num: int,
-    cross_passes: int | None = None,
-    cross_offset: float | None = None,
     recorder: SessionRecorder | None = None,
 ) -> AxisSweepProfiles:
     """X/Y sweeps with box-filtered axis profiles (no centroid)."""
     lo_x, hi_x = _axis_span(Axis.X, center.x, half_x, settings)
     lo_y, hi_y = _axis_span(Axis.Y, center.y, half_y, settings)
-    sweep_kw = {
-        "cross_passes": cross_passes,
-        "cross_offset": cross_offset,
-        "recorder": recorder,
-    }
+    sweep_kw = {"recorder": recorder}
     samples_x = sweep_axis(
         capture,
         settings,
@@ -384,8 +356,6 @@ def axis_sweep_centroid(
     phase: Phase,
     pass_num: int,
     label: str,
-    cross_passes: int | None = None,
-    cross_offset: float | None = None,
     recorder: SessionRecorder | None = None,
 ) -> AxisSweepCentroidResult:
     """X/Y sweeps, box filter, and decoupled centroid from axis profiles."""
@@ -398,8 +368,6 @@ def axis_sweep_centroid(
         speed_mm_min=speed_mm_min,
         phase=phase,
         pass_num=pass_num,
-        cross_passes=cross_passes,
-        cross_offset=cross_offset,
         recorder=recorder,
     )
     if len(profiles.in_box) < settings.min_sweep_samples:
