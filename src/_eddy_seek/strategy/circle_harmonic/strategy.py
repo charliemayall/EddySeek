@@ -77,6 +77,21 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._mode = CircleHarmonicMode.from_config(cfg)
         self._plateau.reset()
         best = Offset.zero()
+
+        probe = self._try_min_radius_probe(ctx, best)
+        if probe is not None:
+            moved = (probe.result - best).abs_components()
+            console.info(
+                f"Pass 1 (probe r={probe.trace_radius:.3f}): "
+                f"{probe.result.to_delta_str()}"
+            )
+            result = self._apply_circle_outcome(ctx, 1, best, probe)
+            logger.info(
+                f"eddy_seek: {self.name} finished after min-radius probe "
+                f"(moved {moved.x:.4f}, {moved.y:.4f})"
+            )
+            return result, 1
+
         passes_run = 0
 
         for pass_num in range(1, cfg.max_passes + 1):
@@ -121,6 +136,35 @@ class CircleHarmonicStrategy(SeekStrategy):
 
     def _sync_mode(self, ctx: SeekSession) -> None:
         self._mode = CircleHarmonicMode.from_config(ctx.config)
+
+    def _try_min_radius_probe(
+        self, ctx: SeekSession, best: Offset
+    ) -> CirclePassOutcome | None:
+        cfg = ctx.config
+        if cfg.circle_radius_min <= 0.0:
+            return None
+        self._sync_mode(ctx)
+        if self._mode.skip_bootstrap and self._bootstrap is None:
+            self._bootstrap = best
+        logger.info(
+            f"eddy_seek: circle_harmonic min-radius probe r={cfg.circle_radius_min:.4f}"
+        )
+        outcome = compute_circle_pass(
+            self,
+            ctx,
+            1,
+            best,
+            self._mode,
+            self._plateau,
+            fixed_radius=cfg.circle_radius_min,
+        )
+        if outcome.rejected:
+            logger.info(
+                "eddy_seek: circle_harmonic min-radius probe rejected - full search"
+            )
+            return None
+        logger.info("eddy_seek: circle_harmonic min-radius probe accepted")
+        return outcome
 
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         self._sync_mode(ctx)
