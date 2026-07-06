@@ -70,6 +70,30 @@ def test_circle_arc_legs_segment_count():
     assert len(circle_arc_legs(Offset.zero(), 0.5, 1.0)) == 3
 
 
+def test_circle_lead_in_legs_ends_at_start():
+    from _eddy_seek.harmonic import circle_lead_in_legs
+
+    legs = circle_arc_legs(Offset.zero(), 1.0, 1.0)
+    lead_in = circle_lead_in_legs(legs, 0.25)
+    assert len(lead_in) >= 3
+    assert lead_in[-1][1].distance_to(legs[0][0]) == pytest.approx(0.0, abs=1e-9)
+    assert circle_lead_in_legs(legs, 0.0) == []
+
+
+def test_inner_leg_samples_drops_end_legs():
+    from _eddy_seek.strategy.circle_harmonic.circle_pass import _inner_leg_samples
+
+    batches = [
+        [MotionSample(Offset(1.0, 0.0), 1.0, 0.0)],
+        [MotionSample(Offset(0.0, 1.0), 2.0, 0.1)],
+        [MotionSample(Offset(-1.0, 0.0), 3.0, 0.2)],
+    ]
+    all_samples = [s for batch in batches for s in batch]
+    inner = _inner_leg_samples(batches, all_samples)
+    assert len(inner) == 1
+    assert inner[0].freq == 2.0
+
+
 def test_circle_radius_for_tier():
     assert (
         circle_radius_for_tier(0, radius_start=2.0, radius_min=0.5, radius_shrink=0.4)

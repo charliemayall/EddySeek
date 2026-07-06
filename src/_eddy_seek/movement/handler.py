@@ -263,6 +263,17 @@ class MotionHandler(_SessionMotionBase):
         self._active = False
         self._th = None
 
+    def move_leg(self, line_start: Offset, line_end: Offset, speed: float) -> None:
+        """Traverse a leg without sensor capture (circle lead-in)."""
+        if not self._active:
+            raise RuntimeError("eddy_seek: continuous motion not active")
+        if self._last_move_end is None or line_start != self._last_move_end:
+            self._manual_move(line_start, speed)
+            self._last_move_end = line_start
+        self._manual_move(line_end, speed)
+        self._commit(line_end)
+        self._last_move_end = line_end
+
     def capture_leg(self, line_start: Offset, line_end: Offset, speed: float) -> None:
         if not self._active:
             raise RuntimeError("eddy_seek: continuous motion not active")
@@ -279,9 +290,14 @@ class MotionHandler(_SessionMotionBase):
         self._last_move_end = line_end
 
     def run_capture_legs(
-        self, legs: Sequence[tuple[Offset, Offset]], speed: float
+        self,
+        legs: Sequence[tuple[Offset, Offset]],
+        speed: float,
+        *,
+        lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
     ) -> None:
-
+        for line_start, line_end in lead_in_legs or ():
+            self.move_leg(line_start, line_end, speed)
         for line_start, line_end in legs:
             self.capture_leg(line_start, line_end, speed)
         self.th.wait_moves()

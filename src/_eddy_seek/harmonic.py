@@ -66,6 +66,17 @@ def circle_arc_legs(
     return legs
 
 
+def circle_lead_in_legs(
+    legs: Sequence[tuple[Offset, Offset]],
+    fraction: float,
+) -> list[tuple[Offset, Offset]]:
+    """Uncaptured arc chords ending at circle start (θ=0) for cruise warmup."""
+    if fraction <= 0.0 or not legs:
+        return []
+    count = max(3, min(len(legs), math.ceil(len(legs) * fraction)))
+    return list(legs[-count:])
+
+
 def circle_in_jog_box(
     center: Offset,
     radius: float,

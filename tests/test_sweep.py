@@ -189,7 +189,19 @@ def test_run_clamps_speed_for_min_samples():
     capture.run(legs, 3000.0, min_samples=20, span_mm=0.2)
 
     # span=0.2 mm -> cap = 0.2 * 400 Hz * 60 / 20 = 240 mm/min
-    handler.run_capture_legs.assert_called_once_with(legs, 240.0)
+    handler.run_capture_legs.assert_called_once_with(legs, 240.0, lead_in_legs=None)
+
+
+def test_run_applies_lead_in_before_capture():
+    handler = MagicMock()
+    handler.collect_samples.return_value = []
+    capture = MotionCapture(handler, Position(0.0, 0.0))
+    legs = [(Offset(0.0, 0.0), Offset(0.2, 0.0))]
+    lead_in = [(Offset(-0.2, 0.0), Offset(0.0, 0.0))]
+
+    capture.run(legs, 600.0, lead_in_legs=lead_in)
+
+    handler.run_capture_legs.assert_called_once_with(legs, 600.0, lead_in_legs=lead_in)
 
 
 def test_sweep_axis_passes_speed_clamp_params():

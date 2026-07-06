@@ -107,6 +107,7 @@ class MotionCapture:
         flat: bool = True,
         min_samples: int | None = None,
         span_mm: float | None = None,
+        lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
     ) -> list[MotionSample] | list[list[MotionSample]]:
         """
         Run a sequence of legs, returning motion samples.
@@ -117,6 +118,7 @@ class MotionCapture:
             flat: If True, return a single list of samples.
             min_samples: Minimum number of samples to collect.
             span_mm: Span in mm.
+            lead_in_legs: Uncaptured warmup legs before ``legs`` (same session).
         Returns:
             If ``flat`` is True --> list[MotionSample]
 
@@ -129,7 +131,9 @@ class MotionCapture:
                 min_samples=min_samples,
             )
         self.handler.begin(self.origin)
-        self.handler.run_capture_legs(legs, speed_mm_min)
+        self.handler.run_capture_legs(
+            legs, speed_mm_min, lead_in_legs=lead_in_legs or None
+        )
         if self.sync_offset is not None:
             self.sync_offset(self.handler.position)
         if flat:

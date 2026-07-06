@@ -22,6 +22,7 @@ from ...harmonic import (
     binned_to_motion_samples,
     circle_arc_legs,
     circle_in_jog_box,
+    circle_lead_in_legs,
     circle_radius_for_tier,
     fit_first_harmonic,
     harmonic_bootstrap_diverged,
@@ -51,6 +52,25 @@ MIN_SAMPLES_PER_SPAN = 3
 
 KALMAN_PROCESS_VAR = 1.0
 KALMAN_MEASURE_VAR = 100.0
+
+
+def _inner_leg_samples(
+    leg_batches: list[list[MotionSample]],
+    samples: list[MotionSample],
+) -> list[MotionSample]:
+    """Drop first/last arc legs; both meet at θ=0 and skew edge bins."""
+    if len(leg_batches) <= 2:
+        return samples
+    keys = {
+        (round(s.print_time, 6), round(s.offset.x, 6), round(s.offset.y, 6))
+        for batch in leg_batches[1:-1]
+        for s in batch
+    }
+    return [
+        s
+        for s in samples
+        if (round(s.print_time, 6), round(s.offset.x, 6), round(s.offset.y, 6)) in keys
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,6 +220,13 @@ def compute_circle_pass(
     if mode.refresh_sweeps:
         strategy._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
+    lead_in = circle_lead_in_legs(legs, cfg.circle_lead_in)
+    if lead_in:
+        logger.info(
+            f"eddy_seek: circle_harmonic pass {pass_num} "
+            f"lead_in={len(lead_in)}/{len(legs)} segments"
+        )
+
     capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
     leg_batches = capture.run(
         legs,
@@ -207,6 +234,7 @@ def compute_circle_pass(
         flat=False,
         min_samples=MIN_SAMPLES_PER_SPAN,
         span_mm=segment_span,
+        lead_in_legs=lead_in or None,
     )
     for i, batch in enumerate(leg_batches):
         if len(batch) < MIN_SAMPLES_PER_SPAN:
@@ -215,9 +243,17 @@ def compute_circle_pass(
                 f"leg {i} has {len(batch)} samples "
                 f"(need >= {MIN_SAMPLES_PER_SPAN})"
             )
-    samples = [s for batch in leg_batches for s in batch]
+    samples_raw = [s for batch in leg_batches for s in batch]
     samples = kalman_filter_freqs(
-        samples,
+        samples_raw,
+        process_var=KALMAN_PROCESS_VAR,
+        measure_var=KALMAN_MEASURE_VAR,
+    )
+    fit_raw = _inner_leg_samples(leg_batches, samples_raw)
+    if len(fit_raw) < 3:
+        fit_raw = samples_raw
+    fit_filtered = kalman_filter_freqs(
+        fit_raw,
         process_var=KALMAN_PROCESS_VAR,
         measure_var=KALMAN_MEASURE_VAR,
     )
@@ -236,7 +272,7 @@ def compute_circle_pass(
             f"{len(samples)} samples (need >= 3)"
         )
 
-    binned = bin_samples_by_angle(samples, trace_center, len(legs))
+    binned = bin_samples_by_angle(fit_filtered, trace_center, len(legs))
     logger.info(f"eddy_seek: circle_harmonic pass {pass_num} bins = {len(binned)}")
     fit_samples = binned_to_motion_samples(trace_center, trace_radius, binned)
     fit = fit_first_harmonic(fit_samples, trace_center)

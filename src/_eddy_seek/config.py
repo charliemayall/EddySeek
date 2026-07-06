@@ -113,6 +113,10 @@ class SeekConfig:
         default=10 * 60.0,
         metadata={"gcode": "CIRCLE_SPEED", "positive": True, "speed": True},
     )
+    circle_lead_in: float = field(
+        default=0.25,
+        metadata={"gcode": "CIRCLE_LEAD_IN"},
+    )
     noise_k: float = field(default=1.0, metadata={"gcode": "NOISE_K", "positive": True})
     harmonic_step_gain: float = field(
         default=0.15, metadata={"gcode": "HARMONIC_STEP_GAIN", "positive": True}
@@ -314,6 +318,8 @@ def _validate(cfg: SeekConfig) -> None:
             "circle_radius_min must be <= circle_radius_start "
             f"(got {cfg.circle_radius_min} > {cfg.circle_radius_start})"
         )
+    if not 0.0 <= cfg.circle_lead_in < 1.0:
+        raise ValueError(f"circle_lead_in must be in [0, 1) (got {cfg.circle_lead_in})")
 
 
 def _config_option_set(config: Any, key: str) -> bool:
