@@ -292,9 +292,7 @@ def compute_circle_pass(
 
     divergence = result.distance_to(bootstrap)
     anchor_floor = (
-        math.hypot(cfg.max_jog_x, cfg.max_jog_y)
-        if mode.skip_bootstrap or mode.slope_only
-        else 0.0
+        math.hypot(cfg.max_jog_x, cfg.max_jog_y) if mode.skip_bootstrap else 0.0
     )
     divergence_limit = harmonic_bootstrap_divergence_limit(
         bootstrap, trace_radius, cfg.tolerance, anchor_floor=anchor_floor

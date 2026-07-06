@@ -27,14 +27,12 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class CircleHarmonicMode:
     skip_bootstrap: bool
-    slope_only: bool
     refresh_sweeps: bool
 
     @classmethod
     def from_config(cls, cfg: SeekConfig) -> CircleHarmonicMode:
         return cls(
             skip_bootstrap=cfg.circle_skip_bootstrap,
-            slope_only=cfg.circle_bootstrap_slope_only,
             refresh_sweeps=cfg.circle_refresh_sweeps,
         )
 

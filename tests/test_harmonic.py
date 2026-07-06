@@ -422,36 +422,6 @@ def test_harmonic_reject_reasons_lists_failures():
     assert any("snr" in reason for reason in reasons)
 
 
-def test_circle_harmonic_slope_only_bootstrap_holds_center_and_keeps_profiles():
-    from unittest.mock import MagicMock, patch
-
-    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
-
-    strategy = CircleHarmonicStrategy()
-    ctx = MagicMock()
-    ctx.config = SeekConfig(circle_bootstrap_slope_only=True, search_for="min")
-
-    samples_x = [
-        MagicMock(offset=Offset(x, 0.0), freq=100.0 - 5.0 * x * x)
-        for x in [i * 0.1 for i in range(-10, 11)]
-    ]
-    samples_y = [
-        MagicMock(offset=Offset(0.0, y), freq=100.0 - 5.0 * y * y)
-        for y in [i * 0.1 for i in range(-10, 11)]
-    ]
-
-    with patch(
-        "_eddy_seek.movement.leg_planner.sweep_axis",
-        side_effect=[samples_x, samples_y],
-    ):
-        result = strategy._bootstrap_pass(ctx, 1, Offset.zero())
-
-    assert result == Offset.zero()
-    assert strategy._bootstrap == Offset.zero()
-    assert len(strategy._x_profile) == len(samples_x)
-    assert len(strategy._y_profile) == len(samples_y)
-
-
 def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one():
     from unittest.mock import MagicMock, patch
 
@@ -475,41 +445,6 @@ def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one()
     finish.assert_called_once()
     assert strategy._bootstrap == Offset.zero()
     assert result == Offset.zero()
-
-
-def test_circle_harmonic_slope_only_search_continues_to_circles():
-    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
-
-    class _FakeReporter:
-        def info(self, msg: str) -> None:
-            pass
-
-    class _SlopeOnlySession:
-        config = SeekConfig(
-            circle_bootstrap_slope_only=True,
-            max_passes=4,
-            tolerance=0.05,
-        )
-
-    strategy = CircleHarmonicStrategy()
-    calls: list[int] = []
-
-    def fake_step(_ctx, pass_num, best):
-        calls.append(pass_num)
-        if pass_num == 1:
-            return best
-        if pass_num == 2:
-            return Offset(0.1, 0.0)
-        return best
-
-    strategy._step = fake_step  # pyright: ignore[reportAttributeAccessIssue]
-    best, passes_run = strategy.search(
-        _SlopeOnlySession(),
-        _FakeReporter(),  # pyright: ignore[reportArgumentType]
-    )
-    assert calls == [1, 2, 3]
-    assert passes_run == 3
-    assert best.x == pytest.approx(0.1)
 
 
 def test_circle_harmonic_search_retries_after_rejected_pass():

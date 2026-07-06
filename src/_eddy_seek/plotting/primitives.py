@@ -232,17 +232,13 @@ class CircleBootstrapRecord(_Record):
     move: PassMove
     samples: XYCloud
     bounds: Bounds
-    skipped: Offset | None = None
 
     def to_trace_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {
+        return {
             "type": self._KIND,
             "pass_num": self.pass_num,
             "result": _json_value(asdict(self.move.result)),
         }
-        if self.skipped is not None:
-            out["skipped"] = _json_value(asdict(self.skipped))
-        return out
 
 
 @dataclass(frozen=True, slots=True)

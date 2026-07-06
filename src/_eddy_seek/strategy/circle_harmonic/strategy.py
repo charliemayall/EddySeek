@@ -43,7 +43,6 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._y_profile: list[tuple[float, float]] = []
         self._mode = CircleHarmonicMode(
             skip_bootstrap=False,
-            slope_only=False,
             refresh_sweeps=False,
         )
         self._plateau = PlateauState()
@@ -60,8 +59,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             f"circle={cfg.circle_speed / 60.0:.2f} mm/s "
             f"arc_res={cfg.circle_arc_resolution} "
             f"refresh_sweeps={mode.refresh_sweeps} "
-            f"skip_bootstrap={mode.skip_bootstrap} "
-            f"slope_only={mode.slope_only}"
+            f"skip_bootstrap={mode.skip_bootstrap}"
         )
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
@@ -113,12 +111,6 @@ class CircleHarmonicStrategy(SeekStrategy):
                         f"- continuing at smaller circle"
                     )
                     continue
-                if self._mode.slope_only and pass_num == 1:
-                    logger.info(
-                        f"eddy_seek: {self.name} slope-only bootstrap done "
-                        f"- continuing to circle passes"
-                    )
-                    continue
                 logger.info(
                     f"eddy_seek: {self.name} converged after pass {pass_num} "
                     f"(moved {moved.x:.4f}, {moved.y:.4f})"
@@ -143,7 +135,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 self._bootstrap = best
             return self._circle_pass_step(ctx, pass_num, best)
         if pass_num == 1:
-            return bootstrap_pass(self, ctx, pass_num, best, self._mode)
+            return bootstrap_pass(self, ctx, pass_num, best)
         return self._circle_pass_step(ctx, pass_num, best)
 
     def _circle_pass_step(
@@ -201,14 +193,8 @@ class CircleHarmonicStrategy(SeekStrategy):
         moved: Offset,
         ctx: SeekSession,
     ) -> str:
-        if pass_num == 1:
-            if self._mode.slope_only:
-                return (
-                    f"Pass {pass_num} (slope cal): "
-                    f"holding X={new.x:+.4f} Y={new.y:+.4f} mm"
-                )
-            if not self._mode.skip_bootstrap:
-                return f"Pass {pass_num} (bootstrap): X={new.x:+.4f} Y={new.y:+.4f} mm"
+        if pass_num == 1 and not self._mode.skip_bootstrap:
+            return f"Pass {pass_num} (bootstrap): X={new.x:+.4f} Y={new.y:+.4f} mm"
         return f"Pass {pass_num} (circle): {new.to_delta_str()}"
 
     def _bootstrap_pass(
@@ -217,7 +203,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         pass_num: int,
         best: Offset,
     ) -> Offset:
-        return bootstrap_pass(self, ctx, pass_num, best, self._mode)
+        return bootstrap_pass(self, ctx, pass_num, best)
 
     def _compute_circle_pass(
         self,
@@ -247,8 +233,6 @@ class CircleHarmonicStrategy(SeekStrategy):
         result: Offset,
         samples: list[MotionSample],
         box: tuple[float, float, float, float],
-        *,
-        skipped: Offset | None = None,
     ) -> None:
         ctx.recorder.record(
             CircleBootstrapRecord(
@@ -256,7 +240,6 @@ class CircleHarmonicStrategy(SeekStrategy):
                 move=PassMove.compute(center, result),
                 samples=XYCloud.from_samples(samples),
                 bounds=Bounds.from_box(box),
-                skipped=skipped,
             )
         )
 

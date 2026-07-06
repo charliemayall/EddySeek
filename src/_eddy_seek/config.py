@@ -131,10 +131,6 @@ class SeekConfig:
         default=False,
         metadata={"gcode": "CIRCLE_SKIP_BOOTSTRAP", "bool": True},
     )
-    circle_bootstrap_slope_only: bool = field(
-        default=False,
-        metadata={"gcode": "CIRCLE_BOOTSTRAP_SLOPE_ONLY", "bool": True},
-    )
     debug: bool = field(default=False, metadata={"bool": True})
 
     def __post_init__(self) -> None:
@@ -322,10 +318,6 @@ def _validate(cfg: SeekConfig) -> None:
         raise ValueError(
             "circle_radius_min must be <= circle_radius_start "
             f"(got {cfg.circle_radius_min} > {cfg.circle_radius_start})"
-        )
-    if cfg.circle_skip_bootstrap and cfg.circle_bootstrap_slope_only:
-        raise ValueError(
-            "circle_skip_bootstrap and circle_bootstrap_slope_only are mutually exclusive"
         )
 
 
