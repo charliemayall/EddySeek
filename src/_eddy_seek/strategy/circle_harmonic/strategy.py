@@ -26,7 +26,7 @@ from ...plotting.primitives import (
     XYCloud,
 )
 from ...session import SeekSession
-from ..base import MaxPassesError, SeekStrategy
+from ..base import MaxPassesError, SeekStrategy, _check_pass_divergence
 from .bootstrap import bootstrap_pass
 from .circle_pass import CirclePassOutcome, compute_circle_pass
 from .plateau import CircleHarmonicMode, PlateauState
@@ -77,21 +77,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._mode = CircleHarmonicMode.from_config(cfg)
         self._plateau.reset()
         best = Offset.zero()
-
-        probe = self._try_min_radius_probe(ctx, best)
-        if probe is not None:
-            moved = (probe.result - best).abs_components()
-            console.info(
-                f"Pass 1 (probe r={probe.trace_radius:.3f}): "
-                f"{probe.result.to_delta_str()}"
-            )
-            result = self._apply_circle_outcome(ctx, 1, best, probe)
-            logger.info(
-                f"eddy_seek: {self.name} finished after min-radius probe "
-                f"(moved {moved.x:.4f}, {moved.y:.4f})"
-            )
-            return result, 1
-
+        positions = [best]
         passes_run = 0
 
         for pass_num in range(1, cfg.max_passes + 1):
@@ -104,6 +90,14 @@ class CircleHarmonicStrategy(SeekStrategy):
             new = self._step(ctx, pass_num, best)
             moved = (new - best).abs_components()
             console.info(self._pass_message(pass_num, new, moved, ctx))
+            positions.append(new)
+            if not self._plateau.last_rejected:
+                _check_pass_divergence(
+                    self.name,
+                    positions,
+                    tolerance=cfg.tolerance,
+                    pass_num=pass_num,
+                )
             best = new
 
             if self._plateau.frozen is not None:
