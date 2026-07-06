@@ -9,6 +9,7 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 
 import math
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -57,11 +58,19 @@ class Direction(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
-class _XYComponents:
+class _Vector2(ABC):
     """Shared XY tuple math for Offset and Position."""
 
     x: float
     y: float
+
+    @property
+    @abstractmethod
+    def is_absolute(self) -> bool: ...
+
+    @property
+    def is_relative(self) -> bool:
+        return not self.is_absolute
 
     @classmethod
     def zero(cls) -> Self:
@@ -117,8 +126,12 @@ class _XYComponents:
 
 
 @dataclass(frozen=True, slots=True)
-class Offset(_XYComponents):
+class Offset(_Vector2):
     """Represent an XY offset (mm)"""
+
+    @property
+    def is_absolute(self) -> bool:
+        return False
 
     def __add__(self, other: Offset) -> Offset:
         if not isinstance(other, Offset):
@@ -135,8 +148,12 @@ class Offset(_XYComponents):
 
 
 @dataclass(frozen=True, slots=True)
-class Position(_XYComponents):
+class Position(_Vector2):
     """Absolute machine XY coordinates (mm)."""
+
+    @property
+    def is_absolute(self) -> bool:
+        return True
 
     @classmethod
     def from_toolhead(cls, printer: Printer) -> Position:

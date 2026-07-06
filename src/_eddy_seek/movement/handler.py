@@ -32,6 +32,16 @@ logger = logging.getLogger(__name__)
 _LDC1612_BULK_HZ = 400.0  # batch bulk client nominal rate
 
 
+def manual_move_xy(toolhead: ToolHead, position: Position, speed_mm_s: float) -> None:
+    """Queue absolute machine XY; rejects session-relative ``Offset``."""
+    if position.is_relative:
+        raise TypeError(
+            "eddy_seek: manual_move attempted to move to a relative position. Moves must use absolute positions."
+            f"(got ({position.x:.4f}, {position.y:.4f}))"
+        )
+    toolhead.manual_move([position.x, position.y], speed_mm_s)
+
+
 def move_to_xy(
     toolhead: ToolHead,
     position: Position,
@@ -43,7 +53,7 @@ def move_to_xy(
     logger.info(
         f"eddy_seek: move_to ({position.x:.4f}, {position.y:.4f}) feedrate={feedrate:.1f}"
     )
-    toolhead.manual_move([position.x, position.y], feedrate / 60.0)
+    manual_move_xy(toolhead, position, feedrate / 60.0)
     if wait:
         toolhead.wait_moves()
 
@@ -110,11 +120,8 @@ class _SessionMotionBase:
             f"-> offset=({offset.x:.4f}, {offset.y:.4f})"
         )
         toolhead = self._printer.lookup_object("toolhead")
-        pos = toolhead.get_position()
-        toolhead.manual_move(
-            [pos[0] + delta.x, pos[1] + delta.y],
-            self._jog_speed / 60.0,
-        )
+        machine = Position.from_pair(toolhead.get_position()) + delta
+        manual_move_xy(toolhead, machine, self._jog_speed / 60.0)
         self._commit(offset)
 
 
@@ -286,7 +293,7 @@ class MotionHandler(_SessionMotionBase):
         self.th.limit_next_junction_speed(
             min(speed_mm_s, MAX_SCV)
         )  # jerky cornering leeds to dwell like behaviour
-        self.th.manual_move([machine.x, machine.y], speed_mm_s)
+        manual_move_xy(self.th, machine, speed_mm_s)
 
     def _register_capture_window(self, capture_start: float) -> None:
         def _end_cb(end_time: float) -> None:

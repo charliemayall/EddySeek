@@ -24,6 +24,7 @@ from ._eddy_seek.common import Offset, Position
 from ._eddy_seek.config import SeekConfig, load_seek_config
 from ._eddy_seek.kconsole import KConsole, console_for_gcmd
 from ._eddy_seek.movement.guard import clear_gcode_offset_xy
+from ._eddy_seek.movement.handler import manual_move_xy
 from ._eddy_seek.plotting import (
     accuracy as _accuracy_plot,  # noqa: F401 - registers plotter
 )
@@ -436,11 +437,8 @@ class EddySeek(SeekHost):
                     )
                     console.info(f"Mock offset: {mock_offset.to_delta_str()}")
                     toolhead = self.printer.lookup_object("toolhead")
-                    pos = toolhead.get_position()
-                    toolhead.manual_move(
-                        [pos[0] + mock_offset.x, pos[1] + mock_offset.y],
-                        cfg.jog_speed / 60.0,
-                    )
+                    machine = Position.from_pair(toolhead.get_position()) + mock_offset
+                    manual_move_xy(toolhead, machine, cfg.jog_speed / 60.0)
                     toolhead.wait_moves()
 
                 console.info(f"Repeat {repeat}/{repeats}")

@@ -19,6 +19,7 @@ from _eddy_seek.movement.handler import (
     align_measurements,
     axis_profile,
     get_clamped_speed_for_min_samples_over_span,
+    manual_move_xy,
     move_to_xy,
 )
 from _eddy_seek.movement.leg_planner import (
@@ -75,6 +76,13 @@ def test_move_to_absolute():
 
     toolhead.manual_move.assert_called_once_with([12.0, 22.0], 50.0)
     assert handler.position == Offset(2.0, 2.0)
+
+
+def test_manual_move_xy_rejects_offset():
+    _printer, toolhead = fake_motion_printer()
+    with raises(TypeError, match=r"attempted to move to a relative position\."):
+        manual_move_xy(toolhead, Offset(1.0, 2.0), 50.0)  # type: ignore[arg-type]
+    toolhead.manual_move.assert_not_called()
 
 
 def test_jog_waits_for_move():
