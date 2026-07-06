@@ -67,8 +67,6 @@ body {{
   flex-direction: column;
   align-items: center;
   min-height: 100vh;
-  height: 100vh;
-  overflow: auto;
   padding: 0.35rem;
   gap: 0.35rem;
 }}
@@ -126,9 +124,7 @@ body {{
   font-variant-numeric: tabular-nums;
 }}
 .chart {{
-  flex: 1 1 0;
-  min-height: 0;
-  container-type: size;
+  flex: 0 0 auto;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -138,13 +134,11 @@ body {{
 }}
 .chart-inner--square {{
   aspect-ratio: 1 / 1;
-  width: min(100cqw, 100cqh);
-  max-width: 100%;
+  width: 100%;
+  max-width: min(960px, 100%);
 }}
 .chart-inner--wide {{
   width: 100%;
-  height: 100%;
-  min-height: 0;
 }}
 .chart-inner .plotly-graph-div,
 .chart-inner .js-plotly-plot {{
