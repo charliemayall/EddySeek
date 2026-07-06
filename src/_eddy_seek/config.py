@@ -95,7 +95,7 @@ class SeekConfig:
         default=3, metadata={"gcode": "CROSS_PASSES", "min": 1, "odd": True}
     )
     fine_shrink: float = field(
-        default=0.4, metadata={"gcode": "FINE_SHRINK", "positive": True}
+        default=0.6, metadata={"gcode": "FINE_SHRINK", "positive": True}
     )
     min_sweep_samples: int = field(
         default=20, metadata={"gcode": "MIN_SWEEP_SAMPLES", "min": 3}
