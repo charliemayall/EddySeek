@@ -65,7 +65,6 @@ class SeekStrategy(ABC):
                 f"eddy_seek: {self.name} pass {pass_num} start "
                 f"best=({best.x:.4f}, {best.y:.4f})"
             )
-            self._before_pass(ctx, pass_num)
             new = self._step(ctx, pass_num, best)
             moved = (new - best).abs_components()
             console.info(self._pass_message(pass_num, new, moved, ctx))
@@ -76,12 +75,7 @@ class SeekStrategy(ABC):
                 )
             best = new
 
-            if self.should_stop(ctx, pass_num, best, moved):
-                break
-
             if moved.x < cfg.tolerance and moved.y < cfg.tolerance:
-                if self.continue_after_convergence(ctx, pass_num, moved):
-                    continue
                 logger.info(
                     f"eddy_seek: {self.name} converged after pass {pass_num} "
                     f"(moved {moved.x:.4f}, {moved.y:.4f})"
@@ -96,28 +90,8 @@ class SeekStrategy(ABC):
 
         return best, passes_run
 
-    def _before_pass(self, ctx: SeekSession, pass_num: int) -> None:
-        return None
-
     def should_check_divergence(self, ctx: SeekSession, pass_num: int) -> bool:
         return True
-
-    def should_stop(
-        self,
-        ctx: SeekSession,
-        pass_num: int,
-        best: Offset,
-        moved: Offset,
-    ) -> bool:
-        return False
-
-    def continue_after_convergence(
-        self,
-        ctx: SeekSession,
-        pass_num: int,
-        moved: Offset,
-    ) -> bool:
-        return False
 
     @abstractmethod
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset: ...

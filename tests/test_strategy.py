@@ -153,6 +153,11 @@ class _ScriptedStrategy(SeekStrategy):
     def name(self) -> str:
         return "scripted"
 
+    def announce_start(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, ctx: SeekSession, console: _FakeReporter
+    ) -> None:
+        return None
+
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         return self._steps[pass_num - 1]
 

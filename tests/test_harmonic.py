@@ -119,12 +119,12 @@ def _plateau_ctx(**overrides):
     return ctx
 
 
-def test_circle_center_uses_last_ok():
+def test_plateau_estimate_uses_anchor():
     from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
 
     strategy = CircleHarmonicStrategy()
-    strategy._last_ok = Offset(1.0, 2.0)
-    assert strategy._circle_center(Offset.zero()) == Offset(1.0, 2.0)
+    strategy._plateau.anchor = Offset(1.0, 2.0)
+    assert strategy._plateau.estimate(Offset.zero()) == Offset(1.0, 2.0)
 
 
 def test_finish_circle_pass_accept_sets_last_ok():
@@ -146,8 +146,8 @@ def test_finish_circle_pass_accept_sets_last_ok():
         freeze=False,
     )
     ret = strategy._finish_circle_pass(ctx, 2, Offset.zero(), outcome)
-    assert strategy._last_ok == result
-    assert strategy._radius_tier == 0
+    assert strategy._plateau.anchor == result
+    assert strategy._plateau.tier == 0
     assert ret == result
 
 
@@ -169,8 +169,8 @@ def test_finish_circle_pass_reject_bumps_tier():
         reason="fit failed",
     )
     strategy._finish_circle_pass(ctx, 2, Offset.zero(), outcome)
-    assert strategy._radius_tier == 1
-    assert strategy._last_pass_rejected
+    assert strategy._plateau.tier == 1
+    assert strategy._plateau.last_rejected
 
 
 def test_finish_circle_pass_reject_at_min_freezes():
@@ -180,7 +180,7 @@ def test_finish_circle_pass_reject_at_min_freezes():
     )
 
     strategy = CircleHarmonicStrategy()
-    strategy._last_ok = Offset(0.1, 0.2)
+    strategy._plateau.anchor = Offset(0.1, 0.2)
     ctx = _plateau_ctx()
     outcome = _outcome_reject(
         Offset.zero(),
@@ -192,7 +192,7 @@ def test_finish_circle_pass_reject_at_min_freezes():
         reason="bad model",
     )
     strategy._finish_circle_pass(ctx, 3, Offset.zero(), outcome)
-    assert strategy._frozen == Offset(0.1, 0.2)
+    assert strategy._plateau.frozen == Offset(0.1, 0.2)
 
 
 def test_finish_circle_pass_reject_returns_last_ok():
@@ -202,7 +202,7 @@ def test_finish_circle_pass_reject_returns_last_ok():
     )
 
     strategy = CircleHarmonicStrategy()
-    strategy._last_ok = Offset(0.5, 0.3)
+    strategy._plateau.anchor = Offset(0.5, 0.3)
     ctx = _plateau_ctx()
     outcome = _outcome_reject(
         Offset.zero(),
@@ -235,7 +235,7 @@ def test_finish_circle_pass_accept_does_not_freeze_at_large_radius():
         freeze=False,
     )
     strategy._finish_circle_pass(ctx, 2, Offset.zero(), outcome)
-    assert strategy._frozen is None
+    assert strategy._plateau.frozen is None
 
 
 def test_fit_first_harmonic_recovers_known_offset():
@@ -465,7 +465,7 @@ def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one()
         patch.object(strategy, "_bootstrap_pass") as bootstrap,
         patch.object(strategy, "_compute_circle_pass") as compute,
         patch.object(
-            strategy, "_finish_circle_pass", return_value=Offset.zero()
+            strategy, "_apply_circle_outcome", return_value=Offset.zero()
         ) as finish,
     ):
         result = strategy._step(ctx, 1, Offset.zero())
@@ -530,7 +530,7 @@ def test_circle_harmonic_search_retries_after_rejected_pass():
         if pass_num == 1:
             return Offset(1.0, 0.0)
         if pass_num == 2:
-            strategy._last_pass_rejected = True
+            strategy._plateau.last_rejected = True
             return Offset(1.0, 0.0)
         if pass_num == 3:
             return Offset(0.96, 0.0)
@@ -573,7 +573,7 @@ def test_circle_harmonic_rejected_pass_holds_best():
         if pass_num == 5:
             return refined
         if pass_num == 6:
-            strategy._last_pass_rejected = True
+            strategy._plateau.last_rejected = True
             return best
         return best
 
