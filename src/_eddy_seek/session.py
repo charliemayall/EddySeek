@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
-from .common import Offset, Position, session_artifact_filename
+from .common import ConvergenceError, Offset, Position, session_artifact_filename
 from .config import SeekConfig
 from .kconsole import KConsole, console_for_gcmd
 from .movement.guard import KnownKinematicLimits, clear_gcode_offset_xy
@@ -193,6 +193,12 @@ class SeekSession:
             status = "ok"
             offset = best
 
+        except ConvergenceError as err:
+            error_message = str(err)
+            logger.exception("eddy_seek: search failed")
+            console.error(f"Seek failed: {error_message}")
+            status = "failed"
+            offset = None
         except Exception as exc:
             error_message = str(exc)
             logger.exception("eddy_seek: search failed")
