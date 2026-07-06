@@ -183,4 +183,5 @@ def _assert_binning() -> None:
     assert peak_bin_center([[]], [], []) is None
 
 
-_assert_binning()
+if __name__ == "__main__":
+    _assert_binning()

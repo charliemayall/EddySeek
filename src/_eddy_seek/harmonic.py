@@ -606,4 +606,5 @@ def _grid(lo: float, hi: float, n: int) -> list[float]:
     return [lo + (hi - lo) * i / (n - 1) for i in range(n)]
 
 
-_self_check()
+if __name__ == "__main__":
+    _self_check()
