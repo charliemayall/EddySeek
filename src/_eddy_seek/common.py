@@ -48,12 +48,27 @@ class ConvergenceError(RuntimeError):
         )
 
 
+class DivergenceError(RuntimeError):
+    """Result moved too far from previous pass."""
+
+    def __init__(
+        self, strategy: str, *, previous: Offset, result: Offset, tolerance: float
+    ) -> None:
+        self.strategy = strategy
+        self.previous = previous
+        self.result = result
+        super().__init__(
+            f"eddy_seek: {strategy} moved too far from previous pass "
+            f"({previous.x:.4f}, {previous.y:.4f}) -> ({result.x:.4f}, {result.y:.4f})"
+        )
+
+
 class Direction(str, Enum):
     PLUS = "+"
     MINUS = "-"
 
     @property
-    def reverse(self) -> bool:
+    def is_reverse(self) -> bool:
         return self is Direction.MINUS
 
 
