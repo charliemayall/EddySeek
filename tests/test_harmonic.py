@@ -422,96 +422,6 @@ def test_harmonic_reject_reasons_lists_failures():
     assert any("snr" in reason for reason in reasons)
 
 
-def test_circle_harmonic_search_short_circuits_on_min_radius_probe():
-    from unittest.mock import patch
-
-    from _eddy_seek.strategy.circle_harmonic import (
-        CircleHarmonicStrategy,
-        _outcome_accept,
-    )
-
-    class _FakeReporter:
-        def info(self, msg: str) -> None:
-            pass
-
-    strategy = CircleHarmonicStrategy()
-    ctx = _plateau_ctx()
-    accepted = _outcome_accept(
-        Offset(0.04, -0.02),
-        Offset.zero(),
-        ctx.config.circle_radius_min,
-        [],
-        [],
-        _harmonic_fit_stub(),
-        freeze=True,
-    )
-
-    with patch.object(strategy, "_try_min_radius_probe", return_value=accepted):
-        best, passes_run = strategy.search(
-            ctx,
-            _FakeReporter(),  # pyright: ignore[reportArgumentType]
-        )
-
-    assert passes_run == 1
-    assert best == Offset(0.04, -0.02)
-
-
-def test_circle_harmonic_search_falls_through_when_min_radius_probe_rejects():
-    from unittest.mock import patch
-
-    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
-
-    class _FakeReporter:
-        def info(self, msg: str) -> None:
-            pass
-
-    strategy = CircleHarmonicStrategy()
-    ctx = _plateau_ctx(max_passes=2)
-
-    with (
-        patch.object(strategy, "_try_min_radius_probe", return_value=None),
-        patch.object(
-            strategy, "_step", side_effect=[Offset(0.1, 0.0), Offset(0.1, 0.0)]
-        ),
-    ):
-        best, passes_run = strategy.search(
-            ctx,
-            _FakeReporter(),  # pyright: ignore[reportArgumentType]
-        )
-
-    assert passes_run == 2
-    assert best == Offset(0.1, 0.0)
-
-
-def test_try_min_radius_probe_uses_fixed_radius():
-    from unittest.mock import patch
-
-    from _eddy_seek.strategy.circle_harmonic import (
-        CircleHarmonicStrategy,
-        _outcome_reject,
-    )
-
-    strategy = CircleHarmonicStrategy()
-    ctx = _plateau_ctx()
-    rejected = _outcome_reject(
-        Offset.zero(),
-        Offset.zero(),
-        ctx.config.circle_radius_min,
-        [],
-        [],
-        fit=None,
-        reason="fit failed",
-    )
-
-    with patch(
-        "_eddy_seek.strategy.circle_harmonic.strategy.compute_circle_pass",
-        return_value=rejected,
-    ) as compute:
-        assert strategy._try_min_radius_probe(ctx, Offset.zero()) is None
-        compute.assert_called_once()
-        assert compute.call_args.kwargs["fixed_radius"] == ctx.config.circle_radius_min
-
-
 def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one():
     from unittest.mock import MagicMock, patch
 
@@ -538,8 +448,6 @@ def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one()
 
 
 def test_circle_harmonic_search_retries_after_rejected_pass():
-    from unittest.mock import patch
-
     from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
 
     class _FakeReporter:
@@ -564,11 +472,10 @@ def test_circle_harmonic_search_retries_after_rejected_pass():
         return best
 
     strategy._step = fake_step  # pyright: ignore[reportAttributeAccessIssue]
-    with patch.object(strategy, "_try_min_radius_probe", return_value=None):
-        best, passes_run = strategy.search(
-            _RetrySession(),
-            _FakeReporter(),  # pyright: ignore[reportArgumentType]
-        )
+    best, passes_run = strategy.search(
+        _RetrySession(),
+        _FakeReporter(),  # pyright: ignore[reportArgumentType]
+    )
     assert passes_run == 3
     assert calls == [1, 2, 3]
     assert best.x == pytest.approx(0.96)
@@ -576,8 +483,6 @@ def test_circle_harmonic_search_retries_after_rejected_pass():
 
 def test_circle_harmonic_rejected_pass_holds_best():
     """Rejected circle pass must not snap to bootstrap (false pass-divergence)."""
-    from unittest.mock import patch
-
     from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
 
     class _FakeReporter:
@@ -608,11 +513,10 @@ def test_circle_harmonic_rejected_pass_holds_best():
         return best
 
     strategy._step = fake_step  # pyright: ignore[reportAttributeAccessIssue]
-    with patch.object(strategy, "_try_min_radius_probe", return_value=None):
-        best, passes_run = strategy.search(
-            _Session(),
-            _FakeReporter(),  # pyright: ignore[reportArgumentType]
-        )
+    best, passes_run = strategy.search(
+        _Session(),
+        _FakeReporter(),  # pyright: ignore[reportArgumentType]
+    )
     assert passes_run == 7
     assert best.x == pytest.approx(refined.x)
     assert best.y == pytest.approx(refined.y)

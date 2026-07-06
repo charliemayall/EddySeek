@@ -166,21 +166,16 @@ def compute_circle_pass(
     best: Offset,
     mode: CircleHarmonicMode,
     plateau: PlateauState,
-    *,
-    fixed_radius: float | None = None,
 ) -> CirclePassOutcome:
     cfg = ctx.config
     bootstrap = strategy._bootstrap if strategy._bootstrap is not None else best
 
-    if fixed_radius is not None:
-        radius = fixed_radius
-    else:
-        radius = circle_radius_for_tier(
-            plateau.tier,
-            radius_start=cfg.circle_radius_start,
-            radius_min=cfg.circle_radius_min,
-            radius_shrink=cfg.circle_shrink,
-        )
+    radius = circle_radius_for_tier(
+        plateau.tier,
+        radius_start=cfg.circle_radius_start,
+        radius_min=cfg.circle_radius_min,
+        radius_shrink=cfg.circle_shrink,
+    )
     trace_center, trace_radius = circle_in_jog_box(
         plateau.estimate(best), radius, cfg.max_jog_x, cfg.max_jog_y
     )
@@ -199,7 +194,7 @@ def compute_circle_pass(
     segment_span = circumference / len(legs)
     logger.info(
         f"eddy_seek: circle_harmonic pass {pass_num} "
-        f"arc_segments={len(legs)} speed={cfg.circle_speed / 60.0:.2f} mm/s"
+        f"arc_segments={len(legs)} speed={cfg.circle_speed:.4f} mm/s"
     )
 
     if mode.refresh_sweeps:
