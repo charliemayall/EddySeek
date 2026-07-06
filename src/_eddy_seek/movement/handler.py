@@ -203,16 +203,6 @@ class MotionHandler(_SessionMotionBase):
         self.jog_to(offset)
         self.th.wait_moves()
 
-    def move_to(self, position: Position) -> None:
-        """Queue a move to absolute machine XY (mm)."""
-        offset = position - self._origin
-        if offset.x == self._offset.x and offset.y == self._offset.y:
-            return
-
-        move_to_xy(self.th, position, self._jog_speed)
-        self._offset = offset
-        self._position = offset
-
     def sample(self, offset: Offset) -> float:
         """Move to offset, dwell, and return mean LDC1612 frequency."""
         self.jog(offset)

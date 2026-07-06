@@ -19,6 +19,7 @@ from _eddy_seek.movement.handler import (
     align_measurements,
     axis_profile,
     get_clamped_speed_for_min_samples_over_span,
+    move_to_xy,
 )
 from _eddy_seek.movement.leg_planner import (
     MotionCapture,
@@ -68,7 +69,9 @@ def test_traversal_endpoints_minus():
 def test_move_to_absolute():
     printer, toolhead = fake_motion_printer()
     handler = _make_handler(printer, Position(10.0, 20.0))
-    handler.move_to(Position(12.0, 22.0))
+    target = Position(12.0, 22.0)
+    move_to_xy(toolhead, target, handler._jog_speed)
+    handler.sync_offset(target - handler.origin)
 
     toolhead.manual_move.assert_called_once_with([12.0, 22.0], 50.0)
     assert handler.position == Offset(2.0, 2.0)
@@ -169,7 +172,19 @@ def test_speed_clamp_for_min_samples_leaves_slow_request():
     )
 
 
-def test_sweep_axis_clamps_speed_for_min_samples():
+def test_collect_legs_clamps_speed_for_min_samples():
+    handler = MagicMock()
+    handler.collect_samples.return_value = []
+    capture = MotionCapture(handler, Position(0.0, 0.0))
+    legs = [(Offset(0.0, 0.0), Offset(0.2, 0.0))]
+
+    capture.collect_legs(legs, 3000.0, min_samples=20, span_mm=0.2)
+
+    # span=0.2 mm -> cap = 0.2 * 400 Hz * 60 / 20 = 240 mm/min
+    handler.run_capture_legs.assert_called_once_with(legs, 240.0)
+
+
+def test_sweep_axis_passes_speed_clamp_params():
     settings = SweepSettings.from_config(
         SeekConfig(
             max_jog_x=2.5,
@@ -196,7 +211,9 @@ def test_sweep_axis_clamps_speed_for_min_samples():
     )
 
     # span=0.2 mm -> cap = 0.2 * 400 Hz * 60 / 20 = 240 mm/min
-    assert capture.collect_legs.call_args.args[1] == 240.0
+    assert capture.collect_legs.call_args.kwargs["min_samples"] == 20
+    assert capture.collect_legs.call_args.kwargs["span_mm"] == 0.2
+    assert capture.collect_legs.call_args.args[1] == 3000.0
 
 
 def test_sweep_axis_coarse_uses_settings_cross_passes():
