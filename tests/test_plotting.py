@@ -85,7 +85,7 @@ def test_accuracy_plot_writes_html(requires_plotly, plot_tmp):
         run_id="abcd1234",
     )
     assert path is not None
-    assert os.path.isfile(path)
+    assert Path(path).is_file()
     assert path.endswith("2026-07-02_14-30-00_accuracy_abcd1234/accuracy.html")
 
 
@@ -184,7 +184,7 @@ def test_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
         write_at=write_at,
     )
     assert path is not None
-    assert os.path.isfile(path)
+    assert Path(path).is_file()
     assert path.endswith(PLOT_HTML_SUFFIX)
     assert recorder.pass_count() == 2
 
@@ -242,7 +242,7 @@ def test_sweep_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
         write_at=write_at,
     )
     assert path is not None
-    assert os.path.isfile(path)
+    assert Path(path).is_file()
     assert path.endswith(PLOT_HTML_SUFFIX)
     assert recorder.pass_count() == 2
 
@@ -424,7 +424,7 @@ def test_debug_scan_plot_writes_html(requires_plotly, plot_tmp):
         write_at=write_at,
     )
     assert path is not None
-    assert os.path.isfile(path)
+    assert Path(path).is_file()
 
 
 def test_save_preview_debug_scan_plot(requires_plotly):
@@ -547,7 +547,7 @@ def test_circle_harmonic_plot_writes_session_html(requires_plotly, plot_tmp):
         write_at=write_at,
     )
     assert path is not None
-    assert os.path.isfile(path)
+    assert Path(path).is_file()
     assert path.endswith(PLOT_HTML_SUFFIX)
 
 
@@ -606,5 +606,5 @@ def test_centroid_on_session_end_returns_plot_path(requires_plotly, tmp_path):
     path = strategy.on_session_end(ctx)  # type: ignore[arg-type]
     assert path is not None
     assert path.endswith("2026-07-02_14-30-00_tools_batch123/tools_t0_centroid.html")
-    assert os.path.isfile(path)
+    assert Path(path).is_file()
     assert recorder.pass_count() == 1

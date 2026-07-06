@@ -315,9 +315,7 @@ def _write_seek_trace(
     }
     try:
         out.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as trace_file:
-            json.dump(payload, trace_file, indent=2)
-            trace_file.write("\n")
+        out.write_text(json.dumps(payload, indent=2))
         logger.info(f"eddy_seek: session trace saved to {path}")
         return path
     except OSError as exc:
