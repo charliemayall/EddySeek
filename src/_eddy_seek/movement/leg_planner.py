@@ -64,7 +64,7 @@ class MotionCapture:
     sync_offset: Callable[[Offset], None] | None = None
 
     @overload
-    def collect_legs(
+    def run(
         self,
         legs: Sequence[tuple[Offset, Offset]],
         speed_mm_min: float,
@@ -75,7 +75,7 @@ class MotionCapture:
     ) -> list[MotionSample]: ...
 
     @overload
-    def collect_legs(
+    def run(
         self,
         legs: Sequence[tuple[Offset, Offset]],
         speed_mm_min: float,
@@ -85,7 +85,7 @@ class MotionCapture:
         span_mm: float | None = None,
     ) -> list[list[MotionSample]]: ...
 
-    def collect_legs(
+    def run(
         self,
         legs: Sequence[tuple[Offset, Offset]],
         speed_mm_min: float,
@@ -224,6 +224,15 @@ def _resolve_cross(settings: SweepSettings, phase: Phase) -> list[float]:
     return iter_cross_offsets(passes, settings.sweep_cross_offset)
 
 
+def _require_min_sweep_samples(count: int, min_samples: int, *, label: str) -> None:
+    if count < min_samples:
+        raise RuntimeError(
+            f"eddy_seek: {label} collected {count} in-range samples "
+            f"(need >= {min_samples}). "
+            "Check sensor and sweep speed."
+        )
+
+
 def sweep_axis(
     capture: MotionCapture,
     settings: SweepSettings,
@@ -245,7 +254,7 @@ def sweep_axis(
     legs = plan_axis_legs(
         axis, lo, hi, cross_center, cross_offsets, settings.sweep_overscan
     )
-    samples = capture.collect_legs(
+    samples = capture.run(
         legs,
         speed_mm_min,
         min_samples=settings.min_sweep_samples,
@@ -257,11 +266,6 @@ def sweep_axis(
         f"eddy_seek: sweep_axis {axis.value} pass {pass_num} {phase.value} "
         f"cross_passes={len(cross_offsets)} -> {len(profile)} in-span samples"
     )
-    if len(profile) < settings.min_sweep_samples:
-        raise RuntimeError(
-            f"eddy_seek: sweep on {axis.value} collected {len(profile)} samples "
-            f"(need >= {settings.min_sweep_samples})"
-        )
     if recorder is not None and recorder.trace:
         recorder.record(
             SweepTraceRecord(
@@ -294,6 +298,7 @@ def axis_sweep_profiles(
     speed_mm_min: float,
     phase: Phase,
     pass_num: int,
+    label: str = "axis sweep",
     recorder: SessionRecorder | None = None,
 ) -> AxisSweepProfiles:
     """X/Y sweeps with box-filtered axis profiles (no centroid)."""
@@ -328,9 +333,11 @@ def axis_sweep_profiles(
     box = lo_x, hi_x, lo_y, hi_y
     in_box_x = samples_in_box(samples_x, box)
     in_box_y = samples_in_box(samples_y, box)
+    in_box = [*in_box_x, *in_box_y]
+    _require_min_sweep_samples(len(in_box), settings.min_sweep_samples, label=label)
     return AxisSweepProfiles(
         box=box,
-        in_box=[*in_box_x, *in_box_y],
+        in_box=in_box,
         x_profile=[(sample.offset.x, sample.freq) for sample in in_box_x],
         y_profile=[(sample.offset.y, sample.freq) for sample in in_box_y],
     )
@@ -368,14 +375,9 @@ def axis_sweep_centroid(
         speed_mm_min=speed_mm_min,
         phase=phase,
         pass_num=pass_num,
+        label=label,
         recorder=recorder,
     )
-    if len(profiles.in_box) < settings.min_sweep_samples:
-        raise RuntimeError(
-            f"eddy_seek: {label} collected {len(profiles.in_box)} in-range samples "
-            f"(need >= {settings.min_sweep_samples}). "
-            "Check sensor and sweep speed."
-        )
     centroid = decoupled_centroid(
         profiles.x_profile, profiles.y_profile, settings.search_for
     )
@@ -408,7 +410,7 @@ def sweep_grid(
     legs = plan_grid_legs(box, step_size, settings.sweep_overscan, axis=Axis.X)
     legs.extend(plan_grid_legs(box, step_size, settings.sweep_overscan, axis=Axis.Y))
     _, _, y_lo, y_hi = box
-    samples = capture.collect_legs(legs, speed_mm_min)
+    samples = capture.run(legs, speed_mm_min)
     in_box = samples_in_box(samples, box)
     rows = len(y_lines(y_lo, y_hi, step_size))
     logger.info(

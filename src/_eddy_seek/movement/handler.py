@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, overload
 
 from ..common import Axis, Offset, Position
+from .kinematic_guard import MAX_SCV
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer
@@ -80,8 +81,7 @@ class _SessionMotionBase:
     def __init__(self, printer: Printer, origin: Position, jog_speed: float) -> None:
         self._printer = printer
         self._origin = origin
-        self._offset = Offset.zero()
-        self._position = Offset.zero()
+        self._session_offset = Offset.zero()
         self._jog_speed = jog_speed
 
     @property
@@ -90,15 +90,17 @@ class _SessionMotionBase:
 
     @property
     def position(self) -> Offset:
-        return self._position
+        return self._session_offset
+
+    def _commit(self, offset: Offset) -> None:
+        self._session_offset = offset
 
     def sync_offset(self, offset: Offset) -> None:
-        self._offset = offset
-        self._position = offset
+        self._commit(offset)
 
     def jog_to(self, offset: Offset) -> None:
         """Queue a jog to session-relative offset."""
-        delta = offset - self._offset
+        delta = offset - self._session_offset
         if delta.x == 0.0 and delta.y == 0.0:
             return
 
@@ -112,8 +114,7 @@ class _SessionMotionBase:
             [pos[0] + delta.x, pos[1] + delta.y],
             self._jog_speed / 60.0,
         )
-        self._offset = offset
-        self._position = offset
+        self._commit(offset)
 
 
 def lookup_toolhead_position(toolhead: ToolHead, print_time: float) -> Position:
@@ -168,8 +169,6 @@ class MotionHandler(_SessionMotionBase):
     Discrete dwell probes and continuous LDC1612 sweep capture.
 
     """
-
-    _MAX_SCV = 10.0
 
     def __init__(
         self,
@@ -245,6 +244,7 @@ class MotionHandler(_SessionMotionBase):
         self._capture_windows = []
         self._results = []
         self._need_stop = False
+        self._last_move_end = None
         self._active = True
         self._th = self._printer.lookup_object("toolhead")
         if not self._client_registered:
@@ -265,7 +265,7 @@ class MotionHandler(_SessionMotionBase):
 
         capture_start_t = self.th.get_last_move_time()
         self._manual_move(line_end, speed)
-        self._position = line_end
+        self._commit(line_end)
         self._register_capture_window(
             capture_start_t
         )  # make cb for move end (start,end)->(...)
@@ -284,7 +284,7 @@ class MotionHandler(_SessionMotionBase):
         machine = self._origin + offset
         speed_mm_s = speed / 60.0
         self.th.limit_next_junction_speed(
-            min(speed_mm_s, self._MAX_SCV)
+            min(speed_mm_s, MAX_SCV)
         )  # jerky cornering leeds to dwell like behaviour
         self.th.manual_move([machine.x, machine.y], speed_mm_s)
 

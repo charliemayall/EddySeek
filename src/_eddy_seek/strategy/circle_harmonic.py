@@ -278,18 +278,13 @@ class CircleHarmonicStrategy(SeekStrategy):
             speed_mm_min=cfg.sweep_coarse_speed,
             phase=Phase.COARSE,
             pass_num=pass_num,
+            label="circle_harmonic bootstrap",
             recorder=ctx.recorder,
         )
         box = profiles.box
         in_box = profiles.in_box
         x_profile = profiles.x_profile
         y_profile = profiles.y_profile
-        if len(in_box) < cfg.min_sweep_samples:
-            raise RuntimeError(
-                f"eddy_seek: circle_harmonic bootstrap collected {len(in_box)} in-range samples "
-                f"(need >= {cfg.min_sweep_samples}). "
-                "Check sensor and sweep speed."
-            )
         self._x_profile = x_profile
         self._y_profile = y_profile
         result_or_none = decoupled_centroid(x_profile, y_profile, cfg.search_for)
@@ -394,7 +389,7 @@ class CircleHarmonicStrategy(SeekStrategy):
             self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
         capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
-        leg_batches = capture.collect_legs(
+        leg_batches = capture.run(
             legs,
             cfg.circle_speed,
             flat=False,

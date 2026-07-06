@@ -172,13 +172,13 @@ def test_speed_clamp_for_min_samples_leaves_slow_request():
     )
 
 
-def test_collect_legs_clamps_speed_for_min_samples():
+def test_run_clamps_speed_for_min_samples():
     handler = MagicMock()
     handler.collect_samples.return_value = []
     capture = MotionCapture(handler, Position(0.0, 0.0))
     legs = [(Offset(0.0, 0.0), Offset(0.2, 0.0))]
 
-    capture.collect_legs(legs, 3000.0, min_samples=20, span_mm=0.2)
+    capture.run(legs, 3000.0, min_samples=20, span_mm=0.2)
 
     # span=0.2 mm -> cap = 0.2 * 400 Hz * 60 / 20 = 240 mm/min
     handler.run_capture_legs.assert_called_once_with(legs, 240.0)
@@ -194,7 +194,7 @@ def test_sweep_axis_passes_speed_clamp_params():
         )
     )
     capture = MagicMock()
-    capture.collect_legs.return_value = [
+    capture.run.return_value = [
         MotionSample(Offset(-0.1 + i * 0.01, 0.0), 100.0, 0.0) for i in range(21)
     ]
 
@@ -211,9 +211,9 @@ def test_sweep_axis_passes_speed_clamp_params():
     )
 
     # span=0.2 mm -> cap = 0.2 * 400 Hz * 60 / 20 = 240 mm/min
-    assert capture.collect_legs.call_args.kwargs["min_samples"] == 20
-    assert capture.collect_legs.call_args.kwargs["span_mm"] == 0.2
-    assert capture.collect_legs.call_args.args[1] == 3000.0
+    assert capture.run.call_args.kwargs["min_samples"] == 20
+    assert capture.run.call_args.kwargs["span_mm"] == 0.2
+    assert capture.run.call_args.args[1] == 3000.0
 
 
 def test_sweep_axis_coarse_uses_settings_cross_passes():
@@ -221,7 +221,7 @@ def test_sweep_axis_coarse_uses_settings_cross_passes():
         SeekConfig(cross_passes=1, min_sweep_samples=3)
     )
     capture = MagicMock()
-    capture.collect_legs.return_value = [
+    capture.run.return_value = [
         MotionSample(Offset(i * 0.01, 0.0), 100.0, 0.0) for i in range(3)
     ]
 
@@ -249,7 +249,7 @@ def test_sweep_axis_fine_phase_uses_single_cross_pass():
         SeekConfig(cross_passes=3, min_sweep_samples=3)
     )
     capture = MagicMock()
-    capture.collect_legs.return_value = [
+    capture.run.return_value = [
         MotionSample(Offset(i * 0.01, 0.0), 100.0, 0.0) for i in range(3)
     ]
 
