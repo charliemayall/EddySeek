@@ -84,6 +84,22 @@ def test_circle_radius_for_tier():
     )
 
 
+def test_min_radius_predicates():
+    from _eddy_seek.strategy.circle_harmonic import (
+        _is_below_min_radius,
+        _is_min_radius,
+    )
+
+    min_r = 0.5
+    assert _is_min_radius(0.5, min_r)
+    assert _is_min_radius(0.4999999999, min_r)
+    assert not _is_min_radius(0.51, min_r)
+
+    assert _is_below_min_radius(0.4, min_r)
+    assert not _is_below_min_radius(0.5, min_r)
+    assert not _is_below_min_radius(0.4999999999, min_r)
+
+
 def _harmonic_fit_stub() -> HarmonicFit:
     return HarmonicFit(c0=50.0, a=1.0, b=0.5, amplitude=1.12, noise=0.1, n=36)
 
