@@ -194,12 +194,8 @@ def test_run_clamps_speed_for_min_samples():
 
 def test_sweep_axis_passes_speed_clamp_params():
     settings = SweepSettings.from_config(
-        SeekConfig(
-            max_jog_x=2.5,
-            max_jog_y=2.5,
-            min_sweep_samples=20,
-            cross_passes=1,
-        )
+        SeekConfig(max_jog_x=2.5, max_jog_y=2.5, min_sweep_samples=20),
+        coarse_cross_passes=1,
     )
     capture = MagicMock()
     capture.run.return_value = [
@@ -224,9 +220,9 @@ def test_sweep_axis_passes_speed_clamp_params():
     assert capture.run.call_args.args[1] == 3000.0
 
 
-def test_sweep_axis_coarse_uses_settings_cross_passes():
+def test_sweep_axis_coarse_uses_coarse_cross_passes():
     settings = SweepSettings.from_config(
-        SeekConfig(cross_passes=1, min_sweep_samples=3)
+        SeekConfig(min_sweep_samples=3), coarse_cross_passes=1
     )
     capture = MagicMock()
     capture.run.return_value = [
@@ -254,7 +250,7 @@ def test_sweep_axis_coarse_uses_settings_cross_passes():
 
 def test_sweep_axis_fine_phase_uses_single_cross_pass():
     settings = SweepSettings.from_config(
-        SeekConfig(cross_passes=3, min_sweep_samples=3)
+        SeekConfig(min_sweep_samples=3), coarse_cross_passes=3
     )
     capture = MagicMock()
     capture.run.return_value = [

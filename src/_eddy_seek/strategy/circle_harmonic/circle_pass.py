@@ -35,6 +35,7 @@ from ...harmonic import (
 from ...movement.handler import MotionSample
 from ...movement.leg_planner import MotionCapture, SweepSettings, axis_sweep_profiles
 from ...session import SeekSession
+from .bootstrap import _COARSE_CROSS_PASSES
 from .plateau import (
     CircleHarmonicMode,
     PlateauState,
@@ -141,7 +142,9 @@ def refresh_profiles(
     radius: float,
 ) -> None:
     capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
-    settings = SweepSettings.from_config(ctx.config)
+    settings = SweepSettings.from_config(
+        ctx.config, coarse_cross_passes=_COARSE_CROSS_PASSES
+    )
     profiles = axis_sweep_profiles(
         capture,
         settings,

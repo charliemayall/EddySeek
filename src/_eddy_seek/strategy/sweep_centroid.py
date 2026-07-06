@@ -32,7 +32,8 @@ from .base import SeekStrategy
 
 logger = logging.getLogger(__name__)
 
-_N_COARSE = 2
+_N_COARSE_PHASES = 2
+_COARSE_CROSS_PASSES = 3
 
 
 class SweepCentroidStrategy(SeekStrategy):
@@ -45,14 +46,14 @@ class SweepCentroidStrategy(SeekStrategy):
         logger.info(
             f"eddy_seek: sweep_centroid coarse={cfg.sweep_coarse_speed / 60.0:.2f} mm/s "
             f"fine={cfg.sweep_fine_speed / 60.0:.2f} mm/s "
-            f"cross_passes={cfg.cross_passes}"
+            f"cross_passes={_COARSE_CROSS_PASSES}/1"
         )
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
         return finalize_strategy_plot(ctx, self.name)
 
     def _phase_for_pass(self, pass_num: int) -> Phase:
-        return Phase.COARSE if pass_num <= _N_COARSE else Phase.FINE
+        return Phase.COARSE if pass_num <= _N_COARSE_PHASES else Phase.FINE
 
     def should_check_divergence(self, ctx: SeekSession, pass_num: int) -> bool:
         return self._phase_for_pass(pass_num) is not Phase.COARSE
@@ -71,7 +72,9 @@ class SweepCentroidStrategy(SeekStrategy):
         half_y = cfg.max_jog_y * shrink
 
         capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
-        settings = SweepSettings.from_config(cfg)
+        settings = SweepSettings.from_config(
+            cfg, coarse_cross_passes=_COARSE_CROSS_PASSES
+        )
         sweep = axis_sweep_centroid(
             capture,
             settings,

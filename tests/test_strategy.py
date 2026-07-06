@@ -28,7 +28,7 @@ from _eddy_seek.strategy.base import (
     _check_pass_divergence,
 )
 from _eddy_seek.strategy.centroid import CentroidStrategy
-from _eddy_seek.strategy.sweep_centroid import _N_COARSE, SweepCentroidStrategy
+from _eddy_seek.strategy.sweep_centroid import _N_COARSE_PHASES, SweepCentroidStrategy
 
 
 def _test_cfg(**overrides) -> SeekConfig:
@@ -185,9 +185,9 @@ def test_sweep_centroid_skips_divergence_on_coarse_passes():
     session = SeekSession.__new__(SeekSession)
     session.config = _test_cfg()
     strategy = SweepCentroidStrategy()
-    for pass_num in range(1, _N_COARSE + 1):
+    for pass_num in range(1, _N_COARSE_PHASES + 1):
         assert not strategy.should_check_divergence(session, pass_num)
-    assert strategy.should_check_divergence(session, _N_COARSE + 1)
+    assert strategy.should_check_divergence(session, _N_COARSE_PHASES + 1)
 
 
 def test_search_aborts_on_pass_divergence():

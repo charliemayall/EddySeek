@@ -51,14 +51,22 @@ class SweepSettings:
     max_jog_x: float
     max_jog_y: float
     sweep_overscan: float
-    cross_passes: int
+    coarse_cross_passes: int
     sweep_cross_offset: float
     min_sweep_samples: int
     search_for: Literal["min", "max"]
 
     @classmethod
-    def from_config(cls, cfg: SeekConfig) -> SweepSettings:
-        return cls(**{f.name: getattr(cfg, f.name) for f in fields(cls)})
+    def from_config(
+        cls, cfg: SeekConfig, *, coarse_cross_passes: int = 3
+    ) -> SweepSettings:
+        values = {
+            f.name: getattr(cfg, f.name)
+            for f in fields(cls)
+            if f.name != "coarse_cross_passes"
+        }
+        values["coarse_cross_passes"] = coarse_cross_passes
+        return cls(**values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +138,7 @@ class MotionCapture:
 
 
 def _resolve_cross(settings: SweepSettings, phase: Phase) -> list[float]:
-    passes = 1 if phase is Phase.FINE else settings.cross_passes
+    passes = 1 if phase is Phase.FINE else settings.coarse_cross_passes
     return iter_cross_offsets(passes, settings.sweep_cross_offset)
 
 

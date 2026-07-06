@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_COARSE_CROSS_PASSES = 1
+
 
 def bootstrap_pass(
     strategy: CircleHarmonicStrategy,
@@ -37,7 +39,7 @@ def bootstrap_pass(
     half_x = cfg.max_jog_x
     half_y = cfg.max_jog_y
     capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
-    settings = SweepSettings.from_config(cfg)
+    settings = SweepSettings.from_config(cfg, coarse_cross_passes=_COARSE_CROSS_PASSES)
     sweep = axis_sweep_centroid(
         capture,
         settings,
