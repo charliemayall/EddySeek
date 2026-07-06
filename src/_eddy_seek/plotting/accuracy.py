@@ -10,9 +10,8 @@ Repeatability scatter plot for EDDY_SEEK_ACCURACY.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from ..session import compute_accuracy_stats
 from ._plotly import (
@@ -24,7 +23,6 @@ from ._plotly import (
     xy_session_layout,
 )
 from .primitives import AccuracyRepeatRecord, pass_color
-from .registry import StrategyPlotter, register_plotter
 
 
 def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
@@ -170,18 +168,3 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
     )
     apply_axes_theme(fig)
     return fig
-
-
-@register_plotter("accuracy")
-class AccuracyPlotter(StrategyPlotter):
-    def render(
-        self,
-        records: Sequence[Any],
-        *,
-        search_for: Literal["min", "max"],
-    ) -> Any | None:
-        _ = search_for
-        repeats = [
-            record for record in records if isinstance(record, AccuracyRepeatRecord)
-        ]
-        return write_accuracy_plot(repeats=repeats)

@@ -11,27 +11,19 @@ eddy_seek.py  -  Klipper extra for nozzle alignment via LDC1612.
 from __future__ import annotations
 
 import logging
-import random
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import fields
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ._eddy_seek.accuracy_test import run_accuracy_test
 from ._eddy_seek.common import Offset, Position
 from ._eddy_seek.config import SeekConfig, load_seek_config
 from ._eddy_seek.kconsole import KConsole, console_for_gcmd
 from ._eddy_seek.movement.guard import clear_gcode_offset_xy
-from ._eddy_seek.movement.handler import manual_move_xy
-from ._eddy_seek.plotting import (
-    accuracy as _accuracy_plot,  # noqa: F401 - registers plotter
-)
-from ._eddy_seek.plotting import render_session_plot, write_figure
-from ._eddy_seek.plotting.primitives import AccuracyRepeatRecord
-from ._eddy_seek.plotting.recorder import SessionRecorder
-from ._eddy_seek.session import SeekHost, SeekSession, report_accuracy_stats
+from ._eddy_seek.session import SeekHost, SeekSession
 from ._eddy_seek.strategy import strategy_for
 from ._eddy_seek.tool_align import align_all_tools, align_tool_number
 from ._eddy_seek.tools import ToolAlignConfig, apply_tool_offset
@@ -404,110 +396,19 @@ class EddySeek(SeekHost):
 
     def cmd_EDDY_SEEK_ACCURACY(self, gcmd: GCodeCommand) -> None:
         repeats = gcmd.get_int("REPEATS", 3, minval=2, maxval=50)
-
         mock_enabled = bool(gcmd.get_int("MOCK", 0, minval=0, maxval=1))
         logger.info(
             f"eddy_seek: EDDY_SEEK_ACCURACY repeats={repeats} mock={mock_enabled}"
         )
         console = self.refresh_console(gcmd)
         console.entry(f"Running {repeats} seek repeat(s) from current position")
-
-        gcode = self.printer.lookup_object("gcode")
-        gcode.run_script_from_command("SAVE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY")
-
-        cfg = self.seek_config
-        mock_span = min(cfg.max_jog_x, cfg.max_jog_y, random.random() * 0.6)
-        accuracy_run_id = uuid.uuid4().hex[:8]
-        write_at = datetime.now()
-        accuracy_recorder = SessionRecorder(trace=False, plots=cfg.save_plots)
-
-        offsets: list[Offset] = []
-        durations_s: list[float] = []
-        try:
-            for repeat in range(1, repeats + 1):
-                if repeat > 1:
-                    gcode.run_script_from_command(
-                        "RESTORE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY MOVE=1"
-                    )
-
-                if mock_enabled:
-                    mock_offset = Offset(
-                        (random.random() * 2 - 1) * mock_span,
-                        (random.random() * 2 - 1) * mock_span,
-                    )
-                    console.info(f"Mock offset: {mock_offset.to_delta_str()}")
-                    toolhead = self.printer.lookup_object("toolhead")
-                    machine = Position.from_pair(toolhead.get_position()) + mock_offset
-                    manual_move_xy(toolhead, machine, cfg.jog_speed / 60.0)
-                    toolhead.wait_moves()
-
-                console.info(f"Repeat {repeat}/{repeats}")
-                session = SeekSession(
-                    self,
-                    run_id=accuracy_run_id,
-                    run_label="accuracy",
-                    artifact_label=f"r{repeat}",
-                    artifact_write_at=write_at,
-                )
-                result = session.run(
-                    gcmd,
-                    strategy_for(self.seek_config.strategy),
-                    boundaries=False,
-                    announce_plot=True,
-                )
-
-                if result.status != "ok" or result.offset is None:
-                    console.error(
-                        f"Repeat {repeat} failed"
-                        + (f": {result.error_message}" if result.error_message else "")
-                    )
-                    break
-
-                offsets.append(result.offset)
-                durations_s.append(result.end_time - result.start_time)
-                accuracy_recorder.record(
-                    AccuracyRepeatRecord(
-                        repeat_num=repeat,
-                        offset=result.offset,
-                        session_plot_path=result.plot_path,
-                    )
-                )
-                console.info(
-                    f"Repeat {repeat} - X={result.offset.x:+.4f} "
-                    f"Y={result.offset.y:+.4f} mm "
-                    f"({durations_s[-1]:.1f}s)"
-                )
-
-            if len(offsets) < 2:
-                console.error("Need at least 2 successful repeats for deviation report")
-                return
-
-            report_accuracy_stats(console, offsets, durations_s=durations_s)
-            if cfg.save_plots and len(offsets) >= 2:
-                fig = render_session_plot(
-                    "accuracy",
-                    accuracy_recorder.records(),
-                    search_for=cfg.search_for,
-                )
-                if fig is not None:
-                    accuracy_plot_path = write_figure(
-                        Path(cfg.result_folder),
-                        fig,
-                        write_at=write_at,
-                        suffix="accuracy",
-                        run_label="accuracy",
-                        run_id=accuracy_run_id,
-                    )
-                    if accuracy_plot_path is not None:
-                        console.plot_saved(accuracy_plot_path)
-                        logger.info(
-                            f"eddy_seek: accuracy plot saved to {accuracy_plot_path}"
-                        )
-            console.exit(f"Accuracy test complete ({len(offsets)} repeats)")
-        finally:
-            gcode.run_script_from_command(
-                "RESTORE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY MOVE=1"
-            )
+        run_accuracy_test(
+            self,
+            gcmd,
+            console=console,
+            repeats=repeats,
+            mock_enabled=mock_enabled,
+        )
 
     def cmd_DEBUG_CONSOLE(self, gcmd: GCodeCommand) -> None:
         console = self.refresh_console(gcmd)

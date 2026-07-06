@@ -20,13 +20,13 @@ from _eddy_seek.config import SeekConfig
 from _eddy_seek.harmonic import HarmonicFit
 from _eddy_seek.movement.handler import MotionSample
 from _eddy_seek.optimizer import bin_frequencies
-from _eddy_seek.plotting import accuracy as _accuracy_plot  # noqa: F401
 from _eddy_seek.plotting import (
     generate_plot_filename,
     render_session_plot,
     write_figure,
 )
 from _eddy_seek.plotting._plotly import THEME_COLORS, write_html
+from _eddy_seek.plotting.accuracy import write_accuracy_plot
 from _eddy_seek.plotting.debug_scan import render_debug_scan_figure
 from _eddy_seek.plotting.primitives import (
     AccuracyRepeatRecord,
@@ -84,7 +84,7 @@ def test_accuracy_plot_writes_html(requires_plotly, plot_tmp):
     )
     path = write_figure(
         tmp_path,
-        render_session_plot("accuracy", records, search_for="max"),
+        write_accuracy_plot(repeats=list(records)),
         write_at=write_at,
         suffix="accuracy",
         run_label="accuracy",
@@ -96,10 +96,8 @@ def test_accuracy_plot_writes_html(requires_plotly, plot_tmp):
 
 
 def test_accuracy_plot_needs_two_repeats(requires_plotly, tmp_path):
-    fig = render_session_plot(
-        "accuracy",
-        [AccuracyRepeatRecord(1, Offset(0.0, 0.0))],
-        search_for="max",
+    fig = write_accuracy_plot(
+        repeats=[AccuracyRepeatRecord(1, Offset(0.0, 0.0))],
     )
     assert fig is None
 
@@ -145,13 +143,11 @@ def test_accuracy_plot_draws_spread_box(requires_plotly):
 
 def test_write_figure_creates_results_dir(requires_plotly, tmp_path):
     results_dir = tmp_path / "eddy_seek_results"
-    fig = render_session_plot(
-        "accuracy",
-        [
+    fig = write_accuracy_plot(
+        repeats=[
             AccuracyRepeatRecord(1, Offset(0.0, 0.0)),
             AccuracyRepeatRecord(2, Offset(0.1, 0.0)),
         ],
-        search_for="max",
     )
     assert fig is not None
     write_figure(results_dir, fig)
