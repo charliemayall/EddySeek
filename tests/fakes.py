@@ -20,7 +20,8 @@ from _eddy_seek.session import SeekSessionResult
 
 PLOT_SESSION_ID = "abcd1234"
 PLOT_WRITE_AT = datetime(2026, 7, 2, 14, 30)
-PLOT_HTML_SUFFIX = "14_30_02_07_26_abcd1234/session.html"
+PLOT_RUN_DIR = "2026-07-02_14-30-00_run"
+PLOT_HTML_SUFFIX = f"{PLOT_RUN_DIR}/session.html"
 
 
 _MISSING = object()
@@ -157,4 +158,4 @@ def ok_seek_result(
         "error_message": None,
     }
     defaults.update(kwargs)
-    return SeekSessionResult(**defaults)  # type: ignore[arg-type]
+    return SeekSessionResult(**defaults)  # pyright: ignore[reportArgumentType]

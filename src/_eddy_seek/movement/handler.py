@@ -13,19 +13,33 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Literal, overload
 
-from .common import Axis, Offset, Position
+from ..common import Axis, Offset, Position
+from .kinematic_guard import MAX_SCV
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer
     from klippy.toolhead import ToolHead
 
-    from .config import SeekConfig
-    from .session import SeekHost
+    from ..config import SeekConfig
+    from ..plotting.primitives import ProbeRecord
+    from ..session import SeekHost
 
 
 logger = logging.getLogger(__name__)
+
+_LDC1612_BULK_HZ = 400.0  # batch bulk client nominal rate
+
+
+def manual_move_xy(toolhead: ToolHead, position: Position, speed_mm_s: float) -> None:
+    """Queue absolute machine XY; rejects session-relative ``Offset``."""
+    if position.is_relative:
+        raise TypeError(
+            "eddy_seek: manual_move attempted to move to a relative position. Moves must use absolute positions."
+            f"(got ({position.x:.4f}, {position.y:.4f}))"
+        )
+    toolhead.manual_move([position.x, position.y], speed_mm_s)
 
 
 def move_to_xy(
@@ -36,12 +50,31 @@ def move_to_xy(
     wait: bool = False,
 ) -> None:
     """Queue a move to absolute machine XY (mm); feedrate in mm/min."""
-    logger.debug(
+    logger.info(
         f"eddy_seek: move_to ({position.x:.4f}, {position.y:.4f}) feedrate={feedrate:.1f}"
     )
-    toolhead.manual_move([position.x, position.y], feedrate / 60.0)
+    manual_move_xy(toolhead, position, feedrate / 60.0)
     if wait:
         toolhead.wait_moves()
+
+
+def get_clamped_speed_for_min_samples_over_span(
+    *,
+    requested_mm_min: float,
+    span_mm: float,
+    min_samples: int,
+) -> float:
+    """Cap feedrate so an in-range traverse can yield ``min_samples`` at ``bulk_rate_hz``."""
+    if span_mm <= 0.0 or min_samples <= 0:
+        return requested_mm_min
+    cap = span_mm * _LDC1612_BULK_HZ * 60.0 / min_samples
+    result_speed_mm_min = min(requested_mm_min, cap)
+    if result_speed_mm_min != requested_mm_min:
+        logger.info(
+            f"eddy_seek: speed clamped {requested_mm_min:.1f} -> {result_speed_mm_min:.1f} mm/min "
+            f"(span={span_mm:.3f} mm, min_samples={min_samples}, bulk_rate_hz={_LDC1612_BULK_HZ:.0f} Hz)"
+        )
+    return result_speed_mm_min
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,8 +92,7 @@ class _SessionMotionBase:
     def __init__(self, printer: Printer, origin: Position, jog_speed: float) -> None:
         self._printer = printer
         self._origin = origin
-        self._offset = Offset.zero()
-        self._position = Offset.zero()
+        self._session_offset = Offset.zero()
         self._jog_speed = jog_speed
 
     @property
@@ -69,39 +101,37 @@ class _SessionMotionBase:
 
     @property
     def position(self) -> Offset:
-        return self._position
+        return self._session_offset
+
+    def _commit(self, offset: Offset) -> None:
+        self._session_offset = offset
 
     def sync_offset(self, offset: Offset) -> None:
-        self._offset = offset
-        self._position = offset
+        self._commit(offset)
 
     def jog_to(self, offset: Offset) -> None:
         """Queue a jog to session-relative offset."""
-        delta = offset - self._offset
+        delta = offset - self._session_offset
         if delta.x == 0.0 and delta.y == 0.0:
             return
 
-        logger.debug(
+        logger.info(
             f"eddy_seek: jog delta=({delta.x:.4f}, {delta.y:.4f}) "
             f"-> offset=({offset.x:.4f}, {offset.y:.4f})"
         )
         toolhead = self._printer.lookup_object("toolhead")
-        pos = toolhead.get_position()
-        toolhead.manual_move(
-            [pos[0] + delta.x, pos[1] + delta.y],
-            self._jog_speed / 60.0,
-        )
-        self._offset = offset
-        self._position = offset
+        machine = Position.from_pair(toolhead.get_position()) + delta
+        manual_move_xy(toolhead, machine, self._jog_speed / 60.0)
+        self._commit(offset)
 
 
 def lookup_toolhead_position(toolhead: ToolHead, print_time: float) -> Position:
     kin = toolhead.get_kinematics()
     kin_spos = {
         s.get_name(): s.mcu_to_commanded_position(s.get_past_mcu_position(print_time))
-        for s in kin.get_steppers()  # type: ignore[union-attr]
+        for s in kin.get_steppers()  # pyright: ignore[reportAttributeAccessIssue]
     }
-    pos = kin.calc_position(kin_spos)  # type: ignore[union-attr]
+    pos = kin.calc_position(kin_spos)  # pyright: ignore[reportAttributeAccessIssue]
     return Position.from_pair(pos)
 
 
@@ -148,15 +178,13 @@ class MotionHandler(_SessionMotionBase):
 
     """
 
-    _MAX_SCV = 10.0
-
     def __init__(
         self,
         printer: Printer,
         host: SeekHost,
         config: SeekConfig,
         origin: Position,
-        trace_cb: Callable[[dict[str, Any]], None] | None = None,
+        trace_cb: Callable[[ProbeRecord], None] | None = None,
     ) -> None:
         super().__init__(printer, origin, config.jog_speed)
         self._host = host
@@ -182,16 +210,6 @@ class MotionHandler(_SessionMotionBase):
         self.jog_to(offset)
         self.th.wait_moves()
 
-    def move_to(self, position: Position) -> None:
-        """Queue a move to absolute machine XY (mm)."""
-        offset = position - self._origin
-        if offset.x == self._offset.x and offset.y == self._offset.y:
-            return
-
-        move_to_xy(self.th, position, self._jog_speed)
-        self._offset = offset
-        self._position = offset
-
     def sample(self, offset: Offset) -> float:
         """Move to offset, dwell, and return mean LDC1612 frequency."""
         self.jog(offset)
@@ -203,7 +221,7 @@ class MotionHandler(_SessionMotionBase):
 
         mean = self._host.get_capture_mean(min_samples=3)
         if mean is None:
-            logger.debug(
+            logger.info(
                 f"eddy_seek: measure_at ({offset.x:.4f}, {offset.y:.4f}) failed "
                 f"({self._host.capture_count} samples)"
             )
@@ -213,18 +231,17 @@ class MotionHandler(_SessionMotionBase):
                 f"{self._config.dwell_time:.2f} s dwell. "
                 "Check sensor connection, dwell_time, and i2c settings."
             )
-        logger.debug(
+        logger.info(
             f"eddy_seek: measure_at ({offset.x:.4f}, {offset.y:.4f}) -> {mean:.2f} Hz "
             f"({self._host.capture_count} samples)"
         )
         if self._trace_cb is not None:
             self._trace_cb(
-                {
-                    "x": offset.x,
-                    "y": offset.y,
-                    "mean_hz": mean,
-                    "samples_hz": self._host.peek_capture_samples(),
-                }
+                ProbeRecord(
+                    at=offset,
+                    mean_hz=mean,
+                    samples_hz=tuple(self._host.peek_capture_samples()),
+                )
             )
         return mean
 
@@ -234,6 +251,7 @@ class MotionHandler(_SessionMotionBase):
         self._capture_windows = []
         self._results = []
         self._need_stop = False
+        self._last_move_end = None
         self._active = True
         self._th = self._printer.lookup_object("toolhead")
         if not self._client_registered:
@@ -250,19 +268,20 @@ class MotionHandler(_SessionMotionBase):
             raise RuntimeError("eddy_seek: continuous motion not active")
         if self._last_move_end is None or line_start != self._last_move_end:
             self._manual_move(line_start, speed)
+            self._last_move_end = line_start
 
-        capture_start = self.th.get_last_move_time()
-
+        capture_start_t = self.th.get_last_move_time()
         self._manual_move(line_end, speed)
-        self._position = line_end
-        self._register_capture_window(capture_start)
+        self._commit(line_end)
+        self._register_capture_window(
+            capture_start_t
+        )  # make cb for move end (start,end)->(...)
         self._last_move_end = line_end
 
     def run_capture_legs(
-        self,
-        legs: Sequence[tuple[Offset, Offset]],
-        speed: float,
+        self, legs: Sequence[tuple[Offset, Offset]], speed: float
     ) -> None:
+
         for line_start, line_end in legs:
             self.capture_leg(line_start, line_end, speed)
         self.th.wait_moves()
@@ -272,9 +291,9 @@ class MotionHandler(_SessionMotionBase):
         machine = self._origin + offset
         speed_mm_s = speed / 60.0
         self.th.limit_next_junction_speed(
-            min(speed_mm_s, self._MAX_SCV)
+            min(speed_mm_s, MAX_SCV)
         )  # jerky cornering leeds to dwell like behaviour
-        self.th.manual_move([machine.x, machine.y], speed_mm_s)
+        manual_move_xy(self.th, machine, speed_mm_s)
 
     def _register_capture_window(self, capture_start: float) -> None:
         def _end_cb(end_time: float) -> None:
@@ -346,21 +365,33 @@ class MotionHandler(_SessionMotionBase):
                     "eddy_seek: LDC1612 sensor outage during sweep "
                     f"(no data by t={capture_end:.3f})"
                 )
-            reactor.pause(systime + 0.010)  # type: ignore[union-attr]
+            reactor.pause(systime + 0.010)  # pyright: ignore[reportAttributeAccessIssue]
             self._process_buffered_data()
 
     def _sensor_outage(self, systime: float, end_time: float) -> bool:
         try:
             mcu = self._printer.lookup_object("mcu")
-            est = mcu.estimated_print_time(systime)  # type: ignore[union-attr]
+            est = mcu.estimated_print_time(systime)  # pyright: ignore[reportAttributeAccessIssue]
             return est > end_time + 1.0
         except Exception:
             return False
 
-    def collect_samples(self) -> list[MotionSample]:
+    @overload
+    def collect_samples(self, flat: Literal[True]) -> Sequence[MotionSample]: ...
+    @overload
+    def collect_samples(
+        self, flat: Literal[False] = False
+    ) -> Sequence[Sequence[MotionSample]]: ...
+    def collect_samples(
+        self, flat: bool = True
+    ) -> Sequence[MotionSample] | Sequence[Sequence[MotionSample]]:
         self._wait_for_pending()
-        flat: list[MotionSample] = []
-        for batch in self._results:
-            flat.extend(batch)
+        if flat:
+            flat_samples: list[MotionSample] = []
+            for batch in self._results:
+                flat_samples.extend(batch)
+            self._results.clear()
+            return flat_samples
+        res_copy = self._results[::]
         self._results.clear()
-        return flat
+        return res_copy

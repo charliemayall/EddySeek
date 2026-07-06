@@ -5,17 +5,18 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-Heatmap debug plots for DebugScanStrategy.
+Debug scan heatmap analysis and figure builders.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..common import Offset
-from ..motion_handler import MotionSample
+from ..movement.handler import MotionSample
 from ._plotly import (
     _DEBUG_ROW_HEIGHT_PX,
     COLORSCALE,
@@ -27,6 +28,8 @@ from ._plotly import (
     multi_panel_layout,
     plotly_available,
 )
+from .primitives import HeatmapRecord, XYCloud
+from .registry import StrategyPlotter, register_plotter
 
 ALT_BIN_SCALES = (2, 4, 8)
 
@@ -36,17 +39,6 @@ _ESTIMATOR_STYLES: dict[str, dict[str, Any]] = {
     "axis": {"color": "#FFA15A", "symbol": "circle", "size": 9},
     "parabolic": {"color": "#AB63FA", "symbol": "cross", "size": 10},
 }
-
-
-@dataclass(frozen=True, slots=True)
-class DebugScanRecord:
-    center: Offset
-    result: Offset
-    samples: list[MotionSample]
-    box: tuple[float, float, float, float]
-    z: list[list[float | None]]
-    x_centers: list[float]
-    y_centers: list[float]
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +55,14 @@ class DebugScanAnalysis:
     x_marginal: list[tuple[float, float]]
     y_marginal: list[tuple[float, float]]
     density: list[list[int]]
+
+
+def _motion_samples(cloud: XYCloud) -> list[MotionSample]:
+    freqs = cloud.freqs or (0.0,) * len(cloud.xs)
+    return [
+        MotionSample(Offset(x, y), freq, 0.0)
+        for x, y, freq in zip(cloud.xs, cloud.ys, freqs, strict=True)
+    ]
 
 
 def _bin_edges(centers: list[float], tolerance: float) -> list[float]:
@@ -95,23 +95,6 @@ def _z_for_display(z: list[list[float | None]]) -> list[list[float]]:
     return [
         [value if value is not None else float("nan") for value in row] for row in z
     ]
-
-
-def _peak_bin_indices(
-    z: list[list[float | None]],
-) -> tuple[int, int, float] | None:
-    best_value: float | None = None
-    best_ix: int | None = None
-    best_iy: int | None = None
-    for iy, row in enumerate(z):
-        for ix, value in enumerate(row):
-            if value is None:
-                continue
-            if best_value is None or value > best_value:
-                best_value, best_ix, best_iy = value, ix, iy
-    if best_ix is None or best_iy is None or best_value is None or best_value < 1e-9:
-        return None
-    return best_ix, best_iy, best_value
 
 
 def _marginal_slice(
@@ -217,47 +200,31 @@ def _fwhm(profile: list[tuple[float, float]]) -> float | None:
     return width if width > 0.0 else None
 
 
-def _bin_sample_counts(
-    samples: list[MotionSample],
-    box: tuple[float, float, float, float],
-    tolerance: float,
-    center: Offset,
-) -> list[list[int]]:
-    x_lo, x_hi, y_lo, y_hi = box
-    n_x_min = math.ceil((x_lo - center.x) / tolerance - 0.5)
-    n_x_max = math.floor((x_hi - center.x) / tolerance + 0.5)
-    n_y_min = math.ceil((y_lo - center.y) / tolerance - 0.5)
-    n_y_max = math.floor((y_hi - center.y) / tolerance + 0.5)
-    nx = n_x_max - n_x_min + 1
-    ny = n_y_max - n_y_min + 1
-    counts = [[0] * nx for _ in range(ny)]
-    for sample in samples:
-        x = sample.offset.x
-        y = sample.offset.y
-        if not (x_lo <= x <= x_hi and y_lo <= y <= y_hi):
-            continue
-        ix = math.floor((x - center.x) / tolerance + 0.5) - n_x_min
-        iy = math.floor((y - center.y) / tolerance + 0.5) - n_y_min
-        if 0 <= ix < nx and 0 <= iy < ny:
-            counts[iy][ix] += 1
-    return counts
-
-
 def analyze_debug_scan(
-    record: DebugScanRecord,
+    heatmap: HeatmapRecord,
     search_for: Literal["min", "max"],
 ) -> DebugScanAnalysis:
-    from ..optimizer import axis_weighted_centroid, weighted_centroid
+    from ..optimizer import (
+        axis_weighted_centroid,
+        bin_sample_counts,
+        peak_bin_indices,
+        weighted_centroid,
+    )
 
-    tolerance = _grid_tolerance(record.x_centers, record.y_centers, record.box)
-    z = record.z
-    peak = _peak_bin_indices(z)
+    center = heatmap.move.center
+    result = heatmap.move.result
+    box = heatmap.bounds.as_box()
+    z = [list(row) for row in heatmap.z]
+    x_centers = list(heatmap.x_centers)
+    y_centers = list(heatmap.y_centers)
+    samples = _motion_samples(heatmap.samples)
+
+    tolerance = _grid_tolerance(x_centers, y_centers, box)
+    peak = peak_bin_indices(z)
     if peak is None:
-        density = _bin_sample_counts(
-            record.samples, record.box, tolerance, record.center
-        )
+        density = bin_sample_counts(samples, box, tolerance, center)
         return DebugScanAnalysis(
-            bin_peak=record.result,
+            bin_peak=result,
             centroid=None,
             axis=None,
             parabolic=None,
@@ -266,35 +233,29 @@ def analyze_debug_scan(
             fwhm_y=None,
             peak_ix=0,
             peak_iy=0,
-            x_marginal=_marginal_max(z, record.x_centers, record.y_centers, axis="x"),
-            y_marginal=_marginal_max(z, record.x_centers, record.y_centers, axis="y"),
+            x_marginal=_marginal_max(z, x_centers, y_centers, axis="x"),
+            y_marginal=_marginal_max(z, x_centers, y_centers, axis="y"),
             density=density,
         )
 
     peak_ix, peak_iy, peak_value = peak
-    x_marginal = _marginal_max(z, record.x_centers, record.y_centers, axis="x")
-    y_marginal = _marginal_max(z, record.x_centers, record.y_centers, axis="y")
-    x_profile = _marginal_slice(
-        z, record.x_centers, record.y_centers, axis="x", index=peak_iy
-    )
-    y_profile = _marginal_slice(
-        z, record.x_centers, record.y_centers, axis="y", index=peak_ix
-    )
+    x_marginal = _marginal_max(z, x_centers, y_centers, axis="x")
+    y_marginal = _marginal_max(z, x_centers, y_centers, axis="y")
+    x_profile = _marginal_slice(z, x_centers, y_centers, axis="x", index=peak_iy)
+    y_profile = _marginal_slice(z, x_centers, y_centers, axis="y", index=peak_ix)
 
     flat_values = [value for row in z for value in row if value is not None]
     background = sorted(flat_values)[len(flat_values) // 2] if flat_values else 0.0
     prominence = peak_value - background
 
-    probes = [(sample.offset, sample.freq) for sample in record.samples]
+    probes = [(sample.offset, sample.freq) for sample in samples]
     centroid = weighted_centroid(probes, search_for)
     axis_x = axis_weighted_centroid(x_marginal, search_for)
     axis_y = axis_weighted_centroid(y_marginal, search_for)
     axis = Offset(axis_x, axis_y) if axis_x is not None and axis_y is not None else None
 
-    x_peak_index = peak_ix
-    y_peak_index = peak_iy
-    parabolic_x = _parabolic_peak(record.x_centers, x_profile, x_peak_index)
-    parabolic_y = _parabolic_peak(record.y_centers, y_profile, y_peak_index)
+    parabolic_x = _parabolic_peak(x_centers, x_profile, peak_ix)
+    parabolic_y = _parabolic_peak(y_centers, y_profile, peak_iy)
     parabolic = (
         Offset(parabolic_x, parabolic_y)
         if parabolic_x is not None and parabolic_y is not None
@@ -302,7 +263,7 @@ def analyze_debug_scan(
     )
 
     return DebugScanAnalysis(
-        bin_peak=Offset(record.x_centers[peak_ix], record.y_centers[peak_iy]),
+        bin_peak=Offset(x_centers[peak_ix], y_centers[peak_iy]),
         centroid=centroid,
         axis=axis,
         parabolic=parabolic,
@@ -313,9 +274,7 @@ def analyze_debug_scan(
         peak_iy=peak_iy,
         x_marginal=x_profile,
         y_marginal=y_profile,
-        density=_bin_sample_counts(
-            record.samples, record.box, tolerance, record.center
-        ),
+        density=bin_sample_counts(samples, box, tolerance, center),
     )
 
 
@@ -332,17 +291,20 @@ def _format_optional(value: float | None, *, unit: str = "") -> str:
 
 
 def _scaled_bin_result(
-    record: DebugScanRecord,
+    heatmap: HeatmapRecord,
     tolerance: float,
     search_for: Literal["min", "max"],
 ) -> tuple[list[list[float | None]], list[float], list[float], Offset]:
     from ..optimizer import bin_frequencies, peak_bin_center
 
+    samples = _motion_samples(heatmap.samples)
+    box = heatmap.bounds.as_box()
+    center = heatmap.move.center
     z, x_centers, y_centers = bin_frequencies(
-        record.samples, record.box, tolerance, record.center, search_for
+        samples, box, tolerance, center, search_for
     )
     peak = peak_bin_center(z, x_centers, y_centers)
-    return z, x_centers, y_centers, peak if peak is not None else record.center
+    return z, x_centers, y_centers, peak if peak is not None else heatmap.move.result
 
 
 def _add_estimator_markers(
@@ -410,7 +372,7 @@ def _add_heatmap_panel(
     if z and isinstance(z[0][0], int):
         display_z = [[float(value) for value in row] for row in z]
     else:
-        display_z = _z_for_display(z)  # type: ignore[arg-type]
+        display_z = _z_for_display(z)  # pyright: ignore[reportArgumentType]
     fig.add_trace(
         go.Heatmap(
             x=x_edges,
@@ -568,59 +530,56 @@ def _add_marginal_panel(
         )
 
 
-def write_debug_scan_plot(
+def render_debug_scan_figure(
+    heatmap: HeatmapRecord,
     *,
-    record: DebugScanRecord | dict[str, Any],
     search_for: Literal["min", "max"],
 ) -> Any | None:
     if not plotly_available() or go is None or make_subplots is None:
         return None
 
-    if isinstance(record, dict):
-        record = DebugScanRecord(
-            center=record["center"],
-            result=record["result"],
-            samples=record["samples"],
-            box=record["box"],
-            z=record["z"],
-            x_centers=record["x_centers"],
-            y_centers=record["y_centers"],
-        )
+    center = heatmap.move.center
+    result = heatmap.move.result
+    box = heatmap.bounds.as_box()
+    z = [list(row) for row in heatmap.z]
+    x_centers = list(heatmap.x_centers)
+    y_centers = list(heatmap.y_centers)
+    samples = _motion_samples(heatmap.samples)
 
-    analysis = analyze_debug_scan(record, search_for)
-    base_tolerance = _grid_tolerance(record.x_centers, record.y_centers, record.box)
+    analysis = analyze_debug_scan(heatmap, search_for)
+    base_tolerance = _grid_tolerance(x_centers, y_centers, box)
     panels: list[
         tuple[int, float, list[list[float | None]], list[float], list[float], Offset]
     ] = [
         (
             1,
             base_tolerance,
-            record.z,
-            record.x_centers,
-            record.y_centers,
-            record.result,
+            z,
+            x_centers,
+            y_centers,
+            result,
         ),
     ]
     for scale in ALT_BIN_SCALES:
         tolerance = base_tolerance * scale
-        z, x_centers, y_centers, result = _scaled_bin_result(
-            record, tolerance, search_for
+        scaled_z, scaled_x, scaled_y, scaled_result = _scaled_bin_result(
+            heatmap, tolerance, search_for
         )
-        panels.append((scale, tolerance, z, x_centers, y_centers, result))
+        panels.append((scale, tolerance, scaled_z, scaled_x, scaled_y, scaled_result))
 
-    freqs = [sample.freq for sample in record.samples]
+    freqs = list(heatmap.samples.freqs or ())
     scale_rows = [
         {
             "scale": f"@{scale}×",
             "tolerance": f"{tol:.4g}",
-            "result": f"({result.x:+.4f}, {result.y:+.4f})",
+            "result": f"({panel_result.x:+.4f}, {panel_result.y:+.4f})",
         }
-        for scale, tol, _, _, _, result in panels
+        for scale, tol, _, _, _, panel_result in panels
     ]
     summary_rows = [
         {
             "metric": "samples",
-            "value": str(len(record.samples)),
+            "value": str(len(samples)),
         },
         {
             "metric": "freq",
@@ -655,10 +614,10 @@ def write_debug_scan_plot(
             "value": _format_optional(analysis.fwhm_y, unit=" mm"),
         },
     ]
-    final = f"Final (1×): ({record.result.x:+.4f}, {record.result.y:+.4f}) mm"
+    final = f"Final (1×): ({result.x:+.4f}, {result.y:+.4f}) mm"
 
-    peak_y = record.y_centers[analysis.peak_iy]
-    peak_x = record.x_centers[analysis.peak_ix]
+    peak_y = y_centers[analysis.peak_iy]
+    peak_x = x_centers[analysis.peak_ix]
     n_rows = 5
     n_cols = 2
 
@@ -694,16 +653,16 @@ def write_debug_scan_plot(
         fig,
         row=1,
         col=1,
-        z=record.z,
-        x_centers=record.x_centers,
-        y_centers=record.y_centers,
-        box=record.box,
-        center=record.center,
-        result=record.result,
+        z=z,
+        x_centers=x_centers,
+        y_centers=y_centers,
+        box=box,
+        center=center,
+        result=result,
         tolerance=base_tolerance,
         show_colorbar=True,
         show_samples=True,
-        samples=record.samples,
+        samples=samples,
         colorscale=COLORSCALE,
         colorbar_title="weight",
         analysis=analysis,
@@ -715,15 +674,15 @@ def write_debug_scan_plot(
         row=2,
         col=1,
         z=analysis.density,
-        x_centers=record.x_centers,
-        y_centers=record.y_centers,
-        box=record.box,
-        center=record.center,
+        x_centers=x_centers,
+        y_centers=y_centers,
+        box=box,
+        center=center,
         result=None,
         tolerance=base_tolerance,
         show_colorbar=False,
         show_samples=False,
-        samples=record.samples,
+        samples=samples,
         colorscale="Blues",
         colorbar_title="count",
         show_legend=False,
@@ -759,7 +718,7 @@ def write_debug_scan_plot(
         show_legend=False,
     )
 
-    for (row, col), (scale, tolerance, z, x_centers, y_centers, result) in zip(
+    for (row, col), (_scale, tolerance, panel_z, panel_x, panel_y, panel_result) in zip(
         ((4, 1), (4, 2), (5, 1)),
         panels[1:],
         strict=True,
@@ -768,16 +727,16 @@ def write_debug_scan_plot(
             fig,
             row=row,
             col=col,
-            z=z,
-            x_centers=x_centers,
-            y_centers=y_centers,
-            box=record.box,
-            center=record.center,
-            result=result,
+            z=panel_z,
+            x_centers=panel_x,
+            y_centers=panel_y,
+            box=box,
+            center=center,
+            result=panel_result,
             tolerance=tolerance,
             show_colorbar=False,
             show_samples=False,
-            samples=record.samples,
+            samples=samples,
             colorscale=COLORSCALE,
             colorbar_title="weight",
             show_legend=False,
@@ -816,3 +775,20 @@ def write_debug_scan_plot(
     fig.update_yaxes(title_text="weight", row=3, col=2)
     apply_axes_theme(fig)
     return fig
+
+
+@register_plotter("debug_scan")
+class DebugScanPlotter(StrategyPlotter):
+    def render(
+        self,
+        records: Sequence[Any],
+        *,
+        search_for: Literal["min", "max"],
+    ) -> Any | None:
+        heatmap = next(
+            (record for record in records if isinstance(record, HeatmapRecord)),
+            None,
+        )
+        if heatmap is None:
+            return None
+        return render_debug_scan_figure(heatmap, search_for=search_for)

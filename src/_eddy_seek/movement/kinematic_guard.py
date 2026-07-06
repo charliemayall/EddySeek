@@ -5,7 +5,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-Toolhead kinematic settings and gcode offset helpers for seek sessions.
+Toolhead kinematic limits and input-shaper guard for seek sessions.
 """
 
 from __future__ import annotations
@@ -13,27 +13,15 @@ from __future__ import annotations
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-from .common import Offset
-
 if TYPE_CHECKING:
     from klippy.klippy import Printer
     from klippy.toolhead import ToolHead
 
 logger = getLogger(__name__)
 
-SCV_CAP = 9.0
+MAX_SCV = 10.0
 MAX_ACCEL = 3000.0
 MCR_DEFAULT = 0.5
-
-
-def _set_gcode_offset_xy(printer: Printer, pos: Offset) -> None:
-    gcode = printer.lookup_object("gcode")
-    gcode.run_script_from_command(f"SET_GCODE_OFFSET {pos.to_gcode()}")
-
-
-def clear_gcode_offset_xy(printer: Printer) -> None:
-    """Zero XY gcode offset so alignment moves use machine coordinates."""
-    _set_gcode_offset_xy(printer, Offset.zero())
 
 
 def set_kinematic_limits(
@@ -72,7 +60,7 @@ def _read_max_accel(toolhead: ToolHead) -> float:
 class KnownKinematicLimits:
     """Save and restore toolhead SCV/cruise limits and input shaper for seeks.
 
-    Gcode XY offset is not handled here — ``SAVE_GCODE_STATE`` / ``RESTORE`` and
+    Gcode XY offset is not handled here - ``SAVE_GCODE_STATE`` / ``RESTORE`` and
     ``clear_gcode_offset_xy()`` own that at the session boundary.
     """
 
@@ -87,7 +75,7 @@ class KnownKinematicLimits:
         self._saved_scv = toolhead.square_corner_velocity
         self._saved_mcr = getattr(toolhead, "min_cruise_ratio", None)
         self._saved_accel = _read_max_accel(toolhead)
-        applied_scv = min(SCV_CAP, self._saved_scv)
+        applied_scv = min(MAX_SCV, self._saved_scv)
         applied_accel = min(MAX_ACCEL, self._saved_accel)
 
         logger.info(
@@ -111,7 +99,7 @@ class KnownKinematicLimits:
 
         input_shaper = self._printer.lookup_object("input_shaper", None)
         if input_shaper is not None:
-            input_shaper.disable_shaping()  # type: ignore
+            input_shaper.disable_shaping()  # pyright: ignore[reportAttributeAccessIssue]
             logger.info("EDDY_SEEK: disabled input shaping")
         else:
             logger.info("EDDY_SEEK: no input shaping found")
@@ -128,13 +116,13 @@ class KnownKinematicLimits:
                 square_corner_velocity=self._saved_scv,
                 min_cruise_ratio=self._saved_mcr,
             )
-            logger.debug(
+            logger.info(
                 f"EDDY_SEEK: restored toolhead limits: scv: {self._saved_scv}, mcr: {self._saved_mcr}, accel: {self._saved_accel}"
             )
 
         input_shaper = self._printer.lookup_object("input_shaper", None)
         if input_shaper is not None:
-            input_shaper.enable_shaping()  # type: ignore
-            logger.debug("EDDY_SEEK: enabled input shaping")
+            input_shaper.enable_shaping()  # pyright: ignore[reportAttributeAccessIssue]
+            logger.info("EDDY_SEEK: enabled input shaping")
 
         return None

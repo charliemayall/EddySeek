@@ -54,9 +54,9 @@ def klippy_extras(tmp_path):
 
 def test_install_script(tmp_path):
     install_dir = tmp_path / "klippy" / "extras"
-    cache = ROOT / "src" / "_eddy_seek" / "__pycache__"
+    cache = ROOT / "src" / "_eddy_seek" / "movement" / "__pycache__"
     cache.mkdir(parents=True, exist_ok=True)
-    (cache / "motion_guard.cpython-311.pyc").write_bytes(b"stale")
+    (cache / "guard.cpython-311.pyc").write_bytes(b"stale")
 
     result = subprocess.run(
         ["./install.sh", str(install_dir)],
@@ -109,4 +109,4 @@ def test_eddy_seek_relative_imports_after_install(klippy_extras):
     assert importlib.import_module("extras._eddy_seek.config") is not None
     assert importlib.import_module("extras._eddy_seek.tool_align") is not None
     assert importlib.import_module("extras._eddy_seek.strategy") is not None
-    assert importlib.import_module("extras._eddy_seek.strategy.sweep") is not None
+    assert importlib.import_module("extras._eddy_seek.movement.leg_planner") is not None

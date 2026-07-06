@@ -10,17 +10,59 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from ..common import Offset
 from ..kconsole import KConsole
-from ..session import SeekSession
+
+if TYPE_CHECKING:
+    from ..session import SeekSession
 
 logger = logging.getLogger(__name__)
 
 _DIVERGE_TOL = 1.25
 
 
+class MaxPassesError(RuntimeError):
+    """Search exhausted ``max_passes`` without converging."""
+
+    def __init__(self, strategy: str, *, max_passes: int, tolerance: float) -> None:
+        self.strategy = strategy
+        self.max_passes = max_passes
+        self.tolerance = tolerance
+        super().__init__(
+            f"{strategy} hit max_passes={max_passes} "
+            f"without convergence (tolerance={tolerance:.4f} mm)"
+        )
+
+
+class DivergenceError(RuntimeError):
+    """Pass corrections diverging — later step grew vs prior step."""
+
+    def __init__(
+        self,
+        strategy: str,
+        *,
+        pass_num: int,
+        prior_correction: float,
+        correction: float,
+        previous: Offset,
+        multiplier: float = _DIVERGE_TOL,
+    ) -> None:
+        self.strategy = strategy
+        self.pass_num = pass_num
+        self.prior_correction = prior_correction
+        self.correction = correction
+        self.previous = previous
+        self.multiplier = multiplier
+        super().__init__(
+            f"{strategy} pass corrections diverging at pass {pass_num}: "
+            f"correction {correction:.4f} mm > {multiplier} × {prior_correction:.4f} mm"
+        )
+
+
 def _check_pass_divergence(
+    strategy: str,
     positions: list[Offset],
     *,
     tolerance: float,
@@ -34,9 +76,12 @@ def _check_pass_divergence(
         return
     d2 = cur.distance_to(nxt)
     if d2 > _DIVERGE_TOL * d1:
-        raise RuntimeError(
-            f"eddy_seek: pass corrections diverging at pass {pass_num}: "
-            f"correction {d2:.4f} mm > {_DIVERGE_TOL} × {d1:.4f} mm"
+        raise DivergenceError(
+            strategy,
+            pass_num=pass_num,
+            prior_correction=d1,
+            correction=d2,
+            previous=cur,
         )
 
 
@@ -47,8 +92,8 @@ class SeekStrategy(ABC):
     @abstractmethod
     def name(self) -> str: ...
 
-    def announce_start(self, ctx: SeekSession, console: KConsole) -> None:
-        pass
+    @abstractmethod
+    def announce_start(self, ctx: SeekSession, console: KConsole) -> None: ...
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
         return None
@@ -61,7 +106,7 @@ class SeekStrategy(ABC):
 
         for pass_num in range(1, cfg.max_passes + 1):
             passes_run = pass_num
-            logger.debug(
+            logger.info(
                 f"eddy_seek: {self.name} pass {pass_num} start "
                 f"best=({best.x:.4f}, {best.y:.4f})"
             )
@@ -69,24 +114,32 @@ class SeekStrategy(ABC):
             moved = (new - best).abs_components()
             console.info(self._pass_message(pass_num, new, moved, ctx))
             positions.append(new)
-            _check_pass_divergence(
-                positions, tolerance=cfg.tolerance, pass_num=pass_num
-            )
+            if self.should_check_divergence(ctx, pass_num):
+                _check_pass_divergence(
+                    self.name,
+                    positions,
+                    tolerance=cfg.tolerance,
+                    pass_num=pass_num,
+                )
             best = new
 
             if moved.x < cfg.tolerance and moved.y < cfg.tolerance:
-                logger.debug(
+                logger.info(
                     f"eddy_seek: {self.name} converged after pass {pass_num} "
                     f"(moved {moved.x:.4f}, {moved.y:.4f})"
                 )
                 break
         else:
-            logger.debug(
-                f"eddy_seek: {self.name} hit max_passes={cfg.max_passes} "
-                "without convergence"
+            raise MaxPassesError(
+                self.name,
+                max_passes=cfg.max_passes,
+                tolerance=cfg.tolerance,
             )
 
         return best, passes_run
+
+    def should_check_divergence(self, ctx: SeekSession, pass_num: int) -> bool:
+        return True
 
     @abstractmethod
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset: ...

@@ -51,7 +51,7 @@ EDDY_SEEK_START
 
 For toolchanger workflows, see the full guide. Per-tool sections (`T0`, `T1`, …) support optional `manual_adjust_x` / `manual_adjust_y` tweaks (mm) added on top of measured offsets when applying alignment.
 
-> **Height above sensor:** Park the nozzle at probe height before starting alignment (EddySeek does not move Z). In testing, **2–3 mm** above the sensor has worked well.
+> **Height above sensor:** Park the nozzle at probe height before starting alignment (EddySeek does not move Z). In testing, **2-3 mm** above the sensor has worked well.
 
 ## Documentation
 

@@ -11,42 +11,37 @@ Debug scan grid sweep strategy: implements spatial binning and peak pick across 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from ..common import Offset
 from ..kconsole import KConsole
+from ..movement.handler import MotionSample
+from ..movement.leg_planner import MotionCapture, SweepSettings, sweep_grid
 from ..optimizer import bin_frequencies, peak_bin_center
-from ..plotting import PlotWriter
+from ..plotting.artifacts import finalize_strategy_plot
+from ..plotting.primitives import (
+    Bounds,
+    HeatmapRecord,
+    PassMove,
+    XYCloud,
+)
 from ..session import SeekSession
 from .base import SeekStrategy
-from .sweep.grid import sweep_grid
 
 logger = logging.getLogger(__name__)
 
 
 class DebugScanStrategy(SeekStrategy):
-    def __init__(self) -> None:
-        self._plotter: PlotWriter | None = None
-
     @property
     def name(self) -> str:
         return "debug_scan"
 
     def announce_start(self, ctx: SeekSession, console: KConsole) -> None:
         cfg = ctx.config
-        if cfg.save_plots:
-            self._plotter = PlotWriter(
-                Path(cfg.result_folder),
-                ctx.session_id,
-                write_at=ctx.artifact_write_at,
-                suffix=ctx.artifact_suffix(self.name),
-                run_id=ctx.run_id,
-            )
         console.warn(
             "debug_scan is for diagnostic use only; "
             "use any other strategy for alignment."
         )
-        logger.debug(
+        logger.info(
             f"eddy_seek: debug_scan tolerance={cfg.tolerance:.4f} mm "
             f"speed={cfg.sweep_coarse_speed / 60.0:.2f} mm/s"
         )
@@ -60,22 +55,20 @@ class DebugScanStrategy(SeekStrategy):
         return new, 1
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
-        plotter = self._plotter
-        self._plotter = None
-        if plotter is None:
-            self._last_plot_passes = 0
-            return None
-        self._last_plot_passes = plotter.debug_scan_count
-        return plotter.finalize_debug_scan(search_for=ctx.config.search_for)
+        return finalize_strategy_plot(ctx, self.name)
 
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         cfg = ctx.config
 
+        capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
+        settings = SweepSettings.from_config(cfg)
         samples, box = sweep_grid(
-            ctx,
+            capture,
+            settings,
             best,
             cfg.sweep_coarse_speed,
             cfg.tolerance,
+            recorder=ctx.recorder,
         )
         if len(samples) < cfg.min_sweep_samples:
             raise RuntimeError(
@@ -93,42 +86,16 @@ class DebugScanStrategy(SeekStrategy):
                 f"eddy_seek: flat frequency response on debug_scan grid - "
                 f"keeping centre ({best.x:.4f}, {best.y:.4f})"
             )
-            if self._plotter is not None:
-                self._plotter.record_debug_scan(
-                    center=best,
-                    result=best,
-                    samples=samples,
-                    box=box,
-                    z=z,
-                    x_centers=x_centers,
-                    y_centers=y_centers,
-                )
+            _record_debug_scan(ctx, best, best, samples, box, z, x_centers, y_centers)
             return best
 
         result = peak.clamp(cfg.max_jog_x, cfg.max_jog_y)
         freqs = [sample.freq for sample in samples]
-        logger.debug(
+        logger.info(
             f"eddy_seek: debug_scan -> ({result.x:.4f}, {result.y:.4f}) "
             f"freq_range=[{min(freqs):.2f}, {max(freqs):.2f}] Hz ({len(samples)} samples)"
         )
-        ctx.append_trace(
-            {
-                "type": "debug_scan",
-                "centre": {"x": best.x, "y": best.y},
-                "result": {"x": result.x, "y": result.y},
-                "samples": len(samples),
-            }
-        )
-        if self._plotter is not None:
-            self._plotter.record_debug_scan(
-                center=best,
-                result=result,
-                samples=samples,
-                box=box,
-                z=z,
-                x_centers=x_centers,
-                y_centers=y_centers,
-            )
+        _record_debug_scan(ctx, best, result, samples, box, z, x_centers, y_centers)
         return result
 
     def _pass_message(
@@ -138,7 +105,29 @@ class DebugScanStrategy(SeekStrategy):
         moved: Offset,
         ctx: SeekSession,
     ) -> str:
-        logger.debug(
+        logger.info(
             f"eddy_seek: debug_scan pass {pass_num} moved=({moved.x:.4f}, {moved.y:.4f})"
         )
-        return f"Pass {pass_num}: X={new.x:+.4f} Y={new.y:+.4f} mm"
+        return f"Pass {pass_num}: {new.to_delta_str()}"
+
+
+def _record_debug_scan(
+    ctx: SeekSession,
+    center: Offset,
+    result: Offset,
+    samples: list[MotionSample],
+    box: tuple[float, float, float, float],
+    z: list[list[float | None]],
+    x_centers: list[float],
+    y_centers: list[float],
+) -> None:
+    ctx.recorder.record(
+        HeatmapRecord(
+            move=PassMove.compute(center, result),
+            bounds=Bounds.from_box(box),
+            z=tuple(tuple(row) for row in z),
+            x_centers=tuple(x_centers),
+            y_centers=tuple(y_centers),
+            samples=XYCloud.from_samples(samples),
+        )
+    )

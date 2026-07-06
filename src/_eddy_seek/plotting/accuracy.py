@@ -10,28 +10,19 @@ Repeatability scatter plot for EDDY_SEEK_ACCURACY.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..common import Offset
 from ..session import compute_accuracy_stats
 from ._plotly import (
     THEME_COLORS,
     apply_axes_theme,
     go,
     marker_outline,
-    pass_color,
     plotly_available,
     xy_session_layout,
 )
-
-
-@dataclass(frozen=True, slots=True)
-class AccuracyRepeatRecord:
-    repeat_num: int
-    offset: Offset
-    session_plot_path: str | None = None
+from .primitives import AccuracyRepeatRecord, pass_color
 
 
 def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:

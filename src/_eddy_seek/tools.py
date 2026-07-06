@@ -120,7 +120,7 @@ class ToolAlignConfig:
             self._load_tool_or_default(main_config, tool_number)
             for tool_number in range(self.tool_count)
         ]
-        logger.debug(
+        logger.info(
             f"eddy_seek: tools config tool_count={self.tool_count} "
             f"sensor=({self.sensor_x:.4f}, {self.sensor_y:.4f}) "
             f"prefix={self.tool_prefix!r} load_macro={self.load_tool_macro!r}"
@@ -145,7 +145,7 @@ class ToolAlignConfig:
 
     def run_load_macro(self, tool_number: int) -> None:
         macro = self.format_load_macro(tool_number)
-        logger.debug(f"eddy_seek: running load macro {macro!r}")
+        logger.info(f"eddy_seek: running load macro {macro!r}")
         gcode = self._printer.lookup_object("gcode")
         gcode.run_script_from_command(macro)
 
@@ -157,7 +157,7 @@ class ToolAlignConfig:
             self.save_tool(tool)
 
     def save_tool(self, tool: Tool) -> None:
-        logger.debug(
+        logger.info(
             f"eddy_seek: staging tool {tool.tool_number} "
             f"offset=({tool.offset.x:.6f}, {tool.offset.y:.6f}) "
             f"calibrated={tool.is_calibrated}"
@@ -190,7 +190,7 @@ def apply_tool_offset(
             f"Tool {tool_number} is not calibrated, and you are trying to apply an offset."
         )
     eff = tool.effective_offset
-    logger.debug(
+    logger.info(
         f"eddy_seek: applying tool {tool_number} effective offset "
         f"({eff.x:.6f}, {eff.y:.6f})"
     )

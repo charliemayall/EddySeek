@@ -9,12 +9,16 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from ..common import Offset
 from ..kconsole import KConsole
 from ..optimizer import weighted_centroid
-from ..plotting import PlotWriter
+from ..plotting.artifacts import finalize_strategy_plot
+from ..plotting.primitives import (
+    CentroidPassRecord,
+    PassMove,
+    XYCloud,
+)
 from ..session import SeekSession
 from .base import SeekStrategy
 
@@ -22,35 +26,18 @@ logger = logging.getLogger(__name__)
 
 
 class CentroidStrategy(SeekStrategy):
-    def __init__(self) -> None:
-        self._plotter: PlotWriter | None = None
-
     @property
     def name(self) -> str:
         return "centroid"
 
     def announce_start(self, ctx: SeekSession, console: KConsole) -> None:
         cfg = ctx.config
-        if cfg.save_plots:
-            self._plotter = PlotWriter(
-                Path(cfg.result_folder),
-                ctx.session_id,
-                write_at=ctx.artifact_write_at,
-                suffix=ctx.artifact_suffix(self.name),
-                run_id=ctx.run_id,
-            )
-        logger.debug(
+        logger.info(
             f"eddy_seek: centroid grid_step=({cfg.grid_step_x:.4f}, {cfg.grid_step_y:.4f}) mm"
         )
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
-        plotter = self._plotter
-        self._plotter = None
-        if plotter is None:
-            self._last_plot_passes = 0
-            return None
-        self._last_plot_passes = plotter.centroid_pass_count
-        return plotter.finalize_centroid(search_for=ctx.config.search_for)
+        return finalize_strategy_plot(ctx, self.name)
 
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         cfg = ctx.config
@@ -74,11 +61,11 @@ class CentroidStrategy(SeekStrategy):
         shrink = 0.5 ** (pass_num - 1)
         step_x = cfg.grid_step_x * shrink
         step_y = cfg.grid_step_y * shrink
-        logger.debug(
+        logger.info(
             f"eddy_seek: centroid pass {pass_num} moved=({moved.x:.4f}, {moved.y:.4f}) "
             f"grid_step=({step_x:.4f}, {step_y:.4f})"
         )
-        return f"Pass {pass_num}: X={new.x:+.4f} Y={new.y:+.4f} mm"
+        return f"Pass {pass_num}: {new.to_delta_str()}"
 
     def _centroid_pass(
         self,
@@ -105,29 +92,39 @@ class CentroidStrategy(SeekStrategy):
                 f"eddy_seek: flat frequency response on centroid grid - "
                 f"keeping centre ({center.x:.4f}, {center.y:.4f})"
             )
-            if self._plotter is not None:
-                self._plotter.record_centroid_pass(
-                    pass_num=pass_num,
-                    center=center,
-                    result=center,
-                    moved=Offset.zero(),
-                    probes=probes,
-                )
+            _record_centroid_pass(ctx, pass_num, center, center, Offset.zero(), probes)
             return center
 
         freqs = [freq for _, freq in probes]
         clamped = result.clamp(cfg.max_jog_x, cfg.max_jog_y)
-        logger.debug(
+        logger.info(
             f"eddy_seek: centroid pass centre=({center.x:.4f}, {center.y:.4f}) "
             f"-> ({clamped.x:.4f}, {clamped.y:.4f}) "
             f"freq_range=[{min(freqs):.2f}, {max(freqs):.2f}] Hz"
         )
-        if self._plotter is not None:
-            self._plotter.record_centroid_pass(
-                pass_num=pass_num,
-                center=center,
-                result=clamped,
-                moved=(clamped - center).abs_components(),
-                probes=probes,
-            )
+        _record_centroid_pass(
+            ctx,
+            pass_num,
+            center,
+            clamped,
+            (clamped - center).abs_components(),
+            probes,
+        )
         return clamped
+
+
+def _record_centroid_pass(
+    ctx: SeekSession,
+    pass_num: int,
+    center: Offset,
+    result: Offset,
+    moved: Offset,
+    probes: list[tuple[Offset, float]],
+) -> None:
+    ctx.recorder.record(
+        CentroidPassRecord(
+            pass_num=pass_num,
+            move=PassMove.compute(center, result),
+            probes=XYCloud.from_probes(probes),
+        )
+    )

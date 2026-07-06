@@ -6,5 +6,5 @@ files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.py$' || tr
 [ -z "$files" ] && exit 0
 
 echo "$files" | xargs uv run ruff check --fix
-echo "$files" | xargs uv run ruff format 
+echo "$files" | xargs uv run ruff format
 echo "$files" | xargs git add

@@ -9,9 +9,9 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 import pytest
 
 from _eddy_seek.common import Axis, Offset
-from _eddy_seek.motion_handler import MotionSample
+from _eddy_seek.movement.handler import MotionSample
+from _eddy_seek.movement.paths import plan_grid_legs, y_lines
 from _eddy_seek.optimizer import bin_frequencies, peak_bin_center
-from _eddy_seek.strategy.sweep.grid import plan_grid_legs, y_lines
 
 
 def test_y_lines_spaced_by_tolerance():

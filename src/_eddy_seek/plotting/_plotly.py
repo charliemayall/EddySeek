@@ -26,19 +26,6 @@ except (ImportError, ModuleNotFoundError):
     make_subplots = None  # pyright: ignore[assignment,misc]
 
 
-PASS_COLORS = (
-    "#636EFA",
-    "#EF553B",
-    "#00CC96",
-    "#AB63FA",
-    "#FFA15A",
-    "#19D3F3",
-    "#FF6692",
-    "#B6E880",
-    "#FF97FF",
-    "#FECB52",
-)
-
 COLORSCALE = "sunsetdark"
 _EDDYSEEK_REPO = "https://github.com/charlie-mayall/EddySeek"
 _AXIS_TICK_SIZE = 9
@@ -80,6 +67,8 @@ body {{
   flex-direction: column;
   align-items: center;
   min-height: 100vh;
+  height: 100vh;
+  overflow: auto;
   padding: 0.35rem;
   gap: 0.35rem;
 }}
@@ -93,6 +82,7 @@ body {{
   margin-bottom: 0.35rem;
 }}
 .stats {{
+  flex-shrink: 0;
   width: 100%;
   max-width: min(960px, 100%);
 }}
@@ -136,25 +126,25 @@ body {{
   font-variant-numeric: tabular-nums;
 }}
 .chart {{
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
+  container-type: size;
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
   max-width: min(960px, 100%);
-  
   border-left: 3px solid {THEME_COLORS.plot};
-  }}
- 
+}}
 .chart-inner--square {{
   aspect-ratio: 1 / 1;
-  width: 100%;
-  min-height: 60vh;
-  max-height: 80vh;
+  width: min(100cqw, 100cqh);
+  max-width: 100%;
 }}
 .chart-inner--wide {{
   width: 100%;
-  min-height: 60vh;
+  height: 100%;
+  min-height: 0;
 }}
 .chart-inner .plotly-graph-div,
 .chart-inner .js-plotly-plot {{
@@ -166,10 +156,6 @@ body {{
 
 def plotly_available() -> bool:
     return go is not None and make_subplots is not None
-
-
-def pass_color(pass_num: int) -> str:
-    return PASS_COLORS[(pass_num - 1) % len(PASS_COLORS)]
 
 
 def marker_outline() -> str:
@@ -236,9 +222,10 @@ def apply_theme(layout: dict[str, Any]) -> dict[str, Any]:
         "legend": legend,
     }
     for key, value in layout.items():
-        if key.startswith("xaxis") or key.startswith("yaxis"):
-            if isinstance(value, dict):
-                themed[key] = {**_AXIS_THEME, **value}
+        if (key.startswith("xaxis") or key.startswith("yaxis")) and isinstance(
+            value, dict
+        ):
+            themed[key] = {**_AXIS_THEME, **value}
     if "xaxis" not in themed and "yaxis" not in themed:
         themed["xaxis"] = dict(_AXIS_THEME)
         themed["yaxis"] = dict(_AXIS_THEME)
@@ -305,7 +292,7 @@ def multi_panel_layout(
 
 
 def xy_session_layout(
-    strategy: str,
+    title: str,
     *,
     columns: list[tuple[str, str]],
     rows: list[dict[str, str]],
@@ -313,7 +300,7 @@ def xy_session_layout(
 ) -> dict[str, Any]:
     """Square XY plot layout with session stats in HTML header meta."""
     return single_xy_layout(
-        title=strategy,
+        title=title,
         tables=[header_table(columns, rows)],
         final=final,
     )
@@ -340,8 +327,10 @@ def _render_table(table: dict[str, Any]) -> str:
     parts.append("</tr></thead><tbody>")
     for row in rows:
         parts.append("<tr>")
-        for key in keys:
-            parts.append(f"<td>{html_module.escape(str(row.get(key, '')))}</td>")
+        parts.extend(
+            [f"<td>{html_module.escape(str(row.get(key, '')))}</td>" for key in keys]
+        )
+
         parts.append("</tr>")
     parts.append("</tbody></table>")
     return "".join(parts)

@@ -5,120 +5,49 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-3x3 grid debug plots for CentroidStrategy.
+Centroid strategy session plot.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Sequence
 from typing import Any, Literal
 
-from ..common import Offset
-from ._plotly import (
-    apply_axes_theme,
-    freq_marker,
-    go,
-    marker_outline,
-    pass_color,
-    plotly_available,
-    xy_session_layout,
-)
+from ._plotly import go, plotly_available
+from .primitives import CentroidPassRecord
+from .registry import StrategyPlotter, register_plotter
+from .renderer import render_pass_xy_figure
 
 
-@dataclass(frozen=True, slots=True)
-class CentroidPassRecord:
-    pass_num: int
-    center: Offset
-    result: Offset
-    moved: Offset
-    probes: list[tuple[Offset, float]]
-
-
-def write_centroid_session_plot(
+def render_centroid_figure(
+    records: Sequence[Any],
     *,
-    passes: list[CentroidPassRecord],
     search_for: Literal["min", "max"],
 ) -> Any | None:
-    if not plotly_available() or go is None or not passes:
+    if not plotly_available() or go is None:
         return None
 
-    fig = go.Figure()
-    for record in passes:
-        color = pass_color(record.pass_num)
-        label = f"pass {record.pass_num}"
-        if record.probes:
-            xs = [position.x for position, _ in record.probes]
-            ys = [position.y for position, _ in record.probes]
-            freqs = [freq for _, freq in record.probes]
-            fig.add_trace(
-                go.Scatter(
-                    x=xs,
-                    y=ys,
-                    mode="markers+lines",
-                    name=f"{label} probes",
-                    line={"color": color, "width": 1},
-                    marker=freq_marker(freqs, search_for, size=9, opacity=1.0),
-                    text=[f"{freq:.1f} Hz" for freq in freqs],
-                    hovertemplate=(
-                        f"{label}<br>x=%{{x:.4f}} y=%{{y:.4f}} %{{text}}<extra></extra>"
-                    ),
-                    legendgroup=label,
-                )
-            )
-        fig.add_trace(
-            go.Scatter(
-                x=[record.center.x],
-                y=[record.center.y],
-                mode="markers",
-                name=f"{label} centre",
-                marker={"size": 10, "symbol": "x", "color": color},
-                legendgroup=label,
-                showlegend=False,
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=[record.result.x],
-                y=[record.result.y],
-                mode="markers",
-                name=f"{label} result",
-                marker={
-                    "size": 14 if record is passes[-1] else 11,
-                    "symbol": "star",
-                    "color": color,
-                    "line": {"width": 1, "color": marker_outline()},
-                },
-                legendgroup=label,
-            )
-        )
+    pass_records = [
+        record for record in records if isinstance(record, CentroidPassRecord)
+    ]
+    if not pass_records:
+        return None
 
-    pass_rows: list[dict[str, str]] = []
-    for record in passes:
-        freqs = [freq for _, freq in record.probes]
-        pass_rows.append(
-            {
-                "pass": str(record.pass_num),
-                "result": f"({record.result.x:+.4f}, {record.result.y:+.4f})",
-                "moved": f"({record.moved.x:.4f}, {record.moved.y:.4f})",
-                "freq": (f"[{min(freqs):.0f}, {max(freqs):.0f}]" if freqs else "n/a"),
-            }
-        )
-    final = passes[-1].result
-    fig.update_layout(
-        xaxis_title="X offset (mm)",
-        yaxis_title="Y offset (mm)",
-        **xy_session_layout(
-            f"Centroid alignment ({len(passes)} pass"
-            f"{'' if len(passes) == 1 else 'es'})  search={search_for}",
-            columns=[
-                ("pass", "Pass"),
-                ("result", "Result (mm)"),
-                ("moved", "Moved (mm)"),
-                ("freq", "Freq (Hz)"),
-            ],
-            rows=pass_rows,
-            final=f"Final: ({final.x:+.4f}, {final.y:+.4f}) mm",
-        ),
+    return render_pass_xy_figure(
+        pass_records,
+        search_for=search_for,
+        draw_bounds=False,
+        extra_columns=(),
+        title_prefix="Centroid alignment",
     )
-    apply_axes_theme(fig)
-    return fig
+
+
+@register_plotter("centroid")
+class CentroidPlotter(StrategyPlotter):
+    def render(
+        self,
+        records: Sequence[Any],
+        *,
+        search_for: Literal["min", "max"],
+    ) -> Any | None:
+        return render_centroid_figure(records, search_for=search_for)

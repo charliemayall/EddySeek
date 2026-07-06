@@ -14,16 +14,16 @@ import logging
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import fields
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ._eddy_seek.accuracy_test import run_accuracy_test
 from ._eddy_seek.common import Offset, Position
-from ._eddy_seek.config import load_seek_config
+from ._eddy_seek.config import SeekConfig, load_seek_config
 from ._eddy_seek.kconsole import KConsole, console_for_gcmd
-from ._eddy_seek.motion_guard import clear_gcode_offset_xy
-from ._eddy_seek.plotting import PlotWriter
-from ._eddy_seek.session import SeekHost, SeekSession, report_accuracy_stats
+from ._eddy_seek.movement.guard import clear_gcode_offset_xy
+from ._eddy_seek.session import SeekHost, SeekSession
 from ._eddy_seek.strategy import strategy_for
 from ._eddy_seek.tool_align import align_all_tools, align_tool_number
 from ._eddy_seek.tools import ToolAlignConfig, apply_tool_offset
@@ -123,7 +123,7 @@ class EddySeek(SeekHost):
         )
 
     def add_sensor_client(self, callback) -> None:
-        self._sensor.add_client(callback)  # type: ignore[arg-type]
+        self._sensor.add_client(callback)
 
     def refresh_console(self, gcmd: GCodeCommand) -> KConsole:
         self.console = console_for_gcmd(gcmd, self.seek_config)
@@ -136,7 +136,7 @@ class EddySeek(SeekHost):
         self._stream_refs = 0
         if self._batch_client_added:
             self._handle_batch({"data": []})
-        logger.debug(f"eddy_seek: stopped sensor stream on {self._sensor.name!r}")
+        logger.info(f"eddy_seek: stopped sensor stream on {self._sensor.name!r}")
 
     def _on_disconnect(self) -> None:
         """Release LDC1612 sampling before Klipper restart or shutdown."""
@@ -150,9 +150,9 @@ class EddySeek(SeekHost):
         """Start LDC1612 bulk sampling while a seek session or query needs data."""
         self._stream_refs += 1
         if self._stream_refs == 1 and not self._batch_client_added:
-            self._sensor.add_client(self._handle_batch)  # type: ignore[arg-type]
+            self._sensor.add_client(self._handle_batch)
             self._batch_client_added = True
-            logger.debug(f"eddy_seek: started sensor stream on {self._sensor.name!r}")
+            logger.info(f"eddy_seek: started sensor stream on {self._sensor.name!r}")
         try:
             yield
         finally:
@@ -210,7 +210,7 @@ class EddySeek(SeekHost):
         return True
 
     def reset_capture(self) -> None:
-        logger.debug(
+        logger.info(
             f"eddy_seek: capture started (discarded {self._capture_count} samples)"
         )
         self._capture_buf = []
@@ -221,16 +221,16 @@ class EddySeek(SeekHost):
         buf = list(self._capture_buf)
         self._capturing = False
         if len(buf) < min_samples:
-            logger.debug(
+            logger.info(
                 f"eddy_seek: capture too few samples ({len(buf)} < {min_samples})"
             )
             return None
         mean = sum(buf) / len(buf)
-        logger.debug(f"eddy_seek: capture mean={mean:.2f} Hz from {len(buf)} samples")
+        logger.info(f"eddy_seek: capture mean={mean:.2f} Hz from {len(buf)} samples")
         return mean
 
-    def get_status(self, eventtime: float) -> dict:
-        # Used by klipper, do not remove parameter eventtime
+    def get_status(self, eventtime: float | None = None) -> dict:
+        """called by klipper, do not remove parameters"""
         smooth_mean = (
             sum(self._status_samples) / len(self._status_samples)
             if self._status_samples
@@ -264,6 +264,7 @@ class EddySeek(SeekHost):
         with self.acquire_sensor_stream():
             toolhead = self.printer.lookup_object("toolhead")
             before = self._total_samples
+            self.reset_capture()
             toolhead.dwell(_QUERY_RATE_DWELL)
             toolhead.wait_moves()
             gained = self._total_samples - before
@@ -271,39 +272,51 @@ class EddySeek(SeekHost):
                 count=gained, duration_s=_QUERY_RATE_DWELL
             )
             self._sample_rate_hz = round(measured, 1) if measured is not None else None
+            self._capturing = False
             status = self.get_status(0)
             rate = status["sample_rate_hz"]
             rate_text = f"{rate:.0f} Hz" if rate is not None else "n/a"
-            console.info(
-                f"Sensor {status['smooth_mean']:.1f} MHz "
-                f"(capture: {status['capture_mean']:.1f} MHz, "
-                f"{status['capture_count']} samples, sample_rate: {rate_text})"
-            )
+            if gained:
+                console.info(
+                    f"Sensor {status['smooth_mean']:.1f} Hz "
+                    f"(capture: {status['capture_mean']:.1f} Hz, "
+                    f"{status['capture_count']} samples, sample_rate: {rate_text})"
+                )
+            else:
+                raise gcmd.error(
+                    "No samples gained during query, check sensor connection"
+                )
 
     def cmd_EDDY_SEEK_RESET(self, gcmd: GCodeCommand) -> None:
         console = self.refresh_console(gcmd)
         prev_count = self._capture_count
         self.reset_capture()
-        console.detail(f"Capture buffer reset (discarded {prev_count} samples)")
+        console.info(f"Capture buffer reset (discarded {prev_count} samples)")
 
     def cmd_EDDY_SEEK_SET(self, gcmd: GCodeCommand) -> None:
         console = self.refresh_console(gcmd)
         changes = self.seek_config.apply_runtime_set(gcmd)
         if not changes:
-            logger.debug("eddy_seek: EDDY_SEEK_SET query (no changes)")
-            console.detail(self.seek_config.format_seek_config())
-            console.detail(
-                "Pass STRATEGY=ternary|centroid|sweep_centroid, TOLERANCE=…, etc. "
+            logger.info("eddy_seek: EDDY_SEEK_SET query (no changes)")
+            console.info(self.seek_config.format_seek_config())
+            strategies = "|".join(
+                sorted(
+                    next(
+                        f for f in fields(SeekConfig) if f.name == "strategy"
+                    ).metadata["enum"]
+                )
+            )
+            console.info(
+                f"Pass STRATEGY={strategies}, TOLERANCE=…, etc. "
                 "to override config values (overrides values until restart)"
             )
             return
 
-        logger.debug(f"eddy_seek: EDDY_SEEK_SET applied: {', '.join(changes)}")
-        fields = [change.split("=", 1)[0] for change in changes]
-        console.info(f"Updated {', '.join(fields)}")
+        logger.info(f"eddy_seek: EDDY_SEEK_SET applied: {', '.join(changes)}")
+        console.info(f"Updated {', '.join(changes)}")
 
     def cmd_EDDY_SEEK_START(self, gcmd: GCodeCommand) -> None:
-        logger.debug("eddy_seek: EDDY_SEEK_START")
+        logger.info("eddy_seek: EDDY_SEEK_START")
         console = self.refresh_console(gcmd)
         console.entry("Seeking nozzle centre…")
         write_at = datetime.now()
@@ -311,6 +324,7 @@ class EddySeek(SeekHost):
         SeekSession(
             self,
             run_id=run_id,
+            run_label="start",
             artifact_label="start",
             artifact_write_at=write_at,
         ).run(gcmd, strategy_for(self.seek_config.strategy))
@@ -319,7 +333,7 @@ class EddySeek(SeekHost):
         tool_number = gcmd.get_int("TOOL", -1, minval=0)
         if tool_number == -1:
             raise gcmd.error("TOOL=<number> is required for EDDY_SEEK_TOOL")
-        logger.debug(f"eddy_seek: EDDY_SEEK_TOOL tool={tool_number}")
+        logger.info(f"eddy_seek: EDDY_SEEK_TOOL tool={tool_number}")
         console = self.refresh_console(gcmd)
         console.entry(f"Aligning tool {tool_number}…")
         write_at = datetime.now()
@@ -335,6 +349,7 @@ class EddySeek(SeekHost):
                 self._tool0_center,
                 console=console,
                 run_id=run_id,
+                run_label="tool",
                 artifact_write_at=write_at,
             )
             if error is not None:
@@ -353,7 +368,7 @@ class EddySeek(SeekHost):
     def cmd_EDDY_SEEK_TOOLS(self, gcmd: GCodeCommand) -> None:
         self.refresh_console(gcmd)
         tool_count = gcmd.get_int("TOOLS", self._tools.tool_count, minval=1)
-        logger.debug(f"eddy_seek: EDDY_SEEK_TOOLS tools={tool_count}")
+        logger.info(f"eddy_seek: EDDY_SEEK_TOOLS tools={tool_count}")
         result = align_all_tools(self, self._tools, gcmd, tool_count)
         if result.tool0_center is not None:
             self._tool0_center = result.tool0_center
@@ -362,7 +377,7 @@ class EddySeek(SeekHost):
 
     def cmd_EDDY_SEEK_APPLY_OFFSET(self, gcmd: GCodeCommand) -> None:
         tool_number = gcmd.get_int("TOOL", 0, minval=0)
-        logger.debug(f"eddy_seek: EDDY_SEEK_APPLY_OFFSET tool={tool_number}")
+        logger.info(f"eddy_seek: EDDY_SEEK_APPLY_OFFSET tool={tool_number}")
         console = self.refresh_console(gcmd)
         try:
             tool = apply_tool_offset(self._tools, self.printer, tool_number)
@@ -381,83 +396,19 @@ class EddySeek(SeekHost):
 
     def cmd_EDDY_SEEK_ACCURACY(self, gcmd: GCodeCommand) -> None:
         repeats = gcmd.get_int("REPEATS", 3, minval=2, maxval=50)
-        logger.debug(f"eddy_seek: EDDY_SEEK_ACCURACY repeats={repeats}")
+        mock_enabled = bool(gcmd.get_int("MOCK", 0, minval=0, maxval=1))
+        logger.info(
+            f"eddy_seek: EDDY_SEEK_ACCURACY repeats={repeats} mock={mock_enabled}"
+        )
         console = self.refresh_console(gcmd)
         console.entry(f"Running {repeats} seek repeat(s) from current position")
-
-        gcode = self.printer.lookup_object("gcode")
-        gcode.run_script_from_command("SAVE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY")
-
-        cfg = self.seek_config
-        accuracy_run_id = uuid.uuid4().hex[:8]
-        write_at = datetime.now()
-        plotter: PlotWriter | None = None
-        if cfg.save_plots:
-            plotter = PlotWriter(
-                Path(cfg.result_folder),
-                accuracy_run_id,
-                write_at=write_at,
-                run_id=accuracy_run_id,
-            )
-
-        offsets: list[Offset] = []
-        try:
-            for repeat in range(1, repeats + 1):
-                if repeat > 1:
-                    gcode.run_script_from_command(
-                        "RESTORE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY MOVE=1"
-                    )
-
-                console.info(f"Repeat {repeat}/{repeats}")
-                session = SeekSession(
-                    self,
-                    run_id=accuracy_run_id,
-                    artifact_label=f"r{repeat}",
-                    artifact_write_at=write_at,
-                )
-                result = session.run(
-                    gcmd,
-                    strategy_for(self.seek_config.strategy),
-                    boundaries=False,
-                    announce_plot=True,
-                )
-
-                if result.status != "ok" or result.offset is None:
-                    console.error(
-                        f"Repeat {repeat} failed"
-                        + (f": {result.error_message}" if result.error_message else "")
-                    )
-                    break
-
-                offsets.append(result.offset)
-                if plotter is not None:
-                    plotter.record_accuracy_repeat(
-                        repeat_num=repeat,
-                        offset=result.offset,
-                        session_plot_path=result.plot_path,
-                    )
-                console.info(
-                    f"Repeat {repeat} - X={result.offset.x:+.4f} "
-                    f"Y={result.offset.y:+.4f} mm"
-                )
-
-            if len(offsets) < 2:
-                console.error("Need at least 2 successful repeats for deviation report")
-                return
-
-            report_accuracy_stats(console, offsets)
-            if plotter is not None:
-                accuracy_plot_path = plotter.finalize_accuracy()
-                if accuracy_plot_path is not None:
-                    console.plot_saved(accuracy_plot_path)
-                    logger.info(
-                        f"eddy_seek: accuracy plot saved to {accuracy_plot_path}"
-                    )
-            console.exit(f"Accuracy test complete ({len(offsets)} repeats)")
-        finally:
-            gcode.run_script_from_command(
-                "RESTORE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY MOVE=1"
-            )
+        run_accuracy_test(
+            self,
+            gcmd,
+            console=console,
+            repeats=repeats,
+            mock_enabled=mock_enabled,
+        )
 
     def cmd_DEBUG_CONSOLE(self, gcmd: GCodeCommand) -> None:
         console = self.refresh_console(gcmd)

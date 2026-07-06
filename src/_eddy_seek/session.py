@@ -25,8 +25,10 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from .common import Offset, Position, session_artifact_filename
 from .config import SeekConfig
 from .kconsole import KConsole, console_for_gcmd
-from .motion_guard import KnownKinematicLimits, clear_gcode_offset_xy
-from .motion_handler import MotionHandler
+from .movement.guard import KnownKinematicLimits, clear_gcode_offset_xy
+from .movement.handler import MotionHandler
+from .plotting.primitives import PlotArtifactRecord, ProbeRecord
+from .plotting.recorder import SessionRecorder
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer
@@ -76,6 +78,7 @@ class SeekSession:
         host: SeekHost,
         *,
         run_id: str | None = None,
+        run_label: str = "run",
         artifact_label: str = "",
         artifact_write_at: datetime | None = None,
     ) -> None:
@@ -85,13 +88,17 @@ class SeekSession:
         self._gcode = self._printer.lookup_object("gcode")
         self.session_id = str(uuid.uuid4())
         self.run_id = run_id
+        self.run_label = run_label
         self.artifact_label = artifact_label
         self._artifact_write_at = artifact_write_at
         self.start_time = time.time()
         self._motion: MotionHandler | None = None
-        self._save_trace = host.seek_config.save_session_trace
-        self._probes: list[dict[str, Any]] = []
-        self._plot_traces: list[dict[str, Any]] = []
+        cfg = host.seek_config
+        self._save_trace = cfg.save_session_trace
+        self.recorder = SessionRecorder(
+            trace=cfg.save_session_trace,
+            plots=cfg.save_plots,
+        )
         self._session_start: Position | None = None
 
     @property
@@ -114,13 +121,6 @@ class SeekSession:
             )
         return self._session_start
 
-    def append_trace(self, probe: dict[str, Any]) -> None:
-        if self._save_trace:
-            self._probes.append(probe)
-
-    def append_plot_trace(self, entry: dict[str, Any]) -> None:
-        self._plot_traces.append(entry)
-
     @property
     def motion(self) -> MotionHandler:
         if self._motion is None:
@@ -128,6 +128,12 @@ class SeekSession:
         return self._motion
 
     def sync_offset(self, offset: Offset) -> None:
+        """
+
+        Sync the current offset to the motion handler.
+
+        This is used to update the motion handler's position after a move.
+        """
         self.motion.sync_offset(offset)
 
     @property
@@ -142,10 +148,12 @@ class SeekSession:
         boundaries: bool = True,
         announce_plot: bool | None = None,
     ) -> SeekSessionResult:
+        from .strategy.base import DivergenceError, MaxPassesError
+
         cfg = self.config
         console = console_for_gcmd(gcmd, self._host.seek_config)
         self._host.console = console
-        logger.debug(
+        logger.info(
             f"eddy_seek: session {self.session_id} start "
             f"strategy={strategy.name} search_for={cfg.search_for}"
         )
@@ -172,22 +180,43 @@ class SeekSession:
                     self._host,
                     self.config,
                     self._session_start,
-                    self.append_trace if self._save_trace else None,
+                    self._get_single_sample if self.recorder.trace else None,
                 )
                 best, passes_run = strategy.search(self, console)
                 self._motion.jog(best)
-            logger.debug(
+            logger.info(
                 f"eddy_seek: session {self.session_id} ok "
                 f"offset=({best.x:.4f}, {best.y:.4f}) passes={passes_run}"
             )
             if boundaries:
                 console.exit(
-                    f"Done - offset X={best.x:+.4f} Y={best.y:+.4f} mm "
-                    f"({passes_run} passes)"
+                    f"Done - offset {best.to_delta_str()} ({passes_run} passes)"
                 )
             status = "ok"
             offset = best
 
+        except MaxPassesError as err:
+            error_message = str(err)
+            logger.exception("eddy_seek: search failed")
+            console.error(f"Seek failed: {error_message}")
+            status = "failed"
+            offset = None
+        except DivergenceError as err:
+            error_message = str(err)
+            logger.exception("eddy_seek: search failed")
+            console.error(f"Seek failed: {error_message}")
+            status = "failed"
+            offset = None
+            try:
+                if self._motion is not None:
+                    self._motion.jog(
+                        err.previous
+                    )  # keep at last good result, so we can try again from there.
+            except Exception:
+                logger.warning(
+                    "eddy_seek: failed to return to previous offset after divergence",
+                    exc_info=True,
+                )
         except Exception as exc:
             error_message = str(exc)
             logger.exception("eddy_seek: search failed")
@@ -205,13 +234,12 @@ class SeekSession:
         finally:
             session_plot_path = strategy.on_session_end(self)
             if session_plot_path is not None:
-                self.append_plot_trace(
-                    {
-                        "type": "plot",
-                        "strategy": strategy.name,
-                        "passes": getattr(strategy, "_last_plot_passes", 0),
-                        "path": session_plot_path,
-                    }
+                self.recorder.record(
+                    PlotArtifactRecord(
+                        strategy=strategy.name,
+                        passes=self.recorder.pass_count(),
+                        path=session_plot_path,
+                    )
                 )
                 if show_plot_saved:
                     console.plot_saved(session_plot_path)
@@ -236,22 +264,20 @@ class SeekSession:
             plot_path=session_plot_path,
         )
         if self._save_trace:
-            path = _write_seek_trace(
+            _write_seek_trace(
                 self._host,
                 result,
-                self._probes,
-                self._plot_traces,
+                self.recorder.to_probe_dicts(),
                 run_id=self.run_id,
+                run_label=self.run_label,
                 suffix=self.artifact_suffix(strategy.name),
                 write_at=self.artifact_write_at,
             )
-            if path is not None:
-                logger.info(f"eddy_seek: session trace saved to {path}")
-        logger.debug(
-            f"eddy_seek: session {self.session_id} finished "
-            f"status={result.status} probes={len(self._probes)}"
-        )
+
         return result
+
+    def _get_single_sample(self, probe: ProbeRecord) -> None:
+        self.recorder.record(probe)
 
     def measure_at(self, offset: Offset) -> float:
         return self.motion.sample(offset)
@@ -261,18 +287,18 @@ def _write_seek_trace(
     host: SeekHost,
     result: SeekSessionResult,
     probes: list[dict[str, Any]],
-    plot_traces: list[dict[str, Any]],
     *,
     run_id: str | None = None,
+    run_label: str = "run",
     suffix: str = "",
     write_at: datetime | None = None,
 ) -> str | None:
     results_dir = Path(host.seek_config.result_folder)
     results_dir.mkdir(parents=True, exist_ok=True)
     out = results_dir / session_artifact_filename(
-        result.session_id,
         write_at or datetime.now(),
         suffix=suffix,
+        run_label=run_label,
         run_id=run_id,
         ext="json",
     )
@@ -292,13 +318,11 @@ def _write_seek_trace(
             "error_message": result.error_message,
             "config": host.session_trace_config(),
         },
-        "probes": probes + plot_traces,
+        "probes": probes,
     }
     try:
         out.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as trace_file:
-            json.dump(payload, trace_file, indent=2)
-            trace_file.write("\n")
+        out.write_text(json.dumps(payload, indent=2))
         logger.info(f"eddy_seek: session trace saved to {path}")
         return path
     except OSError as exc:
@@ -358,24 +382,59 @@ def compute_accuracy_stats(offsets: list[Offset]) -> AccuracyStats:
     )
 
 
-def report_accuracy_stats(console: KConsole, offsets: list[Offset]) -> None:
+def report_accuracy_stats(
+    console: KConsole,
+    offsets: list[Offset],
+    *,
+    durations_s: list[float] | None = None,
+) -> None:
     n = len(offsets)
     stats = compute_accuracy_stats(offsets)
-
+    output = []
     for i, offset in enumerate(offsets, start=1):
-        console.detail(
-            f"  #{i}  X={offset.x:+.4f} mm  Y={offset.y:+.4f} mm  "
+        line = (
+            f"#{i}  X={offset.x:+.4f} mm  Y={offset.y:+.4f} mm  "
             f"radial={stats.radial[i - 1]:.4f} mm"
         )
-    console.info(
-        f"Repeatability ({n} runs): mean X={stats.mean.x:+.4f} "
-        f"Y={stats.mean.y:+.4f} mm, σ X={stats.std_x:.3f} Y={stats.std_y:.3f} mm"
+        if durations_s is not None and i <= len(durations_s):
+            line += f"  t={durations_s[i - 1]:.1f}s"
+        console.detail(line)
+    output.extend(
+        [
+            f"Repeatability ({n} runs):",
+            console.BR,
+            f"mean X={stats.mean.x:+.4f} Y={stats.mean.y:+.4f} mm",
+            console.BR,
+            f"σ X={stats.std_x:.3f} Y={stats.std_y:.3f} mm",
+            console.BR,
+            console.BR,
+            f"Max scatter: {stats.max_radial:.3f} mm",
+            console.BR,
+            f"Max pairwise {stats.max_pair:.3f} mm",
+            console.BR,
+        ]
     )
-    console.info(
-        f"Max scatter {stats.max_radial:.3f} mm - max pairwise {stats.max_pair:.3f} mm"
-    )
-    logger.debug(
+
+    if durations_s:
+        mean_t = sum(durations_s) / len(durations_s)
+        output.extend(
+            [
+                console.BR,
+                f"Seek time ({len(durations_s)} runs): ",
+                console.BR,
+                f"mean {mean_t:.1f}s ",
+                console.BR,
+                f"(min {min(durations_s):.1f}s, max {max(durations_s):.1f}s)",
+            ]
+        )
+    console.info("".join(output))
+    logger.info(
         f"eddy_seek: accuracy report n={n} mean=({stats.mean.x:.4f}, {stats.mean.y:.4f}) "
         f"stdev=({stats.std_x:.4f}, {stats.std_y:.4f}) "
         f"max_radial={stats.max_radial:.4f} max_pair={stats.max_pair:.4f}"
+        + (
+            f" seek_time_mean={sum(durations_s) / len(durations_s):.2f}s"
+            if durations_s
+            else ""
+        )
     )

@@ -10,10 +10,12 @@ Shared pytest fixtures and helpers.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fakes import PLOT_SESSION_ID, PLOT_WRITE_AT
 
-from _eddy_seek.plotting import PlotWriter
+from _eddy_seek.plotting.artifacts import write_figure
 
 
 @pytest.fixture
@@ -23,5 +25,8 @@ def requires_plotly():
 
 @pytest.fixture
 def plot_tmp(tmp_path):
-    writer = PlotWriter(tmp_path, PLOT_SESSION_ID, write_at=PLOT_WRITE_AT)
-    return writer, tmp_path
+    return tmp_path, PLOT_SESSION_ID, PLOT_WRITE_AT
+
+
+def write_plot_tmp(tmp_path: Path, fig, *, write_at=PLOT_WRITE_AT):
+    return write_figure(tmp_path, fig, write_at=write_at)

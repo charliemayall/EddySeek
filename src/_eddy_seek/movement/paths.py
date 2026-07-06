@@ -5,32 +5,21 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-Sweep path planning and session capture glue.
+Pure leg geometry: overscan, raster lines, and traverse endpoint planning.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 
-from ...common import Axis, Offset
-from ...motion_handler import MotionSample
-from ...session import SeekSession
-
-_LDC1612_BULK_HZ = 400.0  # batch bulk client nominal rate
+from ..common import Axis, Offset
 
 
-def speed_clamp_for_min_samples(
-    *,
-    requested_mm_min: float,
-    span_mm: float,
-    min_samples: int,
-    bulk_rate_hz: float = _LDC1612_BULK_HZ,
-) -> float:
-    """Cap feedrate so an in-range traverse can yield ``min_samples`` at ``bulk_rate_hz``."""
-    if span_mm <= 0.0 or min_samples <= 0:
-        return requested_mm_min
-    cap = span_mm * bulk_rate_hz * 60.0 / min_samples
-    return min(requested_mm_min, cap)
+def min_leg_span_mm(legs: Sequence[tuple[Offset, Offset]]) -> float:
+    if not legs:
+        return 0.0
+    return min(math.hypot(end.x - start.x, end.y - start.y) for start, end in legs)
 
 
 def effective_overscan(overscan: float) -> float:
@@ -96,10 +85,13 @@ def plan_axis_legs(
     legs: list[tuple[Offset, Offset]] = []
     for cross_delta in cross_offsets:
         cross = cross_center + cross_delta
-        for reverse in (False, True):
-            legs.append(
+        legs.extend(
+            [
                 traversal_endpoints(axis, lo, hi, cross, overscan, reverse=reverse)
-            )
+                for reverse in (False, True)
+            ]
+        )
+
     return legs
 
 
@@ -123,52 +115,11 @@ def plan_grid_legs(
             traverses = (True, False)
         else:
             traverses = (False, True)
-        for reverse in traverses:
-            legs.append(
+        legs.extend(
+            [
                 traversal_endpoints(axis, lo, hi, cross, overscan, reverse=reverse)
-            )
-    return legs
-
-
-def capture_legs(
-    ctx: SeekSession,
-    legs: Sequence[tuple[Offset, Offset]],
-    speed: float,
-) -> list[MotionSample]:
-    """Run continuous capture legs and return merged session-relative samples."""
-    handler = ctx.motion
-    handler.begin(ctx.session_start)
-    handler.run_capture_legs(legs, speed)
-    ctx.sync_offset(handler.position)
-    return handler.collect_samples()
-
-
-def _assert_grid_leg_count() -> None:
-    box = (-5.0, 5.0, -5.0, 5.0)
-    tolerance = 0.1
-    rows = len(y_lines(box[2], box[3], tolerance))
-    legs = plan_grid_legs(box, tolerance, overscan=1.0)
-    assert len(legs) == rows * 2
-
-
-def _assert_speed_clamp_for_min_samples() -> None:
-    cap = speed_clamp_for_min_samples(
-        requested_mm_min=3000.0,
-        span_mm=2.0,
-        min_samples=20,
-        bulk_rate_hz=400.0,
-    )
-    assert cap == 2400.0
-    assert (
-        speed_clamp_for_min_samples(
-            requested_mm_min=1200.0,
-            span_mm=2.0,
-            min_samples=20,
-            bulk_rate_hz=400.0,
+                for reverse in traverses
+            ]
         )
-        == 1200.0
-    )
 
-
-_assert_grid_leg_count()
-_assert_speed_clamp_for_min_samples()
+    return legs

@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from dataclasses import Field, asdict, dataclass, field, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 if TYPE_CHECKING:
     from klippy.extras.configfile import ConfigWrapper
@@ -41,33 +41,33 @@ class SeekConfig:
         default=2.5, metadata={"gcode": "MAX_JOG_Y", "positive": True}
     )
     tolerance: float = field(
-        default=0.1, metadata={"gcode": "TOLERANCE", "positive": True}
+        default=0.05, metadata={"gcode": "TOLERANCE", "positive": True}
     )
     dwell_time: float = field(
         default=0.5, metadata={"gcode": "DWELL_TIME", "positive": True}
     )
     jog_speed: float = field(
-        default=600.0,
+        default=80 * 60.0,
         metadata={"gcode": "JOG_SPEED", "positive": True, "speed": True},
     )
     search_for: Literal["min", "max"] = field(
         default="max",
         metadata={"gcode": "SEARCH_FOR", "enum": ("min", "max")},
     )
-    strategy: Literal["ternary", "centroid", "sweep_centroid", "debug_scan"] = field(
-        default="sweep_centroid",
-        metadata={
-            "gcode": "STRATEGY",
-            "enum": ("ternary", "centroid", "sweep_centroid", "debug_scan"),
-        },
+    strategy: Literal["centroid", "sweep_centroid", "debug_scan", "circle_harmonic"] = (
+        field(
+            default="sweep_centroid",
+            metadata={
+                "gcode": "STRATEGY",
+                "enum": (
+                    "centroid",
+                    "sweep_centroid",
+                    "debug_scan",
+                    "circle_harmonic",
+                ),
+            },
+        )
     )
-    grid_step_x: float = field(
-        default=1.25, metadata={"gcode": "GRID_STEP_X", "positive": True}
-    )
-    grid_step_y: float = field(
-        default=1.25, metadata={"gcode": "GRID_STEP_Y", "positive": True}
-    )
-    max_iter: int = field(default=10, metadata={"gcode": "MAX_ITER", "min": 1})
     max_passes: int = field(default=6, metadata={"gcode": "MAX_PASSES", "min": 1})
     save_session_trace: bool = field(
         default=False, metadata={"gcode": "SAVE_SESSION_TRACE", "bool": True}
@@ -78,11 +78,11 @@ class SeekConfig:
     result_folder: str = field(default="~/printer_data/config/eddy_seek_results")
 
     sweep_coarse_speed: float = field(
-        default=1200.0,
+        default=20 * 60.0,
         metadata={"gcode": "SWEEP_COARSE_SPEED", "positive": True, "speed": True},
     )
     sweep_fine_speed: float = field(
-        default=600.0,
+        default=10 * 60.0,
         metadata={"gcode": "SWEEP_FINE_SPEED", "positive": True, "speed": True},
     )
     sweep_overscan: float = field(
@@ -91,20 +91,59 @@ class SeekConfig:
     sweep_cross_offset: float = field(
         default=0.3, metadata={"gcode": "SWEEP_CROSS_OFFSET", "positive": True}
     )
-    sweep_cross_passes: int = field(
-        default=3, metadata={"gcode": "SWEEP_CROSS_PASSES", "min": 1}
+    cross_passes: int = field(
+        default=3, metadata={"gcode": "CROSS_PASSES", "min": 1, "odd": True}
     )
     fine_shrink: float = field(
-        default=0.4, metadata={"gcode": "FINE_SHRINK", "positive": True}
+        default=0.6, metadata={"gcode": "FINE_SHRINK", "positive": True}
     )
     min_sweep_samples: int = field(
         default=20, metadata={"gcode": "MIN_SWEEP_SAMPLES", "min": 3}
+    )
+    circle_radius_start: float = field(
+        default=2.0, metadata={"gcode": "CIRCLE_RADIUS_START", "positive": True}
+    )
+    circle_radius_min: float = field(
+        default=0.5, metadata={"gcode": "CIRCLE_RADIUS_MIN", "positive": True}
+    )
+    circle_shrink: float = field(
+        default=0.4, metadata={"gcode": "CIRCLE_SHRINK", "positive": True}
+    )
+    circle_arc_resolution: float = field(
+        default=0.1, metadata={"gcode": "CIRCLE_ARC_RESOLUTION", "positive": True}
+    )
+    circle_speed: float = field(
+        default=10 * 60.0,
+        metadata={"gcode": "CIRCLE_SPEED", "positive": True, "speed": True},
+    )
+    noise_k: float = field(default=1.0, metadata={"gcode": "NOISE_K", "positive": True})
+    harmonic_step_gain: float = field(
+        default=0.15, metadata={"gcode": "HARMONIC_STEP_GAIN", "positive": True}
+    )
+    harmonic_min_quality: float = field(
+        default=0.5, metadata={"gcode": "HARMONIC_MIN_QUALITY", "positive": True}
+    )
+    circle_refresh_sweeps: bool = field(
+        default=False,
+        metadata={"gcode": "CIRCLE_REFRESH_SWEEPS", "bool": True},
+    )
+    circle_skip_bootstrap: bool = field(
+        default=False,
+        metadata={"gcode": "CIRCLE_SKIP_BOOTSTRAP", "bool": True},
     )
     debug: bool = field(default=False, metadata={"bool": True})
 
     def __post_init__(self) -> None:
         _validate(self)
         self.result_folder = str(Path(self.result_folder).expanduser().resolve())
+
+    @property
+    def grid_step_x(self) -> float:
+        return self.max_jog_x / 2.0
+
+    @property
+    def grid_step_y(self) -> float:
+        return self.max_jog_y / 2.0
 
     def format_seek_config(self) -> str:
         """One-line summary of effective alignment settings (speeds in mm/s)."""
@@ -118,50 +157,41 @@ class SeekConfig:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
-    def _var_ok(self, key: str, value: Any) -> bool:
-        try:
-            _parse_runtime_value(_field_name_for_key(key), key, value)
-            return True
-        except ValueError:
-            return False
-
     def apply_runtime_set(self, gcmd: GCodeCommand) -> list[str]:
         """
         Apply ``EDDY_SEEK_SET`` parameters in place.
 
-        Only keys present on the G-code command line are changed.  Returns a
-        list of ``field=value`` strings describing what changed.  Raises
-        ``gcmd.error`` (``CommandError``) on invalid input.
+        Only keys present on the G-code command line are changed.
+
+        Returns:
+          list[str]: A list of ``field=value`` strings describing what changed.
         """
         params = gcmd.get_command_parameters()
         changes: list[str] = []
         if not params:
             return changes
-
-        gcode_map = _gcode_to_field()
-        for key, raw in params.items():
-            gcode_key = key.upper()
-            field_name = gcode_map.get(gcode_key)
-            if field_name is None:
-                raise gcmd.error(
-                    f"EDDY_SEEK_SET: unknown parameter {key!r} "
-                    f"(known: {', '.join(sorted(gcode_map))})"
-                )
+        gcode_map = _runtime_settable_map()
+        for gcode_key, gcode_raw in params.items():
+            gcode_key = gcode_key.upper()
+            check = _can_set_key(gcode_key)
+            if not check.is_field or not check.is_settable:
+                raise gcmd.error(f"EDDY_SEEK_SET: {check.error}")
+            config_field_name = gcode_map[gcode_key]
             try:
-                value = _parse_runtime_value(field_name, gcode_key, raw)
+                value = _parse_runtime_value(config_field_name, gcode_key, gcode_raw)
             except ValueError as exc:
                 raise gcmd.error(
-                    f"EDDY_SEEK_SET: invalid {key}={raw!r} ({exc})"
+                    f"EDDY_SEEK_SET: invalid {gcode_key}={gcode_raw!r} ({exc})"
                 ) from exc
-            setattr(self, field_name, value)
-            display = value / 60.0 if _is_speed_field(field_name) else value
-            changes.append(f"{field_name}={display}")
+            setattr(self, config_field_name, value)
+            display = value / 60.0 if _is_speed_field(config_field_name) else value
+            changes.append(f"{config_field_name} --> {display}")
         try:
             _validate(self)
         except ValueError as exc:
             raise gcmd.error(f"EDDY_SEEK_SET: {exc}") from exc
         if changes:
-            logger.debug(f"eddy_seek: runtime config updated: {', '.join(changes)}")
+            logger.info(f"eddy_seek: runtime config updated: {', '.join(changes)}")
         return changes
 
 
@@ -180,7 +210,8 @@ def _mm_s_to_mm_min(mm_s: float) -> float:
     return mm_s * 60.0
 
 
-def _gcode_to_field() -> dict[str, str]:
+def _runtime_settable_map() -> dict[str, str]:
+    """Get the map of G-code keys to SeekConfig field names, for fields with a "gcode" metadata key (runtime settable)"""
     return {
         spec.metadata["gcode"]: spec.name
         for spec in fields(SeekConfig)
@@ -188,14 +219,37 @@ def _gcode_to_field() -> dict[str, str]:
     }
 
 
-def _field_name_for_key(key: str) -> str:
+class SetKeyCheck(NamedTuple):
+    is_field: bool
+    is_settable: bool
+    error: str | None = None
+
+
+def _can_set_key(key: str) -> SetKeyCheck:
+    """
+    Check whether a G-code key names a SeekConfig field and may be set at runtime.
+
+    Some fields exist only in printer.cfg (no ``gcode`` metadata); others are unknown.
+    """
     gcode_key = key.upper()
-    gcode_map = _gcode_to_field()
-    if gcode_key in gcode_map:
-        return gcode_map[gcode_key]
-    if gcode_key.lower() in {spec.name for spec in fields(SeekConfig)}:
-        return gcode_key.lower()
-    raise ValueError(f"EDDY_SEEK_SET: unknown parameter {key!r}")
+    gcode_map = _runtime_settable_map()
+    is_field = gcode_key.lower() in {spec.name for spec in fields(SeekConfig)}
+    is_settable = gcode_key in gcode_map
+    if not is_field:
+        return SetKeyCheck(
+            is_field=False,
+            is_settable=False,
+            error=(
+                f"Unknown parameter {key!r}</br>Known: {', '.join(sorted(gcode_map))}"
+            ),
+        )
+    if not is_settable:
+        return SetKeyCheck(
+            is_field=True,
+            is_settable=False,
+            error=f"{key!r} Can only be set via your config file",
+        )
+    return SetKeyCheck(is_field=True, is_settable=True)
 
 
 def _parse_runtime_value(field_name: str, label: str, raw: Any) -> Any:
@@ -224,6 +278,16 @@ def _parse_runtime_value(field_name: str, label: str, raw: Any) -> Any:
     raise ValueError(f"EDDY_SEEK_SET: invalid {label}={raw!r}")
 
 
+def _field_name_for_key(gcode_key: str) -> str:
+    gcode_key = gcode_key.upper()
+    gcode_map = _runtime_settable_map()
+    if gcode_key in gcode_map:
+        return gcode_map[gcode_key]
+    if gcode_key.lower() in {spec.name for spec in fields(SeekConfig)}:
+        return gcode_key.lower()
+    raise ValueError(f"unknown parameter {gcode_key!r}")
+
+
 def _parse_bool(raw: Any, label: str) -> bool:
     if isinstance(raw, bool):
         return raw
@@ -247,6 +311,14 @@ def _validate(cfg: SeekConfig) -> None:
             raise ValueError(
                 f"{spec.name} must be one of {meta['enum']!r} (got {value!r})"
             )
+        if meta.get("odd") and value % 2 == 0:
+            raise ValueError(f"{spec.name} must be odd (got {value!r})")
+
+    if cfg.circle_radius_min > cfg.circle_radius_start:
+        raise ValueError(
+            "circle_radius_min must be <= circle_radius_start "
+            f"(got {cfg.circle_radius_min} > {cfg.circle_radius_start})"
+        )
 
 
 def _config_option_set(config: Any, key: str) -> bool:
@@ -268,14 +340,10 @@ def load_seek_config(config: ConfigWrapper) -> SeekConfig:
         for spec in fields(SeekConfig):
             name = spec.name
             default = getattr(d, name)
-            if name == "grid_step_x":
-                values[name] = config.getfloat(name, values["max_jog_x"] / 2.0)
-            elif name == "grid_step_y":
-                values[name] = config.getfloat(name, values["max_jog_y"] / 2.0)
-            elif spec.metadata.get("bool"):
+            if spec.metadata.get("bool"):
                 values[name] = config.getboolean(name, default)
             elif "enum" in spec.metadata:
-                values[name] = config.get(name, default).lower()  # type: ignore[union-attr]
+                values[name] = config.get(name, default).lower()
             elif isinstance(default, int):
                 values[name] = config.getint(name, default)
             elif spec.metadata.get("speed"):
@@ -290,7 +358,7 @@ def load_seek_config(config: ConfigWrapper) -> SeekConfig:
         ):
             values["save_plots"] = True  # legacy key; save_plots wins if both set
         cfg = SeekConfig(**values)
-        logger.debug(f"eddy_seek: loaded config {cfg.format_seek_config()}")
+        logger.info(f"eddy_seek: loaded config {cfg.format_seek_config()}")
         return cfg
     except ValueError as exc:
         raise config.error(f"eddy_seek: {exc}") from exc
