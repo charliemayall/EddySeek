@@ -537,7 +537,7 @@ def test_circle_harmonic_rejected_pass_holds_best():
             pass
 
     class _Session:
-        config = SeekConfig(max_passes=6, tolerance=0.01)
+        config = SeekConfig(max_passes=7, tolerance=0.01)
 
     bootstrap = Offset(-0.0498, -0.3674)
     refined = Offset(-0.1478, -0.7640)
@@ -554,7 +554,9 @@ def test_circle_harmonic_rejected_pass_holds_best():
             )
         if pass_num == 5:
             return refined
-        strategy._last_pass_rejected = True
+        if pass_num == 6:
+            strategy._last_pass_rejected = True
+            return best
         return best
 
     strategy._step = fake_step  # pyright: ignore[reportAttributeAccessIssue]
@@ -562,7 +564,7 @@ def test_circle_harmonic_rejected_pass_holds_best():
         _Session(),
         _FakeReporter(),  # pyright: ignore[reportArgumentType]
     )
-    assert passes_run == 6
+    assert passes_run == 7
     assert best.x == pytest.approx(refined.x)
     assert best.y == pytest.approx(refined.y)
 

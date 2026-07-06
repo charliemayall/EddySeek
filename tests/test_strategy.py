@@ -10,7 +10,7 @@ import math
 
 from pytest import raises
 
-from _eddy_seek.common import Offset
+from _eddy_seek.common import ConvergenceError, Offset
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.optimizer import (
     axis_weighted_centroid,
@@ -37,7 +37,7 @@ class _FakeReporter:
 
 class _RecordingSearchSession:
     def __init__(self) -> None:
-        self.config = _test_cfg(max_passes=1)
+        self.config = _test_cfg(max_passes=6)
         self.positions: list[Offset] = []
         self.recorder = SessionRecorder(trace=False, plots=False)
 
@@ -51,7 +51,7 @@ def test_strategy_search_uses_positions():
     best, passes_run = CentroidStrategy().search(session, _FakeReporter())  # type: ignore[arg-type]
 
     assert isinstance(best, Offset)
-    assert passes_run == 1
+    assert passes_run >= 1
     assert session.positions
     assert all(isinstance(position, Offset) for position in session.positions)
 
@@ -186,3 +186,20 @@ def test_search_aborts_on_pass_divergence():
     )
     with raises(RuntimeError, match="pass corrections diverging at pass 2"):
         strategy.search(session, _FakeReporter())  # type: ignore[arg-type]
+
+
+def test_search_raises_when_max_passes_exhausted_without_convergence():
+    session = SeekSession.__new__(SeekSession)
+    session.config = _test_cfg(max_passes=2, tolerance=0.01)
+    strategy = _ScriptedStrategy(
+        [
+            Offset(1.0, 0.0),
+            Offset(0.5, 0.0),
+        ]
+    )
+    with raises(ConvergenceError) as exc_info:
+        strategy.search(session, _FakeReporter())  # type: ignore[arg-type]
+    err = exc_info.value
+    assert err.strategy == "scripted"
+    assert err.max_passes == 2
+    assert err.tolerance == 0.01

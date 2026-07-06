@@ -34,6 +34,19 @@ class Phase(str, Enum):
     FINE = "fine"
 
 
+class ConvergenceError(RuntimeError):
+    """Search exhausted ``max_passes`` without meeting tolerance."""
+
+    def __init__(self, strategy: str, *, max_passes: int, tolerance: float) -> None:
+        self.strategy = strategy
+        self.max_passes = max_passes
+        self.tolerance = tolerance
+        super().__init__(
+            f"eddy_seek: {strategy} hit max_passes={max_passes} "
+            f"without convergence (tolerance={tolerance:.4f} mm)"
+        )
+
+
 class Direction(str, Enum):
     PLUS = "+"
     MINUS = "-"

@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 
-from ..common import Offset
+from ..common import ConvergenceError, Offset
 from ..kconsole import KConsole
 from ..session import SeekSession
 
@@ -88,9 +88,10 @@ class SeekStrategy(ABC):
                 )
                 break
         else:
-            logger.info(
-                f"eddy_seek: {self.name} hit max_passes={cfg.max_passes} "
-                "without convergence"
+            raise ConvergenceError(
+                self.name,
+                max_passes=cfg.max_passes,
+                tolerance=cfg.tolerance,
             )
 
         return best, passes_run
