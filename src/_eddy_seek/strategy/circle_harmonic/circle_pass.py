@@ -40,7 +40,6 @@ from .plateau import (
     CircleHarmonicMode,
     PlateauState,
     is_below_min_radius,
-    is_min_radius,
 )
 
 if TYPE_CHECKING:
@@ -324,20 +323,9 @@ def compute_circle_pass(
             ),
         )
 
-    converged = harmonic_converged(fit, step, cfg.tolerance, cfg.noise_k)
-    if converged:
+    freeze = harmonic_converged(fit, step, cfg.tolerance, cfg.noise_k)
+    if freeze:
         logger.info(f"eddy_seek: circle_harmonic converged at pass {pass_num}")
-    at_min = is_min_radius(trace_radius, cfg.circle_radius_min)
-    if at_min:
-        moved = (result - best).abs_components()
-        freeze = moved.x <= cfg.tolerance and moved.y <= cfg.tolerance
-        if freeze:
-            logger.info(
-                f"eddy_seek: circle_harmonic at min radius r={trace_radius:.4f} "
-                f"- stopping (moved {moved.x:.4f}, {moved.y:.4f})"
-            )
-    else:
-        freeze = False
     return outcome_accept(
         result,
         trace_center,
