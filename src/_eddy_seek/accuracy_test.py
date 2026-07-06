@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 _GCODE_STATE = "EDDY_SEEK_ACCURACY"
 
 
-def _apply_mock_offset(host: SeekHost, cfg: SeekConfig, console: KConsole) -> None:
+def _apply_mock_offset(host: SeekHost, cfg: SeekConfig, console: KConsole) -> Offset:
     mock_span = min(cfg.max_jog_x, cfg.max_jog_y, random.random() * 0.6)
     mock_offset = Offset(
         (random.random() * 2 - 1) * mock_span,
@@ -43,6 +43,7 @@ def _apply_mock_offset(host: SeekHost, cfg: SeekConfig, console: KConsole) -> No
     machine = Position.from_pair(toolhead.get_position()) + mock_offset
     manual_move_xy(toolhead, machine, cfg.jog_speed / 60.0)
     toolhead.wait_moves()
+    return mock_offset
 
 
 def _write_accuracy_plot(
@@ -91,8 +92,9 @@ def run_accuracy_test(
                     f"RESTORE_GCODE_STATE NAME={_GCODE_STATE} MOVE=1"
                 )
 
+            mock_offset = Offset.zero()
             if mock_enabled:
-                _apply_mock_offset(host, cfg, console)
+                mock_offset = _apply_mock_offset(host, cfg, console)
 
             console.info(f"Repeat {repeat}/{repeats}")
             result = SeekSession(
@@ -115,18 +117,19 @@ def run_accuracy_test(
                 )
                 break
 
-            offsets.append(result.offset)
+            found_offset = mock_offset + result.offset
+            offsets.append(found_offset)
             durations_s.append(result.end_time - result.start_time)
             recorder.record(
                 AccuracyRepeatRecord(
                     repeat_num=repeat,
-                    offset=result.offset,
+                    offset=found_offset,
                     session_plot_path=result.plot_path,
                 )
             )
             console.info(
-                f"Repeat {repeat} - X={result.offset.x:+.4f} "
-                f"Y={result.offset.y:+.4f} mm "
+                f"Repeat {repeat} - X={found_offset.x:+.4f} "
+                f"Y={found_offset.y:+.4f} mm "
                 f"({durations_s[-1]:.1f}s)"
             )
 

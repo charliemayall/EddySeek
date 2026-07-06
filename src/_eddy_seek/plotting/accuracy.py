@@ -78,8 +78,6 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
             f"repeat {record.repeat_num}<br>"
             f"x={record.offset.x:+.4f} y={record.offset.y:+.4f} mm"
         )
-        if record.session_plot_path:
-            hover += f"<br>session plot: {record.session_plot_path}"
         fig.add_trace(
             go.Scatter(
                 x=[record.offset.x],
@@ -162,8 +160,8 @@ def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
         },
     ]
     fig.update_layout(
-        xaxis_title="X offset from session start (mm)",
-        yaxis_title="Y offset from session start (mm)",
+        xaxis_title="X offset from test start (mm)",
+        yaxis_title="Y offset from test start (mm)",
         **layout,
     )
     apply_axes_theme(fig)
