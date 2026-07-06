@@ -754,7 +754,7 @@ def render_debug_scan_figure(
         show_legend=False,
     )
 
-    for (row, col), (scale, tolerance, panel_z, panel_x, panel_y, panel_result) in zip(
+    for (row, col), (_scale, tolerance, panel_z, panel_x, panel_y, panel_result) in zip(
         ((4, 1), (4, 2), (5, 1)),
         panels[1:],
         strict=True,

@@ -445,12 +445,14 @@ def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one()
     ctx = MagicMock()
     ctx.config = SeekConfig(circle_skip_bootstrap=True)
 
-    with patch.object(strategy, "_bootstrap_pass") as bootstrap:
-        with patch.object(strategy, "_compute_circle_pass") as compute:
-            with patch.object(
-                strategy, "_finish_circle_pass", return_value=Offset.zero()
-            ) as finish:
-                result = strategy._step(ctx, 1, Offset.zero())
+    with (
+        patch.object(strategy, "_bootstrap_pass") as bootstrap,
+        patch.object(strategy, "_compute_circle_pass") as compute,
+        patch.object(
+            strategy, "_finish_circle_pass", return_value=Offset.zero()
+        ) as finish,
+    ):
+        result = strategy._step(ctx, 1, Offset.zero())
 
     bootstrap.assert_not_called()
     compute.assert_called_once_with(ctx, 1, Offset.zero())
@@ -579,12 +581,12 @@ def test_circle_harmonic_skips_refresh_sweeps_when_disabled():
     ctx = MagicMock()
     ctx.config = SeekConfig(circle_refresh_sweeps=False)
 
-    with patch.object(strategy, "_refresh_profiles") as refresh:
-        with patch.object(
-            ctx.motion, "run_capture_legs", side_effect=RuntimeError("stop")
-        ):
-            with pytest.raises(RuntimeError, match="stop"):
-                strategy._compute_circle_pass(ctx, 2, Offset(1.0, 0.0))
+    with (
+        patch.object(strategy, "_refresh_profiles") as refresh,
+        patch.object(ctx.motion, "run_capture_legs", side_effect=RuntimeError("stop")),
+        pytest.raises(RuntimeError, match="stop"),
+    ):
+        strategy._compute_circle_pass(ctx, 2, Offset(1.0, 0.0))
 
     refresh.assert_not_called()
 
@@ -599,12 +601,12 @@ def test_circle_harmonic_runs_refresh_sweeps_when_enabled():
     ctx = MagicMock()
     ctx.config = SeekConfig(circle_refresh_sweeps=True)
 
-    with patch.object(strategy, "_refresh_profiles") as refresh:
-        with patch.object(
-            ctx.motion, "run_capture_legs", side_effect=RuntimeError("stop")
-        ):
-            with pytest.raises(RuntimeError, match="stop"):
-                strategy._compute_circle_pass(ctx, 2, Offset(1.0, 0.0))
+    with (
+        patch.object(strategy, "_refresh_profiles") as refresh,
+        patch.object(ctx.motion, "run_capture_legs", side_effect=RuntimeError("stop")),
+        pytest.raises(RuntimeError, match="stop"),
+    ):
+        strategy._compute_circle_pass(ctx, 2, Offset(1.0, 0.0))
 
     refresh.assert_called_once()
 

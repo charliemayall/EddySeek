@@ -47,8 +47,8 @@ class SeekStrategy(ABC):
     @abstractmethod
     def name(self) -> str: ...
 
-    def announce_start(self, ctx: SeekSession, console: KConsole) -> None:
-        pass
+    @abstractmethod
+    def announce_start(self, ctx: SeekSession, console: KConsole) -> None: ...
 
     def on_session_end(self, ctx: SeekSession) -> str | None:
         return None
@@ -96,8 +96,8 @@ class SeekStrategy(ABC):
 
         return best, passes_run
 
-    def _before_pass(self, ctx: SeekSession, pass_num: int) -> None:
-        pass
+    @abstractmethod
+    def _before_pass(self, ctx: SeekSession, pass_num: int) -> None: ...
 
     def should_check_divergence(self, ctx: SeekSession, pass_num: int) -> bool:
         return True

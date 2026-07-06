@@ -335,19 +335,21 @@ def test_axis_sweep_centroid_raises_when_too_few_samples():
         MotionSample(Offset(0.0, y), 100.0, 0.0) for y in [i * 0.1 for i in range(5)]
     ]
 
-    with patch(
-        "_eddy_seek.movement.leg_planner.sweep_axis",
-        side_effect=[samples_x, samples_y],
+    with (
+        patch(
+            "_eddy_seek.movement.leg_planner.sweep_axis",
+            side_effect=[samples_x, samples_y],
+        ),
+        raises(RuntimeError, match="test collected 10 in-range samples"),
     ):
-        with raises(RuntimeError, match="test collected 10 in-range samples"):
-            axis_sweep_centroid(
-                capture,
-                settings,
-                Offset.zero(),
-                half_x=5.0,
-                half_y=5.0,
-                speed_mm_min=3000.0,
-                phase=Phase.COARSE,
-                pass_num=1,
-                label="test",
-            )
+        axis_sweep_centroid(
+            capture,
+            settings,
+            Offset.zero(),
+            half_x=5.0,
+            half_y=5.0,
+            speed_mm_min=3000.0,
+            phase=Phase.COARSE,
+            pass_num=1,
+            label="test",
+        )

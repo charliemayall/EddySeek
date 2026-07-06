@@ -222,9 +222,10 @@ def apply_theme(layout: dict[str, Any]) -> dict[str, Any]:
         "legend": legend,
     }
     for key, value in layout.items():
-        if key.startswith("xaxis") or key.startswith("yaxis"):
-            if isinstance(value, dict):
-                themed[key] = {**_AXIS_THEME, **value}
+        if (key.startswith("xaxis") or key.startswith("yaxis")) and isinstance(
+            value, dict
+        ):
+            themed[key] = {**_AXIS_THEME, **value}
     if "xaxis" not in themed and "yaxis" not in themed:
         themed["xaxis"] = dict(_AXIS_THEME)
         themed["yaxis"] = dict(_AXIS_THEME)
