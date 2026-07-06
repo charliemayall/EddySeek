@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Literal, overload
 
 from ..common import Axis, Offset, Phase, Position, samples_in_box, search_box
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class SweepSettings:
-    """Sweep geometry and sample thresholds extracted from seek config."""
+    """Sweep releveant parameters extracted from seek config."""
 
     max_jog_x: float
     max_jog_y: float
@@ -52,15 +52,7 @@ class SweepSettings:
 
     @classmethod
     def from_config(cls, cfg: SeekConfig) -> SweepSettings:
-        return cls(
-            max_jog_x=cfg.max_jog_x,
-            max_jog_y=cfg.max_jog_y,
-            sweep_overscan=cfg.sweep_overscan,
-            cross_passes=cfg.cross_passes,
-            sweep_cross_offset=cfg.sweep_cross_offset,
-            min_sweep_samples=cfg.min_sweep_samples,
-            search_for=cfg.search_for,
-        )
+        return cls(**{f.name: getattr(cfg, f.name) for f in fields(cls)})
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,18 +219,6 @@ def plan_grid_legs(
     return legs
 
 
-def _axis_span(
-    axis: Axis,
-    center: float,
-    half_range: float,
-    settings: SweepSettings,
-) -> tuple[float, float]:
-    jog_limit = settings.max_jog_x if axis is Axis.X else settings.max_jog_y
-    lo = max(-jog_limit, center - half_range)
-    hi = min(jog_limit, center + half_range)
-    return lo, hi
-
-
 def _resolve_cross(settings: SweepSettings, phase: Phase) -> list[float]:
     passes = 1 if phase is Phase.FINE else settings.cross_passes
     return iter_cross_offsets(passes, settings.sweep_cross_offset)
@@ -317,8 +297,9 @@ def axis_sweep_profiles(
     recorder: SessionRecorder | None = None,
 ) -> AxisSweepProfiles:
     """X/Y sweeps with box-filtered axis profiles (no centroid)."""
-    lo_x, hi_x = _axis_span(Axis.X, center.x, half_x, settings)
-    lo_y, hi_y = _axis_span(Axis.Y, center.y, half_y, settings)
+    lo_x, hi_x, lo_y, hi_y = search_box(
+        center, half_x, half_y, settings.max_jog_x, settings.max_jog_y
+    )
     sweep_kw = {"recorder": recorder}
     samples_x = sweep_axis(
         capture,
@@ -344,7 +325,7 @@ def axis_sweep_profiles(
         pass_num=pass_num,
         **sweep_kw,
     )
-    box = search_box(center, half_x, half_y, settings.max_jog_x, settings.max_jog_y)
+    box = lo_x, hi_x, lo_y, hi_y
     in_box_x = samples_in_box(samples_x, box)
     in_box_y = samples_in_box(samples_y, box)
     return AxisSweepProfiles(
