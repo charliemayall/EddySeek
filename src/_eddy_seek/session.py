@@ -246,7 +246,7 @@ class SeekSession:
             plot_path=session_plot_path,
         )
         if self._save_trace:
-            path = _write_seek_trace(
+            _write_seek_trace(
                 self._host,
                 result,
                 self.recorder.to_probe_dicts(),
@@ -255,8 +255,7 @@ class SeekSession:
                 suffix=self.artifact_suffix(strategy.name),
                 write_at=self.artifact_write_at,
             )
-            if path is not None:
-                logger.info(f"eddy_seek: session trace saved to {path}")
+
         logger.info(
             f"eddy_seek: session {self.session_id} finished "
             f"status={result.status} probes={len(self.recorder.to_probe_dicts())}"
