@@ -111,7 +111,7 @@ def _plateau_ctx(**overrides):
     ctx.config = SeekConfig(
         circle_radius_start=2.0,
         circle_radius_min=0.5,
-        circle_shrink=0.4,
+        circle_shrink=0.6,
         tolerance=0.05,
         **overrides,
     )

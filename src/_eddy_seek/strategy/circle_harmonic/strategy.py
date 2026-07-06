@@ -26,7 +26,7 @@ from ...plotting.primitives import (
     XYCloud,
 )
 from ...session import SeekSession
-from ..base import MaxPassesError, SeekStrategy, _check_pass_divergence
+from ..base import MaxPassesError, SeekStrategy
 from .bootstrap import bootstrap_pass
 from .circle_pass import CirclePassOutcome, compute_circle_pass
 from .plateau import CircleHarmonicMode, PlateauState
@@ -77,7 +77,6 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._mode = CircleHarmonicMode.from_config(cfg)
         self._plateau.reset()
         best = Offset.zero()
-        positions = [best]
         passes_run = 0
 
         for pass_num in range(1, cfg.max_passes + 1):
@@ -90,14 +89,6 @@ class CircleHarmonicStrategy(SeekStrategy):
             new = self._step(ctx, pass_num, best)
             moved = (new - best).abs_components()
             console.info(self._pass_message(pass_num, new, moved, ctx))
-            positions.append(new)
-            if not self._plateau.last_rejected:
-                _check_pass_divergence(
-                    self.name,
-                    positions,
-                    tolerance=cfg.tolerance,
-                    pass_num=pass_num,
-                )
             best = new
 
             if self._plateau.frozen is not None:

@@ -24,8 +24,6 @@ from ...harmonic import (
     circle_in_jog_box,
     circle_radius_for_tier,
     fit_first_harmonic,
-    harmonic_bootstrap_diverged,
-    harmonic_bootstrap_divergence_limit,
     harmonic_converged,
     harmonic_reject_reasons,
     harmonic_step_v2,
@@ -168,7 +166,6 @@ def compute_circle_pass(
     plateau: PlateauState,
 ) -> CirclePassOutcome:
     cfg = ctx.config
-    bootstrap = strategy._bootstrap if strategy._bootstrap is not None else best
 
     radius = circle_radius_for_tier(
         plateau.tier,
@@ -291,37 +288,6 @@ def compute_circle_pass(
     )
     unclamped = trace_center + step
     result = unclamped.clamp(cfg.max_jog_x, cfg.max_jog_y)
-
-    divergence = result.distance_to(bootstrap)
-    anchor_floor = (
-        math.hypot(cfg.max_jog_x, cfg.max_jog_y) if mode.skip_bootstrap else 0.0
-    )
-    divergence_limit = harmonic_bootstrap_divergence_limit(
-        bootstrap, trace_radius, cfg.tolerance, anchor_floor=anchor_floor
-    )
-    if harmonic_bootstrap_diverged(
-        result,
-        bootstrap,
-        trace_radius,
-        cfg.tolerance,
-        anchor_floor=anchor_floor,
-    ):
-        logger.warning(
-            f"eddy_seek: circle_harmonic pass {pass_num} diverged from bootstrap "
-            f"Δ={divergence:.4f} > limit {divergence_limit:.4f} "
-            f"({result.x:.4f}, {result.y:.4f}) vs ({bootstrap.x:.4f}, {bootstrap.y:.4f})"
-        )
-        return outcome_reject(
-            best,
-            trace_center,
-            trace_radius,
-            samples,
-            binned,
-            fit=fit,
-            reason=(
-                f"diverged from bootstrap (Δ={divergence:.4f} > {divergence_limit:.4f})"
-            ),
-        )
 
     freeze = harmonic_converged(fit, step, cfg.tolerance, cfg.noise_k)
     if freeze:
