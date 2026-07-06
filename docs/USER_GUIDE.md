@@ -106,31 +106,31 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 
 ### `[eddy_seek]` - `strategy: sweep_centroid` options
 
-| Option               | Default | Description                                |
-| -------------------- | ------- | ------------------------------------------ |
-| `sweep_coarse_speed` | `20`    | Coarse sweep feedrate (mm/s)               |
-| `sweep_fine_speed`   | `10`    | Fine sweep feedrate (mm/s)                 |
-| `sweep_overscan`     | `1.0`   | Extra travel beyond jog range (mm)         |
-| `sweep_cross_offset` | `0.3`   | Stagger between parallel sweeps (mm)       |
+| Option               | Default | Description                                          |
+| -------------------- | ------- | ---------------------------------------------------- |
+| `sweep_coarse_speed` | `20`    | Coarse sweep feedrate (mm/s)                         |
+| `sweep_fine_speed`   | `10`    | Fine sweep feedrate (mm/s)                           |
+| `sweep_overscan`     | `1.0`   | Extra travel beyond jog range (mm)                   |
+| `sweep_cross_offset` | `0.3`   | Stagger between parallel sweeps (mm)                 |
 | _(fixed)_            | `3`/`1` | Coarse/fine staggered sweep lines (not configurable) |
-| `fine_shrink`        | `0.6`   | Fine pass range multiplier (× max_jog)     |
-| `min_sweep_samples`  | `20`    | Minimum profile points before centroid fit |
+| `fine_shrink`        | `0.6`   | Fine pass range multiplier (× max_jog)               |
+| `min_sweep_samples`  | `20`    | Minimum profile points before centroid fit           |
 
 ### `[eddy_seek]` - `strategy: circle_harmonic` options
 
-| Option                  | Default | Description                                                       |
-| ----------------------- | ------- | ----------------------------------------------------------------- |
-| `circle_radius_start`   | `2`     | First circle radius (mm)                                          |
-| `circle_radius_min`     | `0.5`   | Smallest circle radius (mm)                                       |
-| `circle_shrink`         | `0.4`   | Radius multiplier when stepping down a tier after a rejected pass |
-| `circle_arc_resolution` | `0.1`   | Arc segment length along the circle (mm)                          |
-| `circle_speed`          | `10`    | Circle trace feedrate (mm/s)                                      |
-| `noise_k`               | `1`     | SNR threshold (amplitude vs noise) for model fit                  |
-| `harmonic_step_gain`    | `0.15`  | Fraction of fitted offset applied each pass                       |
-| `harmonic_min_quality`  | `0.5`   | Minimum fit quality to accept a pass                              |
-| `circle_refresh_sweeps` | `False` | Re-run axis sweeps each pass instead of reusing the bootstrap ones |
+| Option                  | Default | Description                                                         |
+| ----------------------- | ------- | ------------------------------------------------------------------- |
+| `circle_radius_start`   | `2`     | First circle radius (mm)                                            |
+| `circle_radius_min`     | `0.5`   | Smallest circle radius (mm)                                         |
+| `circle_shrink`         | `0.4`   | Radius multiplier when stepping down a tier after a rejected pass   |
+| `circle_arc_resolution` | `0.1`   | Arc segment length along the circle (mm)                            |
+| `circle_speed`          | `10`    | Circle trace feedrate (mm/s)                                        |
+| `noise_k`               | `1`     | SNR threshold (amplitude vs noise) for model fit                    |
+| `harmonic_step_gain`    | `0.15`  | Fraction of fitted offset applied each pass                         |
+| `harmonic_min_quality`  | `0.5`   | Minimum fit quality to accept a pass                                |
+| `circle_refresh_sweeps` | `False` | Re-run axis sweeps each pass instead of reusing the bootstrap ones  |
 | `circle_skip_bootstrap` | `False` | Skip the initial axis-sweep bootstrap and start circling right away |
-| _(fixed)_               | `1`     | Bootstrap axis sweeps use a single stagger line (not configurable)    |
+| _(fixed)_               | `1`     | Bootstrap axis sweeps use a single stagger line (not configurable)  |
 
 > **max_jog** should be ≥ 2× your worst-case expected misalignment (per axis).Searches are unlikely to converge fully if the nozzle starts too far from the true centre.
 
@@ -247,9 +247,9 @@ Continuous axis sweeps (like Klipper's bed mesh `rapid_scan` method). Coarse bid
 
 Initial axis sweep, then circles at a fixed radius while passes are accepted. After a rejected pass the radius steps down by `circle_shrink`. Search stops at `circle_radius_min` when the correction is within tolerance, or immediately on reject at min radius. Does not stop on harmonic convergence alone at larger radii.
 
-Fastest strategy, and very accurate, but it can be **sensitive to larger initial misalignment** - `sensor_x`/`sensor_y` and `max_jog` must put the nozzle close to the true centre, and the misalignment of the nozzle itself must be small.
+Fastest strategy, and very accurate. However, it can be **sensitive to larger initial misalignment** - `sensor_x`/`sensor_y` must put the nozzle close to the true centre.
 
-Worth trying, but may need some tuning to make it reliable.
+> `circle_harmonic` does many very small moves, don't panic if you hear your printer vibrating.
 
 ### Debug scan (`strategy: debug_scan`)
 
