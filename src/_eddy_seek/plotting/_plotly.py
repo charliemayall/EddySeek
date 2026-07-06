@@ -327,8 +327,10 @@ def _render_table(table: dict[str, Any]) -> str:
     parts.append("</tr></thead><tbody>")
     for row in rows:
         parts.append("<tr>")
-        for key in keys:
-            parts.append(f"<td>{html_module.escape(str(row.get(key, '')))}</td>")
+        parts.extend(
+            [f"<td>{html_module.escape(str(row.get(key, '')))}</td>" for key in keys]
+        )
+
         parts.append("</tr>")
     parts.append("</tbody></table>")
     return "".join(parts)

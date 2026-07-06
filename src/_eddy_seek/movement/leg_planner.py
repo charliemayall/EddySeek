@@ -167,10 +167,14 @@ def plan_axis_legs(
     legs: list[tuple[Offset, Offset]] = []
     for cross_delta in cross_offsets:
         cross = cross_center + cross_delta
-        for reverse in (False, True):
-            legs.append(
+        # for reverse in (False, True):
+        legs.extend(
+            [
                 traversal_endpoints(axis, lo, hi, cross, overscan, reverse=reverse)
-            )
+                for reverse in (False, True)
+            ]
+        )
+
     return legs
 
 
@@ -194,10 +198,13 @@ def plan_grid_legs(
             traverses = (True, False)
         else:
             traverses = (False, True)
-        for reverse in traverses:
-            legs.append(
+        legs.extend(
+            [
                 traversal_endpoints(axis, lo, hi, cross, overscan, reverse=reverse)
-            )
+                for reverse in traverses
+            ]
+        )
+
     return legs
 
 
