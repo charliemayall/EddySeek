@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, overload
+from typing import TYPE_CHECKING, Self, overload
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer
@@ -57,57 +57,47 @@ class Direction(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
-class Offset:
-    """Represent an XY offset (mm)"""
+class _XYComponents:
+    """Shared XY tuple math for Offset and Position."""
 
     x: float
     y: float
 
     @classmethod
-    def zero(cls) -> Offset:
+    def zero(cls) -> Self:
         return cls(0.0, 0.0)
 
     @classmethod
-    def from_axis(cls, axis: Axis, along: float, cross: float) -> Offset:
+    def from_axis(cls, axis: Axis, along: float, cross: float) -> Self:
         if axis is Axis.X:
             return cls(along, cross)
         return cls(cross, along)
 
     @classmethod
-    def from_pair(cls, pair: Sequence[float]) -> Offset:
+    def from_pair(cls, pair: Sequence[float]) -> Self:
         return cls(float(pair[0]), float(pair[1]))
-
-    def __add__(self, other: Offset) -> Offset:
-        if not isinstance(other, Offset):
-            return NotImplemented
-        return Offset(self.x + other.x, self.y + other.y)
-
-    def __sub__(self, other: Offset) -> Offset:
-        if not isinstance(other, Offset):
-            return NotImplemented
-        return Offset(self.x - other.x, self.y - other.y)
 
     def abs_components(self) -> Offset:
         return Offset(abs(self.x), abs(self.y))
 
-    def with_x(self, x: float) -> Offset:
-        return Offset(x, self.y)
+    def with_x(self, x: float) -> Self:
+        return type(self)(x, self.y)
 
-    def with_y(self, y: float) -> Offset:
-        return Offset(self.x, y)
+    def with_y(self, y: float) -> Self:
+        return type(self)(self.x, y)
 
-    def with_axis(self, axis: Axis, value: float) -> Offset:
+    def with_axis(self, axis: Axis, value: float) -> Self:
         if axis is Axis.X:
             return self.with_x(value)
         return self.with_y(value)
 
-    def clamp(self, max_x: float, max_y: float) -> Offset:
-        return Offset(
+    def clamp(self, max_x: float, max_y: float) -> Self:
+        return type(self)(
             max(-max_x, min(max_x, self.x)),
             max(-max_y, min(max_y, self.y)),
         )
 
-    def distance_to(self, other: Offset) -> float:
+    def distance_to(self, other: Self) -> float:
         return math.hypot(self.x - other.x, self.y - other.y)
 
     def to_gcode(self) -> str:
@@ -121,34 +111,32 @@ class Offset:
             "y": round(self.y, _ROUND_PRECISION),
         }
 
-    def to_delta_str(self) -> str:
-        return f"{CHAR_DELTA}X={round(self.x, _ROUND_PRECISION)} {CHAR_DELTA}Y={round(self.y, _ROUND_PRECISION)}"
-
     @property
     def seq(self) -> tuple[float, float]:
         return self.x, self.y
 
 
 @dataclass(frozen=True, slots=True)
-class Position:
+class Offset(_XYComponents):
+    """Represent an XY offset (mm)"""
+
+    def __add__(self, other: Offset) -> Offset:
+        if not isinstance(other, Offset):
+            return NotImplemented
+        return Offset(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other: Offset) -> Offset:
+        if not isinstance(other, Offset):
+            return NotImplemented
+        return Offset(self.x - other.x, self.y - other.y)
+
+    def to_delta_str(self) -> str:
+        return f"{CHAR_DELTA}X={round(self.x, _ROUND_PRECISION)} {CHAR_DELTA}Y={round(self.y, _ROUND_PRECISION)}"
+
+
+@dataclass(frozen=True, slots=True)
+class Position(_XYComponents):
     """Absolute machine XY coordinates (mm)."""
-
-    x: float
-    y: float
-
-    @classmethod
-    def zero(cls) -> Position:
-        return cls(0.0, 0.0)
-
-    @classmethod
-    def from_axis(cls, axis: Axis, along: float, cross: float) -> Position:
-        if axis is Axis.X:
-            return cls(along, cross)
-        return cls(cross, along)
-
-    @classmethod
-    def from_pair(cls, pair: Sequence[float]) -> Position:
-        return cls(float(pair[0]), float(pair[1]))
 
     @classmethod
     def from_toolhead(cls, printer: Printer) -> Position:
@@ -172,51 +160,6 @@ class Position:
         if isinstance(other, Offset):
             return Position(self.x - other.x, self.y - other.y)
         return NotImplemented
-
-    def abs_components(self) -> Offset:
-        return Offset(abs(self.x), abs(self.y))
-
-    def with_x(self, x: float) -> Position:
-        return Position(x, self.y)
-
-    def with_y(self, y: float) -> Position:
-        return Position(self.x, y)
-
-    def with_axis(self, axis: Axis, value: float) -> Position:
-        if axis is Axis.X:
-            return self.with_x(value)
-        return self.with_y(value)
-
-    def clamp(self, max_x: float, max_y: float) -> Position:
-        return Position(
-            max(-max_x, min(max_x, self.x)),
-            max(-max_y, min(max_y, self.y)),
-        )
-
-    def distance_to(self, other: Position) -> float:
-        return math.hypot(self.x - other.x, self.y - other.y)
-
-    def to_gcode(self) -> str:
-        """
-        Return a G-code string for this position.
-
-        Example:
-        >>> Position(10.0, 20.0).to_gcode()
-        'X=10.0000 Y=20.0000'
-        """
-        return (
-            f"X={round(self.x, _ROUND_PRECISION)} Y={round(self.y, _ROUND_PRECISION)}"
-        )
-
-    def to_dict(self) -> dict[str, float]:
-        return {
-            "x": round(self.x, _ROUND_PRECISION),
-            "y": round(self.y, _ROUND_PRECISION),
-        }
-
-    @property
-    def seq(self) -> tuple[float, float]:
-        return self.x, self.y
 
 
 def search_box(
