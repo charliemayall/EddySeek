@@ -11,7 +11,6 @@ Shared Plotly builders for session record primitives.
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -86,15 +85,6 @@ def pass_record_stats(record: _Record) -> PassGroupStats:
     raise TypeError(f"unsupported pass record type: {type(record).__name__}")
 
 
-def group_by_pass(records: Sequence[_Record]) -> dict[int, list[_Record]]:
-    passes: dict[int, list[_Record]] = defaultdict(list)
-    for record in records:
-        pass_num = record_pass_num(record)
-        if pass_num is not None:
-            passes[pass_num].append(record)
-    return passes
-
-
 def pass_group_stats(group: Sequence[Any]) -> PassGroupStats:
     for record in group:
         if isinstance(record, (SweepCentroidPassRecord, CentroidPassRecord)):
@@ -114,22 +104,6 @@ def final_result_offset(records: Sequence[_Record]) -> Offset:
             best_pass = pass_num
             best_result = move.result
     return best_result
-
-
-def final_result_marker(passes: dict[int, list[Any]]) -> MarkerRecord | None:
-    if not passes:
-        return None
-    last_pass = max(passes)
-    for record in passes[last_pass]:
-        move = getattr(record, "move", None)
-        if move is not None:
-            return MarkerRecord(
-                last_pass,
-                f"pass {last_pass} result",
-                move.result,
-                "star",
-            )
-    return None
 
 
 def plot_filename(
