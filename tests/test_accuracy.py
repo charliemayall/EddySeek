@@ -8,6 +8,7 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,6 +17,18 @@ from fakes import FakeGcmd, FakePrinter, ok_seek_result
 from _eddy_seek.accuracy_test import run_accuracy_test
 from _eddy_seek.common import Offset
 from _eddy_seek.config import SeekConfig
+from _eddy_seek.plotting.accuracy import (
+    write_accuracy_comparison_plot,
+    write_accuracy_plot,
+)
+from _eddy_seek.plotting.accuracy_io import (
+    load_accuracy_run,
+    parse_accuracy_html,
+    parse_accuracy_json,
+    parse_offset_cell,
+)
+from _eddy_seek.plotting.artifacts import write_figure
+from _eddy_seek.plotting.primitives import AccuracyRepeatRecord
 from _eddy_seek.session import compute_accuracy_stats
 
 
@@ -83,3 +96,138 @@ def test_run_accuracy_test_records_reference_relative_offsets_with_mock():
     assert recorded[0].y == pytest.approx(true_center.y)
     assert recorded[1].x == pytest.approx(true_center.x)
     assert recorded[1].y == pytest.approx(true_center.y)
+
+
+def test_parse_offset_cell():
+    offset = parse_offset_cell("(+0.0123, -0.0045)")
+    assert offset.x == pytest.approx(0.0123)
+    assert offset.y == pytest.approx(-0.0045)
+
+
+def test_parse_accuracy_json(tmp_path):
+    payload = {
+        "strategy": "sweep_centroid",
+        "offsets": [[0.01, 0.02], [-0.02, 0.01], [0.0, -0.01]],
+        "durations_s": [4.2, 3.8, 4.0],
+    }
+    path = tmp_path / "run.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    strategy, records, durations = parse_accuracy_json(path)
+    assert strategy == "sweep_centroid"
+    assert len(records) == 3
+    assert records[0].offset == Offset(0.01, 0.02)
+    assert durations == pytest.approx([4.2, 3.8, 4.0])
+
+
+def test_parse_accuracy_html_round_trip(requires_plotly, plot_tmp):
+    tmp_path, _, write_at = plot_tmp
+    records = (
+        AccuracyRepeatRecord(1, Offset(0.01, 0.02)),
+        AccuracyRepeatRecord(2, Offset(-0.02, 0.01)),
+        AccuracyRepeatRecord(3, Offset(0.0, -0.01)),
+    )
+    path = write_figure(
+        tmp_path,
+        write_accuracy_plot(repeats=list(records)),
+        write_at=write_at,
+        suffix="accuracy",
+        run_label="accuracy",
+        run_id="abcd1234",
+    )
+    assert path is not None
+    parsed = parse_accuracy_html(path)
+    assert len(parsed) == 3
+    assert parsed[0].offset.x == pytest.approx(0.01)
+    assert parsed[2].offset.y == pytest.approx(-0.01)
+
+
+def test_load_accuracy_run_json_file(tmp_path):
+    path = tmp_path / "run.json"
+    path.write_text(
+        json.dumps(
+            {"strategy": "circle_harmonic", "offsets": [[0.0, 0.0], [0.1, 0.0]]}
+        ),
+        encoding="utf-8",
+    )
+    strategy, records, durations = load_accuracy_run(path)
+    assert strategy == "circle_harmonic"
+    assert len(records) == 2
+    assert durations is None
+
+
+def test_write_accuracy_comparison_plot(requires_plotly):
+    runs = [
+        (
+            "sweep_centroid",
+            [
+                AccuracyRepeatRecord(1, Offset(0.0, 0.0)),
+                AccuracyRepeatRecord(2, Offset(0.05, 0.02)),
+                AccuracyRepeatRecord(3, Offset(-0.01, -0.03)),
+            ],
+            [4.0, 4.2, 3.9],
+        ),
+        (
+            "circle_harmonic",
+            [
+                AccuracyRepeatRecord(1, Offset(0.01, -0.01)),
+                AccuracyRepeatRecord(2, Offset(0.02, 0.0)),
+                AccuracyRepeatRecord(3, Offset(0.0, 0.02)),
+            ],
+            None,
+        ),
+    ]
+    fig = write_accuracy_comparison_plot(runs=runs)
+    assert fig is not None
+    assert fig.layout.xaxis.range == fig.layout.xaxis2.range
+    assert fig.layout.yaxis.range == fig.layout.yaxis2.range
+    header = fig.layout.meta["eddy_header"]
+    assert header["title"].startswith("EDDY_SEEK_ACCURACY comparison")
+    assert len(header["tables"][0]["rows"]) == 2
+
+
+def test_accuracy_compare_cli(requires_plotly, plot_tmp, tmp_path):
+    from _eddy_seek.accuracy_compare import main
+
+    results_dir, _, write_at = plot_tmp
+    records_a = (
+        AccuracyRepeatRecord(1, Offset(0.0, 0.0)),
+        AccuracyRepeatRecord(2, Offset(0.05, 0.02)),
+    )
+    records_b = (
+        AccuracyRepeatRecord(1, Offset(0.01, -0.01)),
+        AccuracyRepeatRecord(2, Offset(0.02, 0.0)),
+    )
+    path_a = write_figure(
+        results_dir,
+        write_accuracy_plot(repeats=list(records_a)),
+        write_at=write_at,
+        suffix="accuracy",
+        run_label="accuracy",
+        run_id="aaaa1111",
+    )
+    path_b = write_figure(
+        results_dir,
+        write_accuracy_plot(repeats=list(records_b)),
+        write_at=write_at,
+        suffix="accuracy",
+        run_label="accuracy",
+        run_id="bbbb2222",
+    )
+    assert path_a is not None and path_b is not None
+    out = tmp_path / "compare.html"
+    assert (
+        main(
+            [
+                path_a,
+                path_b,
+                "--labels",
+                "sweep_centroid",
+                "circle_harmonic",
+                "-o",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    assert out.is_file()
+    assert "EDDY_SEEK_ACCURACY comparison" in out.read_text(encoding="utf-8")
