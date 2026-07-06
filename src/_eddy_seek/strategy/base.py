@@ -96,8 +96,8 @@ class SeekStrategy(ABC):
 
         return best, passes_run
 
-    @abstractmethod
-    def _before_pass(self, ctx: SeekSession, pass_num: int) -> None: ...
+    def _before_pass(self, ctx: SeekSession, pass_num: int) -> None:
+        return None
 
     def should_check_divergence(self, ctx: SeekSession, pass_num: int) -> bool:
         return True
