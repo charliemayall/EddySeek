@@ -12,26 +12,37 @@ from fakes import CommandError, FakeGcmd, FakeKlipperConfig
 from pytest import raises
 
 from _eddy_seek.common import session_artifact_run_dir
-from _eddy_seek.config import SeekConfig, load_seek_config
+from _eddy_seek.config import (
+    SeekConfig,
+    _field_name_for_key,
+    _parse_runtime_value,
+    load_seek_config,
+)
+
+
+def _runtime_value_ok(key: str, value) -> bool:
+    try:
+        _parse_runtime_value(_field_name_for_key(key), key, value)
+        return True
+    except ValueError:
+        return False
 
 
 def test_validate_var():
-    cfg = SeekConfig()
-
-    assert cfg._var_ok("max_jog_x", 5.0) is True
-    assert cfg._var_ok("max_jog_y", 5.0) is True
-    assert cfg._var_ok("tolerance", 0.1) is True
-    assert cfg._var_ok("dwell_time", 0.5) is True
-    assert cfg._var_ok("jog_speed", 10.0) is True
-    assert cfg._var_ok("search_for", "max") is True
-    assert cfg._var_ok("strategy", "circle_harmonic") is True
-    assert cfg._var_ok("max_passes", 6) is True
-    assert cfg._var_ok("save_session_trace", True) is True
-    assert cfg._var_ok("save_plots", True) is True
-    assert cfg._var_ok("save_session_trace", "false") is True
-    assert cfg._var_ok("search_for", "bogus") is False
-    assert cfg._var_ok("strategy", "bogus") is False
-    assert cfg._var_ok("max_passes", -1) is False
+    assert _runtime_value_ok("max_jog_x", 5.0) is True
+    assert _runtime_value_ok("max_jog_y", 5.0) is True
+    assert _runtime_value_ok("tolerance", 0.1) is True
+    assert _runtime_value_ok("dwell_time", 0.5) is True
+    assert _runtime_value_ok("jog_speed", 10.0) is True
+    assert _runtime_value_ok("search_for", "max") is True
+    assert _runtime_value_ok("strategy", "circle_harmonic") is True
+    assert _runtime_value_ok("max_passes", 6) is True
+    assert _runtime_value_ok("save_session_trace", True) is True
+    assert _runtime_value_ok("save_plots", True) is True
+    assert _runtime_value_ok("save_session_trace", "false") is True
+    assert _runtime_value_ok("search_for", "bogus") is False
+    assert _runtime_value_ok("strategy", "bogus") is False
+    assert _runtime_value_ok("max_passes", -1) is False
 
 
 def test_cross_passes_must_be_odd():

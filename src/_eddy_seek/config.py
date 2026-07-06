@@ -161,13 +161,6 @@ class SeekConfig:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
-    def _var_ok(self, key: str, value: Any) -> bool:
-        try:
-            _parse_runtime_value(_field_name_for_key(key), key, value)
-            return True
-        except ValueError:
-            return False
-
     def apply_runtime_set(self, gcmd: GCodeCommand) -> list[str]:
         """
         Apply ``EDDY_SEEK_SET`` parameters in place.
