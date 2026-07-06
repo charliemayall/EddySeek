@@ -122,7 +122,7 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | ----------------------- | ------- | ------------------------------------------------------------------- |
 | `circle_radius_start`   | `2`     | First circle radius (mm)                                            |
 | `circle_radius_min`     | `0.5`   | Smallest circle radius (mm)                                         |
-| `circle_shrink`         | `0.4`   | Radius multiplier when stepping down a tier after a rejected pass   |
+| `circle_shrink`         | `0.6`   | Radius multiplier when stepping down a tier after a rejected pass   |
 | `circle_arc_resolution` | `0.1`   | Arc segment length along the circle (mm)                            |
 | `circle_speed`          | `10`    | Circle trace feedrate (mm/s)                                        |
 | `noise_k`               | `1`     | SNR threshold (amplitude vs noise) for model fit                    |
@@ -229,7 +229,7 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 `EDDY_SEEK_SET STRATEGY=centroid TOLERANCE=0.05` - overrides last until firmware restart. Run bare `EDDY_SEEK_SET` to print current values.
 
-`EDDY_SEEK_ACCURACY REPEATS=5` - runs full seeks (default 3, min 2, max 50) and prints σ / max scatter. Use to compare `dwell_time`, `tolerance`, or `strategy`.
+`EDDY_SEEK_ACCURACY REPEATS=5` - runs full seeks (default 3, min 2, max 50) and prints σ / max scatter.
 
 ---
 
