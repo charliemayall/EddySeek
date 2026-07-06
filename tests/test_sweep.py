@@ -234,7 +234,7 @@ def test_sweep_axis_coarse_uses_settings_cross_passes():
     ]
 
     with patch(
-        "_eddy_seek.movement.leg_planner.plan_axis_legs",
+        "_eddy_seek.movement.sweep.plan_axis_legs",
         return_value=[],
     ) as plan_legs:
         sweep_axis(
@@ -262,7 +262,7 @@ def test_sweep_axis_fine_phase_uses_single_cross_pass():
     ]
 
     with patch(
-        "_eddy_seek.movement.leg_planner.plan_axis_legs",
+        "_eddy_seek.movement.sweep.plan_axis_legs",
         return_value=[],
     ) as plan_legs:
         sweep_axis(
@@ -296,7 +296,7 @@ def test_axis_sweep_centroid_builds_profiles_and_centroid():
     ]
 
     with patch(
-        "_eddy_seek.movement.leg_planner.sweep_axis",
+        "_eddy_seek.movement.sweep.sweep_axis",
         side_effect=[samples_x, samples_y],
     ):
         result = axis_sweep_centroid(
@@ -332,7 +332,7 @@ def test_axis_sweep_centroid_raises_when_too_few_samples():
 
     with (
         patch(
-            "_eddy_seek.movement.leg_planner.sweep_axis",
+            "_eddy_seek.movement.sweep.sweep_axis",
             side_effect=[samples_x, samples_y],
         ),
         raises(RuntimeError, match="test collected 10 in-range samples"),

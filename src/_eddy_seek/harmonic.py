@@ -41,7 +41,8 @@ def circle_arc_legs(
     radius: float,
     resolution: float,
 ) -> list[tuple[Offset, Offset]]:
-    """One revolution as short chords; segment count from arc length / ``resolution``.
+    """
+    One revolution as short chords. Segment count from ``arc length`` / ``resolution``.
 
     Same rule as Klipper ``[gcode_arcs]``: ``floor(circumference / resolution)``,
     minimum 3 segments.

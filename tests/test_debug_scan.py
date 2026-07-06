@@ -10,7 +10,7 @@ import pytest
 
 from _eddy_seek.common import Axis, Offset
 from _eddy_seek.movement.handler import MotionSample
-from _eddy_seek.movement.leg_planner import plan_grid_legs, y_lines
+from _eddy_seek.movement.paths import plan_grid_legs, y_lines
 from _eddy_seek.optimizer import bin_frequencies, peak_bin_center
 
 
