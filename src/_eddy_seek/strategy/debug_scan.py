@@ -125,7 +125,7 @@ def _record_debug_scan(
     x_centers: list[float],
     y_centers: list[float],
 ) -> None:
-    ctx.recorder.record_if_active(
+    ctx.recorder.record(
         HeatmapRecord(
             move=PassMove.compute(center, result),
             bounds=Bounds.from_box(box),

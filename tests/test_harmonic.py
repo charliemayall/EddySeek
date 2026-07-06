@@ -99,7 +99,7 @@ def _plateau_ctx(**overrides):
         tolerance=0.05,
         **overrides,
     )
-    ctx.recorder.record_if_active = MagicMock()
+    ctx.recorder.record = MagicMock()
     return ctx
 
 

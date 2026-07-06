@@ -603,7 +603,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         *,
         skipped: Offset | None = None,
     ) -> None:
-        ctx.recorder.record_if_active(
+        ctx.recorder.record(
             CircleBootstrapRecord(
                 pass_num=pass_num,
                 move=PassMove.compute(center, result),
@@ -628,7 +628,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         rejected: bool,
         reject_reasons: str = "",
     ) -> None:
-        ctx.recorder.record_if_active(
+        ctx.recorder.record(
             CircleHarmonicPassRecord(
                 pass_num=pass_num,
                 trace_center=trace_center,

@@ -161,7 +161,7 @@ def _record_sweep_centroid_pass(
     samples: list[MotionSample],
     box: tuple[float, float, float, float],
 ) -> None:
-    ctx.recorder.record_if_active(
+    ctx.recorder.record(
         SweepCentroidPassRecord(
             pass_num=pass_num,
             phase=phase.value,

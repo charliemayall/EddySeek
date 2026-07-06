@@ -137,7 +137,7 @@ def _record_centroid_pass(
     moved: Offset,
     probes: list[tuple[Offset, float]],
 ) -> None:
-    ctx.recorder.record_if_active(
+    ctx.recorder.record(
         CentroidPassRecord(
             pass_num=pass_num,
             move=PassMove.compute(center, result),
