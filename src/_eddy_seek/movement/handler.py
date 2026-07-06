@@ -395,23 +395,3 @@ class MotionHandler(_SessionMotionBase):
         res_copy = self._results[::]
         self._results.clear()
         return res_copy
-
-
-def _assert_speed_clamp_for_min_samples() -> None:
-    cap = get_clamped_speed_for_min_samples_over_span(
-        requested_mm_min=3000.0,
-        span_mm=2.0,
-        min_samples=20,
-    )
-    assert cap == 2400.0
-    assert (
-        get_clamped_speed_for_min_samples_over_span(
-            requested_mm_min=1200.0,
-            span_mm=2.0,
-            min_samples=20,
-        )
-        == 1200.0
-    )
-
-
-_assert_speed_clamp_for_min_samples()

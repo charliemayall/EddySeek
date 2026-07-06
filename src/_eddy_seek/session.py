@@ -274,10 +274,6 @@ class SeekSession:
                 write_at=self.artifact_write_at,
             )
 
-        logger.info(
-            f"eddy_seek: session {self.session_id} finished "
-            f"status={result.status} probes={len(self.recorder.to_probe_dicts())}"
-        )
         return result
 
     def _get_single_sample(self, probe: ProbeRecord) -> None:

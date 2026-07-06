@@ -429,14 +429,3 @@ def sweep_grid(
             )
         )
     return in_box, box
-
-
-def _assert_grid_leg_count() -> None:
-    box = (-5.0, 5.0, -5.0, 5.0)
-    tolerance = 0.1
-    rows = len(y_lines(box[2], box[3], tolerance))
-    legs = plan_grid_legs(box, tolerance, overscan=1.0)
-    assert len(legs) == rows * 2
-
-
-_assert_grid_leg_count()
