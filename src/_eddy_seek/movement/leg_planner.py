@@ -11,6 +11,7 @@ Leg geometry, sweep/grid path planning, and session capture orchestration.
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, overload
@@ -77,6 +78,8 @@ class MotionCapture:
         speed_mm_min: float,
         *,
         flat: Literal[True] = True,
+        min_samples: int | None = None,
+        span_mm: float | None = None,
     ) -> list[MotionSample]: ...
 
     @overload
@@ -86,6 +89,8 @@ class MotionCapture:
         speed_mm_min: float,
         *,
         flat: Literal[False],
+        min_samples: int | None = None,
+        span_mm: float | None = None,
     ) -> list[list[MotionSample]]: ...
 
     def collect_legs(
@@ -94,7 +99,15 @@ class MotionCapture:
         speed_mm_min: float,
         *,
         flat: bool = True,
+        min_samples: int | None = None,
+        span_mm: float | None = None,
     ) -> list[MotionSample] | list[list[MotionSample]]:
+        if min_samples is not None:
+            speed_mm_min = get_clamped_speed_for_min_samples_over_span(
+                requested_mm_min=speed_mm_min,
+                span_mm=span_mm if span_mm is not None else _min_leg_span_mm(legs),
+                min_samples=min_samples,
+            )
         self.handler.begin(self.origin)
         self.handler.run_capture_legs(legs, speed_mm_min)
         if self.sync_offset is not None:
@@ -102,6 +115,12 @@ class MotionCapture:
         if flat:
             return list(self.handler.collect_samples(flat=True))
         return [list(batch) for batch in self.handler.collect_samples(flat=False)]
+
+
+def _min_leg_span_mm(legs: Sequence[tuple[Offset, Offset]]) -> float:
+    if not legs:
+        return 0.0
+    return min(math.hypot(end.x - start.x, end.y - start.y) for start, end in legs)
 
 
 def effective_overscan(overscan: float) -> float:
@@ -242,16 +261,16 @@ def sweep_axis(
     if hi < lo:
         lo, hi = hi, lo
     span_mm = abs(hi - lo)
-    feedrate = get_clamped_speed_for_min_samples_over_span(
-        requested_mm_min=speed_mm_min,
-        span_mm=span_mm,
-        min_samples=settings.min_sweep_samples,
-    )
     cross_offsets = _resolve_cross(settings, phase)
     legs = plan_axis_legs(
         axis, lo, hi, cross_center, cross_offsets, settings.sweep_overscan
     )
-    samples = capture.collect_legs(legs, feedrate)
+    samples = capture.collect_legs(
+        legs,
+        speed_mm_min,
+        min_samples=settings.min_sweep_samples,
+        span_mm=span_mm,
+    )
     profile = axis_profile(samples, axis, lo, hi)
 
     logger.info(

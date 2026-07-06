@@ -32,7 +32,7 @@ from ..harmonic import (
     radial_slope,
 )
 from ..kconsole import KConsole
-from ..movement.handler import MotionSample, get_clamped_speed_for_min_samples_over_span
+from ..movement.handler import MotionSample
 from ..movement.leg_planner import (
     MotionCapture,
     SweepSettings,
@@ -385,21 +385,22 @@ class CircleHarmonicStrategy(SeekStrategy):
 
         circumference = 2 * math.pi * trace_radius
         segment_span = circumference / len(legs)
-        clamped_speed = get_clamped_speed_for_min_samples_over_span(
-            requested_mm_min=cfg.circle_speed,
-            span_mm=segment_span,
-            min_samples=MIN_SAMPLES_PER_SPAN,
-        )
         logger.info(
             f"eddy_seek: circle_harmonic pass {pass_num} "
-            f"arc_segments={len(legs)} clamped_speed={clamped_speed:.4f} mm/s"
+            f"arc_segments={len(legs)} speed={cfg.circle_speed:.4f} mm/s"
         )
 
         if cfg.circle_refresh_sweeps:
             self._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
 
         capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
-        leg_batches = capture.collect_legs(legs, clamped_speed, flat=False)
+        leg_batches = capture.collect_legs(
+            legs,
+            cfg.circle_speed,
+            flat=False,
+            min_samples=MIN_SAMPLES_PER_SPAN,
+            span_mm=segment_span,
+        )
         for i, batch in enumerate(leg_batches):
             if len(batch) < MIN_SAMPLES_PER_SPAN:
                 logger.warning(
