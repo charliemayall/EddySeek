@@ -89,7 +89,7 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | `i2c_mcu`                 | _(required)_                              | MCU name, e.g. `mcu`                                                                   |
 | `i2c_bus`                 | _(required)_                              | I2C bus, e.g. `i2c1`                                                                   |
 | `tool_count`              | `1`                                       | Number of tools                                                                        |
-| `tool_prefix`             | `T`                                       | Prefix for saved offset sections (`es_T1`, …)                                          |
+| `tool_prefix`             | `es_T`                                    | Prefix for saved offset sections (`es_T1`, …)                                          |
 | `load_tool_macro_prefix`  | `T`                                       | Prefix for load macros (`T0`, `T1`, …)                                                 |
 | `sensor_x` / `sensor_y`   | _(required)_                              | Machine XY of sensor coil; tool 0 jogs here before seeking                             |
 | `max_jog_x` / `max_jog_y` | `2.5`                                     | Max search radius from start (mm)                                                      |
@@ -113,7 +113,7 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | `sweep_fine_speed`   | `10`    | Fine sweep feedrate (mm/s)                 |
 | `sweep_overscan`     | `1.0`   | Extra travel beyond jog range (mm)         |
 | `sweep_cross_offset` | `0.3`   | Stagger between parallel sweeps (mm)       |
-| `fine_shrink`        | `0.4`   | Fine pass range multiplier (× max_jog)     |
+| `fine_shrink`        | `0.6`   | Fine pass range multiplier (× max_jog)     |
 | `min_sweep_samples`  | `20`    | Minimum profile points before centroid fit |
 
 ### `[eddy_seek]` - `strategy: circle_harmonic` options
@@ -128,6 +128,8 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | `noise_k`               | `1`     | SNR threshold (amplitude vs noise) for model fit                  |
 | `harmonic_step_gain`    | `0.15`  | Fraction of fitted offset applied each pass                       |
 | `harmonic_min_quality`  | `0.5`   | Minimum fit quality to accept a pass                              |
+| `circle_refresh_sweeps` | `False` | Re-run axis sweeps each pass instead of reusing the bootstrap ones |
+| `circle_skip_bootstrap` | `False` | Skip the initial axis-sweep bootstrap and start circling right away |
 
 > **max_jog** should be ≥ 2× your worst-case expected misalignment (per axis).Searches are unlikely to converge fully if the nozzle starts too far from the true centre.
 
