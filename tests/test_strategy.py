@@ -10,7 +10,7 @@ import math
 
 from pytest import raises
 
-from _eddy_seek.common import ConvergenceError, Offset
+from _eddy_seek.common import Offset
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.optimizer import (
     axis_weighted_centroid,
@@ -21,7 +21,12 @@ from _eddy_seek.optimizer import (
 from _eddy_seek.plotting.recorder import SessionRecorder
 from _eddy_seek.session import SeekSession, _sample_stdev
 from _eddy_seek.strategy import strategy_for
-from _eddy_seek.strategy.base import SeekStrategy, _check_pass_divergence
+from _eddy_seek.strategy.base import (
+    DivergenceError,
+    MaxPassesError,
+    SeekStrategy,
+    _check_pass_divergence,
+)
 from _eddy_seek.strategy.centroid import CentroidStrategy
 from _eddy_seek.strategy.sweep_centroid import _N_COARSE, SweepCentroidStrategy
 
@@ -117,6 +122,7 @@ def test_axis_weighted_centroid_decouples_axes():
 
 def test_check_pass_divergence_too_few_positions():
     _check_pass_divergence(
+        "test",
         [Offset.zero(), Offset(1.0, 0.0)],
         tolerance=0.1,
         pass_num=1,
@@ -125,24 +131,28 @@ def test_check_pass_divergence_too_few_positions():
 
 def test_check_pass_divergence_shrinking_corrections_ok():
     positions = [Offset.zero(), Offset(2.0, 0.0), Offset(3.0, 0.0)]
-    _check_pass_divergence(positions, tolerance=0.1, pass_num=2)
+    _check_pass_divergence("test", positions, tolerance=0.1, pass_num=2)
 
 
 def test_check_pass_divergence_raises_when_corrections_grow():
     positions = [Offset.zero(), Offset(1.0, 0.0), Offset(2.3, 0.0)]
-    with raises(RuntimeError, match="pass corrections diverging"):
-        _check_pass_divergence(positions, tolerance=0.1, pass_num=2)
+    with raises(DivergenceError, match="pass corrections diverging") as exc_info:
+        _check_pass_divergence("test", positions, tolerance=0.1, pass_num=2)
+    err = exc_info.value
+    assert err.strategy == "test"
+    assert err.pass_num == 2
+    assert err.previous == Offset(1.0, 0.0)
 
 
 def test_check_pass_divergence_skips_when_prior_correction_below_tolerance():
     positions = [Offset.zero(), Offset.zero(), Offset(1.0, 0.0)]
-    _check_pass_divergence(positions, tolerance=0.1, pass_num=2)
+    _check_pass_divergence("test", positions, tolerance=0.1, pass_num=2)
 
 
 def test_check_pass_divergence_raises_at_tolerance_boundary():
     positions = [Offset.zero(), Offset(0.1, 0.0), Offset(0.226, 0.0)]
-    with raises(RuntimeError, match="pass corrections diverging"):
-        _check_pass_divergence(positions, tolerance=0.1, pass_num=2)
+    with raises(DivergenceError, match="pass corrections diverging"):
+        _check_pass_divergence("test", positions, tolerance=0.1, pass_num=2)
 
 
 class _ScriptedStrategy(SeekStrategy):
@@ -189,7 +199,7 @@ def test_search_aborts_on_pass_divergence():
             Offset(2.3, 0.0),
         ]
     )
-    with raises(RuntimeError, match="pass corrections diverging at pass 2"):
+    with raises(DivergenceError, match="pass corrections diverging at pass 2"):
         strategy.search(session, _FakeReporter())  # type: ignore[arg-type]
 
 
@@ -202,7 +212,7 @@ def test_search_raises_when_max_passes_exhausted_without_convergence():
             Offset(0.5, 0.0),
         ]
     )
-    with raises(ConvergenceError) as exc_info:
+    with raises(MaxPassesError) as exc_info:
         strategy.search(session, _FakeReporter())  # type: ignore[arg-type]
     err = exc_info.value
     assert err.strategy == "scripted"

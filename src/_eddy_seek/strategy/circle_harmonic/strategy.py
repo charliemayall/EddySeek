@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from ...common import ConvergenceError, Offset
+from ...common import Offset
 from ...harmonic import HarmonicFit
 from ...kconsole import KConsole
 from ...movement.handler import MotionSample
@@ -26,7 +26,7 @@ from ...plotting.primitives import (
     XYCloud,
 )
 from ...session import SeekSession
-from ..base import SeekStrategy, _check_pass_divergence
+from ..base import MaxPassesError, SeekStrategy, _check_pass_divergence
 from .bootstrap import bootstrap_pass
 from .circle_pass import CirclePassOutcome, compute_circle_pass
 from .plateau import CircleHarmonicMode, PlateauState
@@ -93,7 +93,10 @@ class CircleHarmonicStrategy(SeekStrategy):
             positions.append(new)
             if not self._plateau.last_rejected:
                 _check_pass_divergence(
-                    positions, tolerance=cfg.tolerance, pass_num=pass_num
+                    self.name,
+                    positions,
+                    tolerance=cfg.tolerance,
+                    pass_num=pass_num,
                 )
             best = new
 
@@ -117,7 +120,7 @@ class CircleHarmonicStrategy(SeekStrategy):
                 )
                 break
         else:
-            raise ConvergenceError(
+            raise MaxPassesError(
                 self.name,
                 max_passes=cfg.max_passes,
                 tolerance=cfg.tolerance,

@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
-from .common import ConvergenceError, Offset, Position, session_artifact_filename
+from .common import Offset, Position, session_artifact_filename
 from .config import SeekConfig
 from .kconsole import KConsole, console_for_gcmd
 from .movement.guard import KnownKinematicLimits, clear_gcode_offset_xy
@@ -148,6 +148,8 @@ class SeekSession:
         boundaries: bool = True,
         announce_plot: bool | None = None,
     ) -> SeekSessionResult:
+        from .strategy.base import DivergenceError, MaxPassesError
+
         cfg = self.config
         console = console_for_gcmd(gcmd, self._host.seek_config)
         self._host.console = console
@@ -193,12 +195,28 @@ class SeekSession:
             status = "ok"
             offset = best
 
-        except ConvergenceError as err:
+        except MaxPassesError as err:
             error_message = str(err)
             logger.exception("eddy_seek: search failed")
             console.error(f"Seek failed: {error_message}")
             status = "failed"
             offset = None
+        except DivergenceError as err:
+            error_message = str(err)
+            logger.exception("eddy_seek: search failed")
+            console.error(f"Seek failed: {error_message}")
+            status = "failed"
+            offset = None
+            try:
+                if self._motion is not None:
+                    self._motion.jog(
+                        err.previous
+                    )  # keep at last good result, so we can try again from there.
+            except Exception:
+                logger.warning(
+                    "eddy_seek: failed to return to previous offset after divergence",
+                    exc_info=True,
+                )
         except Exception as exc:
             error_message = str(exc)
             logger.exception("eddy_seek: search failed")

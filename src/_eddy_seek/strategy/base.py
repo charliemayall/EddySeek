@@ -10,17 +10,59 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-from ..common import ConvergenceError, Offset
+from ..common import Offset
 from ..kconsole import KConsole
-from ..session import SeekSession
+
+if TYPE_CHECKING:
+    from ..session import SeekSession
 
 logger = logging.getLogger(__name__)
 
 _DIVERGE_TOL = 1.25
 
 
+class MaxPassesError(RuntimeError):
+    """Search exhausted ``max_passes`` without converging."""
+
+    def __init__(self, strategy: str, *, max_passes: int, tolerance: float) -> None:
+        self.strategy = strategy
+        self.max_passes = max_passes
+        self.tolerance = tolerance
+        super().__init__(
+            f"{strategy} hit max_passes={max_passes} "
+            f"without convergence (tolerance={tolerance:.4f} mm)"
+        )
+
+
+class DivergenceError(RuntimeError):
+    """Pass corrections diverging — later step grew vs prior step."""
+
+    def __init__(
+        self,
+        strategy: str,
+        *,
+        pass_num: int,
+        prior_correction: float,
+        correction: float,
+        previous: Offset,
+        multiplier: float = _DIVERGE_TOL,
+    ) -> None:
+        self.strategy = strategy
+        self.pass_num = pass_num
+        self.prior_correction = prior_correction
+        self.correction = correction
+        self.previous = previous
+        self.multiplier = multiplier
+        super().__init__(
+            f"{strategy} pass corrections diverging at pass {pass_num}: "
+            f"correction {correction:.4f} mm > {multiplier} × {prior_correction:.4f} mm"
+        )
+
+
 def _check_pass_divergence(
+    strategy: str,
     positions: list[Offset],
     *,
     tolerance: float,
@@ -34,9 +76,12 @@ def _check_pass_divergence(
         return
     d2 = cur.distance_to(nxt)
     if d2 > _DIVERGE_TOL * d1:
-        raise RuntimeError(
-            f"eddy_seek: pass corrections diverging at pass {pass_num}: "
-            f"correction {d2:.4f} mm > {_DIVERGE_TOL} × {d1:.4f} mm"
+        raise DivergenceError(
+            strategy,
+            pass_num=pass_num,
+            prior_correction=d1,
+            correction=d2,
+            previous=cur,
         )
 
 
@@ -71,7 +116,10 @@ class SeekStrategy(ABC):
             positions.append(new)
             if self.should_check_divergence(ctx, pass_num):
                 _check_pass_divergence(
-                    positions, tolerance=cfg.tolerance, pass_num=pass_num
+                    self.name,
+                    positions,
+                    tolerance=cfg.tolerance,
+                    pass_num=pass_num,
                 )
             best = new
 
@@ -82,7 +130,7 @@ class SeekStrategy(ABC):
                 )
                 break
         else:
-            raise ConvergenceError(
+            raise MaxPassesError(
                 self.name,
                 max_passes=cfg.max_passes,
                 tolerance=cfg.tolerance,

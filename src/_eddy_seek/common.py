@@ -35,34 +35,6 @@ class Phase(str, Enum):
     FINE = "fine"
 
 
-class ConvergenceError(RuntimeError):
-    """Search exhausted ``max_passes`` without meeting tolerance."""
-
-    def __init__(self, strategy: str, *, max_passes: int, tolerance: float) -> None:
-        self.strategy = strategy
-        self.max_passes = max_passes
-        self.tolerance = tolerance
-        super().__init__(
-            f"eddy_seek: {strategy} hit max_passes={max_passes} "
-            f"without convergence (tolerance={tolerance:.4f} mm)"
-        )
-
-
-class DivergenceError(RuntimeError):
-    """Result moved too far from previous pass."""
-
-    def __init__(
-        self, strategy: str, *, previous: Offset, result: Offset, tolerance: float
-    ) -> None:
-        self.strategy = strategy
-        self.previous = previous
-        self.result = result
-        super().__init__(
-            f"eddy_seek: {strategy} moved too far from previous pass "
-            f"({previous.x:.4f}, {previous.y:.4f}) -> ({result.x:.4f}, {result.y:.4f})"
-        )
-
-
 class Direction(str, Enum):
     PLUS = "+"
     MINUS = "-"

@@ -19,7 +19,6 @@ from ...movement.leg_planner import (
     SweepSettings,
     axis_sweep_centroid,
 )
-from ...optimizer import decoupled_centroid
 from ...session import SeekSession
 
 if TYPE_CHECKING:
@@ -39,7 +38,7 @@ def bootstrap_pass(
     half_y = cfg.max_jog_y
     capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
     settings = SweepSettings.from_config(cfg)
-    profiles = axis_sweep_centroid(
+    sweep = axis_sweep_centroid(
         capture,
         settings,
         best,
@@ -51,11 +50,9 @@ def bootstrap_pass(
         label="circle_harmonic bootstrap",
         recorder=ctx.recorder,
     )
-    strategy._x_profile = profiles.x_profile
-    strategy._y_profile = profiles.y_profile
-    result_or_none = decoupled_centroid(
-        profiles.x_profile, profiles.y_profile, cfg.search_for
-    )
+    strategy._x_profile = sweep.x_profile
+    strategy._y_profile = sweep.y_profile
+    result_or_none = sweep.centroid
 
     if result_or_none is None:
         logger.warning(
@@ -68,8 +65,8 @@ def bootstrap_pass(
             pass_num,
             best,
             best,
-            profiles.in_box,
-            profiles.box,
+            sweep.in_box,
+            sweep.box,
         )
         return best
 
@@ -83,7 +80,7 @@ def bootstrap_pass(
         pass_num,
         best,
         result,
-        profiles.in_box,
-        profiles.box,
+        sweep.in_box,
+        sweep.box,
     )
     return result
