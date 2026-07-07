@@ -25,7 +25,7 @@ from ..plotting.primitives import (
     XYCloud,
 )
 from ..session import SeekSession
-from .base import SeekStrategy
+from .base import InsufficientSamplesError, SeekStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +71,10 @@ class DebugScanStrategy(SeekStrategy):
             recorder=ctx.recorder,
         )
         if len(samples) < cfg.min_sweep_samples:
-            raise RuntimeError(
-                f"eddy_seek: debug_scan collected {len(samples)} in-range samples "
-                f"(need >= {cfg.min_sweep_samples}). "
-                "Check sensor and sweep speed."
+            raise InsufficientSamplesError(
+                self.name,
+                count=len(samples),
+                min_samples=cfg.min_sweep_samples,
             )
 
         z, x_centers, y_centers = bin_frequencies(

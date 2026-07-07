@@ -23,12 +23,14 @@ from _eddy_seek.session import SeekSession, _sample_stdev
 from _eddy_seek.strategy import strategy_for
 from _eddy_seek.strategy.base import (
     DivergenceError,
+    InsufficientSamplesError,
     MaxPassesError,
+    SeekExitKind,
     SeekStrategy,
     _check_pass_divergence,
 )
 from _eddy_seek.strategy.centroid import CentroidStrategy
-from _eddy_seek.strategy.sweep_centroid import _N_COARSE_PHASES, SweepCentroidStrategy
+from _eddy_seek.strategy.sweep_centroid import SweepCentroidStrategy
 
 
 def _test_cfg(**overrides) -> SeekConfig:
@@ -142,6 +144,7 @@ def test_check_pass_divergence_raises_when_corrections_grow():
     assert err.strategy == "test"
     assert err.pass_num == 2
     assert err.previous == Offset(1.0, 0.0)
+    assert err.exit_kind is SeekExitKind.DIVERGENCE
 
 
 def test_check_pass_divergence_skips_when_prior_correction_below_tolerance():
@@ -185,9 +188,10 @@ def test_sweep_centroid_skips_divergence_on_coarse_passes():
     session = SeekSession.__new__(SeekSession)
     session.config = _test_cfg()
     strategy = SweepCentroidStrategy()
-    for pass_num in range(1, _N_COARSE_PHASES + 1):
+    coarse_phases = session.config.coarse_phases
+    for pass_num in range(1, coarse_phases + 1):
         assert not strategy.should_check_divergence(session, pass_num)
-    assert strategy.should_check_divergence(session, _N_COARSE_PHASES + 1)
+    assert strategy.should_check_divergence(session, coarse_phases + 1)
 
 
 def test_search_aborts_on_pass_divergence():
@@ -218,3 +222,12 @@ def test_search_raises_when_max_passes_exhausted_without_convergence():
     assert err.strategy == "scripted"
     assert err.max_passes == 2
     assert err.tolerance == 0.01
+    assert err.exit_kind is SeekExitKind.MAX_PASSES
+
+
+def test_insufficient_samples_error_exit_kind():
+    err = InsufficientSamplesError("debug_scan", count=3, min_samples=20)
+    assert err.exit_kind is SeekExitKind.INSUFFICIENT_SAMPLES
+    assert err.count == 3
+    assert err.min_samples == 20
+    assert "debug_scan collected 3 in-range samples" in str(err)

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import TYPE_CHECKING
 
 from ..common import Offset
@@ -23,20 +24,42 @@ logger = logging.getLogger(__name__)
 _DIVERGE_TOL = 1.25
 
 
-class MaxPassesError(RuntimeError):
+class SeekExitKind(str, Enum):
+    """How a seek session or pass ended."""
+
+    CONVERGED = "converged"
+    MAX_PASSES = "max_passes"
+    DIVERGENCE = "divergence"
+    FLAT_RESPONSE = "flat_response"
+    INSUFFICIENT_SAMPLES = "insufficient_samples"
+
+
+class SeekExitError(RuntimeError):
+    """Expected seek failure with a shared exit kind."""
+
+    exit_kind: SeekExitKind
+
+    def __init__(self, strategy: str, message: str, *, exit_kind: SeekExitKind) -> None:
+        self.strategy = strategy
+        self.exit_kind = exit_kind
+        super().__init__(message)
+
+
+class MaxPassesError(SeekExitError):
     """Search exhausted ``max_passes`` without converging."""
 
     def __init__(self, strategy: str, *, max_passes: int, tolerance: float) -> None:
-        self.strategy = strategy
         self.max_passes = max_passes
         self.tolerance = tolerance
         super().__init__(
+            strategy,
             f"{strategy} hit max_passes={max_passes} "
-            f"without convergence (tolerance={tolerance:.4f} mm)"
+            f"without convergence (tolerance={tolerance:.4f} mm)",
+            exit_kind=SeekExitKind.MAX_PASSES,
         )
 
 
-class DivergenceError(RuntimeError):
+class DivergenceError(SeekExitError):
     """Pass corrections diverging — later step grew vs prior step."""
 
     def __init__(
@@ -49,15 +72,31 @@ class DivergenceError(RuntimeError):
         previous: Offset,
         multiplier: float = _DIVERGE_TOL,
     ) -> None:
-        self.strategy = strategy
         self.pass_num = pass_num
         self.prior_correction = prior_correction
         self.correction = correction
         self.previous = previous
         self.multiplier = multiplier
         super().__init__(
+            strategy,
             f"{strategy} pass corrections diverging at pass {pass_num}: "
-            f"correction {correction:.4f} mm > {multiplier} × {prior_correction:.4f} mm"
+            f"correction {correction:.4f} mm > {multiplier} × {prior_correction:.4f} mm",
+            exit_kind=SeekExitKind.DIVERGENCE,
+        )
+
+
+class InsufficientSamplesError(SeekExitError):
+    """Sweep collected too few in-range samples."""
+
+    def __init__(self, strategy: str, *, count: int, min_samples: int) -> None:
+        self.count = count
+        self.min_samples = min_samples
+        super().__init__(
+            strategy,
+            f"eddy_seek: {strategy} collected {count} in-range samples "
+            f"(need >= {min_samples}). "
+            "Check sensor and sweep speed.",
+            exit_kind=SeekExitKind.INSUFFICIENT_SAMPLES,
         )
 
 
