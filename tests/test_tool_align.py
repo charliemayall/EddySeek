@@ -17,7 +17,6 @@ from fakes import (
     FakePrinter,
     RecordingToolhead,
     as_config,
-    as_printer,
     as_tools,
     ok_seek_result,
 )
@@ -32,16 +31,26 @@ from _eddy_seek.tool_align import (
     align_tool_number,
     move_to_seek_start_pos,
 )
-from _eddy_seek.tools import Tool, ToolAlignConfig, apply_tool_offset
+from _eddy_seek.tools import Tool, ToolAlignConfig
 
 
 class _FakeTools:
-    def __init__(self, tools: list[Tool]) -> None:
+    def __init__(self, tools: list[Tool], printer: FakePrinter | None = None) -> None:
         self.tool_count = len(tools)
         self.tools = tools
+        self._printer = printer
 
     def get_tool(self, tool_number: int) -> Tool:
         return self.tools[tool_number]
+
+    apply_tool_offset = ToolAlignConfig.apply_tool_offset
+
+
+def _assert_set_gcode_offset(script: str, *, x: float, y: float) -> None:
+    vals = script.split(" ")
+    assert vals[0] == "SET_GCODE_OFFSET"
+    assert float(vals[1].split("=")[1]) == x
+    assert float(vals[2].split("=")[1]) == y
 
 
 def test_apply_tool_offset_sets_gcode_offset():
@@ -60,11 +69,12 @@ def test_apply_tool_offset_sets_gcode_offset():
                 manual_offset=Offset(0.0, 0.0),
                 is_calibrated=True,
             ),
-        ]
+        ],
+        printer=printer,
     )
-    tool = apply_tool_offset(as_tools(tools), as_printer(printer), 1)
+    tool = as_tools(tools).apply_tool_offset(1)
     assert tool.offset.x == 1.5
-    assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=1.500000 Y=-0.500000"]
+    _assert_set_gcode_offset(printer.gcode.scripts[0], x=1.5, y=-0.5)
 
 
 def test_apply_tool_offset_includes_manual_adjust():
@@ -77,10 +87,11 @@ def test_apply_tool_offset_includes_manual_adjust():
                 manual_offset=Offset(0.1, -0.2),
                 is_calibrated=True,
             ),
-        ]
+        ],
+        printer=printer,
     )
-    apply_tool_offset(as_tools(tools), as_printer(printer), 0)
-    assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=1.100000 Y=1.800000"]
+    as_tools(tools).apply_tool_offset(0)
+    _assert_set_gcode_offset(printer.gcode.scripts[0], x=1.1, y=1.8)
 
 
 def test_apply_tool_offset_rejects_uncalibrated():
@@ -93,10 +104,11 @@ def test_apply_tool_offset_rejects_uncalibrated():
                 manual_offset=Offset(0.0, 0.0),
                 is_calibrated=False,
             ),
-        ]
+        ],
+        printer=printer,
     )
     with raises(ValueError, match="not calibrated"):
-        apply_tool_offset(as_tools(tools), as_printer(printer), 0)
+        as_tools(tools).apply_tool_offset(0)
 
 
 def _console(gcmd: FakeGcmd | None = None) -> KConsole:
@@ -343,7 +355,7 @@ def test_align_all_tools_clears_gcode_offset_on_exit():
     ):
         align_all_tools(host, tools, gcmd, tool_count=1)  # type: ignore[arg-type]
 
-    assert printer.gcode.scripts[-1] == "SET_GCODE_OFFSET X=0.0 Y=0.0"
+    _assert_set_gcode_offset(printer.gcode.scripts[-1], x=0.0, y=0.0)
 
 
 def test_align_tool_number_clears_gcode_offset_after_load():
@@ -362,7 +374,7 @@ def test_align_tool_number_clears_gcode_offset_after_load():
             console=_console(),
             load_tool=True,
         )
-    assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=0.0 Y=0.0"]
+    _assert_set_gcode_offset(printer.gcode.scripts[0], x=0.0, y=0.0)
 
 
 def test_align_tool0_warns_when_seek_offset_exceeds_sensor_threshold():

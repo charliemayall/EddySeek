@@ -28,7 +28,7 @@ from ._eddy_seek.sensor_z import assert_sensor_z
 from ._eddy_seek.session import SeekHost, SeekSession
 from ._eddy_seek.strategy import strategy_for
 from ._eddy_seek.tool_align import align_all_tools, align_tool_number
-from ._eddy_seek.tools import ToolAlignConfig, apply_tool_offset
+from ._eddy_seek.tools import ToolAlignConfig
 
 if TYPE_CHECKING:
     from klippy.extras.configfile import (  # pyright: ignore[reportMissingModuleSource]
@@ -404,7 +404,7 @@ class EddySeek(SeekHost):
         logger.info(f"eddy_seek: EDDY_SEEK_APPLY_OFFSET tool={tool_number}")
         console = self.refresh_console(gcmd)
         try:
-            tool = apply_tool_offset(self._tools, self.printer, tool_number)
+            tool = self._tools.apply_tool_offset(tool_number)
         except ValueError as exc:
             console.warn(str(exc))
             return

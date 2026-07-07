@@ -19,7 +19,6 @@ from .common import Offset, Position
 
 if TYPE_CHECKING:
     from klippy.extras.configfile import ConfigWrapper, PrinterConfig
-    from klippy.klippy import Printer
 
 
 logger = logging.getLogger(__name__)
@@ -150,6 +149,25 @@ class ToolAlignConfig:
         gcode = self._printer.lookup_object("gcode")
         gcode.run_script_from_command(macro)
 
+    def apply_tool_offset(self, tool_number: int) -> Tool:
+        """Apply a calibrated tool's stored XY offset via ``SET_GCODE_OFFSET``."""
+        try:
+            tool = self.get_tool(tool_number)
+        except IndexError as exc:
+            raise ValueError(str(exc)) from exc
+        if not tool.is_calibrated:
+            raise ValueError(
+                f"Tool {tool_number} is not calibrated, and you are trying to apply an offset."
+            )
+        eff = tool.effective_offset
+        logger.info(
+            f"eddy_seek: applying tool {tool_number} effective offset "
+            f"({eff.x:.6f}, {eff.y:.6f})"
+        )
+        gcode = self._printer.lookup_object("gcode")
+        gcode.run_script_from_command(f"SET_GCODE_OFFSET {eff.to_gcode()}")
+        return tool
+
     def update_tool(self, tool: Tool) -> None:
         self.tools[tool.tool_number] = tool
 
@@ -174,27 +192,3 @@ class ToolAlignConfig:
         if not main_config.has_section(self.section_name(tool_number)):
             return Tool.create_default(tool_number)
         return Tool.load(main_config, self.tool_prefix, tool_number)
-
-
-def apply_tool_offset(
-    tools: ToolAlignConfig,
-    printer: Printer,
-    tool_number: int,
-) -> Tool:
-    """Apply a calibrated tool's stored XY offset via ``SET_GCODE_OFFSET``."""
-    try:
-        tool = tools.get_tool(tool_number)
-    except IndexError as exc:
-        raise ValueError(str(exc)) from exc
-    if not tool.is_calibrated:
-        raise ValueError(
-            f"Tool {tool_number} is not calibrated, and you are trying to apply an offset."
-        )
-    eff = tool.effective_offset
-    logger.info(
-        f"eddy_seek: applying tool {tool_number} effective offset "
-        f"({eff.x:.6f}, {eff.y:.6f})"
-    )
-    gcode = printer.lookup_object("gcode")
-    gcode.run_script_from_command(f"SET_GCODE_OFFSET X={eff.x:.6f} Y={eff.y:.6f}")
-    return tool

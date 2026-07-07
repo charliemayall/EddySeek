@@ -116,6 +116,7 @@ class _Vector2(ABC):
         return math.hypot(self.x - other.x, self.y - other.y)
 
     def to_gcode(self) -> str:
+        """Return X=0.000000 Y=0.000000 format for G-code."""
         return (
             f"X={round(self.x, _ROUND_PRECISION)} Y={round(self.y, _ROUND_PRECISION)}"
         )
