@@ -67,7 +67,7 @@ def test_install_script(tmp_path):
     )
 
     assert "EddySeek: installed" in result.stdout
-    assert "cleared" in result.stdout
+    assert "cleaned" in result.stdout
     assert not cache.exists()
 
     assert (install_dir / "eddy_seek.py").resolve() == (

@@ -16,7 +16,8 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, overload
 
-from klippy.klippy import Reactor
+if TYPE_CHECKING:
+    from klippy.klippy import Reactor
 
 if TYPE_CHECKING:
     from typing import Self

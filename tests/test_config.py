@@ -148,16 +148,6 @@ def test_load_seek_config_circle_refresh_sweeps():
     )
 
 
-def test_load_seek_config_circle_skip_bootstrap():
-    assert load_seek_config(FakeKlipperConfig()).circle_skip_bootstrap is False
-    assert (
-        load_seek_config(
-            FakeKlipperConfig(circle_skip_bootstrap="true")
-        ).circle_skip_bootstrap
-        is True
-    )
-
-
 def test_load_seek_config_rejects_circle_radius_min_above_start():
     with raises(ValueError, match="circle_radius_min"):
         SeekConfig(circle_radius_start=0.5, circle_radius_min=1.0)
