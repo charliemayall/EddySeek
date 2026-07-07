@@ -69,6 +69,15 @@ def test_console_plot_saved():
     assert gcmd.raw == [f"echo: 📊 Plot saved: {plot_path}"]
 
 
+def test_console_warn_plot_missing():
+    gcmd = FakeGcmd()
+    console = KConsole(gcmd, SeekConfig())  # pyright: ignore[reportArgumentType]
+    console.warn_plot_missing()
+    assert len(gcmd.raw) == 1
+    assert gcmd.raw[0].startswith("echo: ")
+    assert "save_plots is enabled but no plot was written" in gcmd.raw[0]
+
+
 def test_console_stored_on_host():
     class _Host:
         def __init__(self) -> None:

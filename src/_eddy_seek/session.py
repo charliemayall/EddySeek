@@ -310,10 +310,7 @@ class SeekSession:
             if show_plot_saved:
                 console.plot_saved(session_plot_path)
         elif cfg.save_plots and status == "ok":
-            console.warn(
-                "save_plots is enabled but no plot was written (is plotly installed?)"
-            )
-            logger.warning("eddy_seek: save_plots enabled but no plot was written")
+            console.warn_plot_missing()
         return session_plot_path
 
     def _get_single_sample(self, probe: ProbeRecord) -> None:

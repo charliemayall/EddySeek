@@ -84,9 +84,7 @@ def _announce_plot_result(
     if result.plot_path is not None:
         console.plot_saved(result.plot_path)
     elif host.seek_config.save_plots and result.status == "ok":
-        console.warn(
-            "save_plots is enabled but no plot was written (is plotly installed?)"
-        )
+        console.warn_plot_missing()
 
 
 def align_tool(

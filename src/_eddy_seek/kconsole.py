@@ -83,6 +83,13 @@ class KConsole:
         """Report a saved plot with its full resolved path."""
         self.info(f"{ConsoleSymbols.PLOT} Plot saved: {Path(plot_path)}")
 
+    def warn_plot_missing(self) -> None:
+        """Warn when save_plots is on but no plot was produced."""
+        self.warn(
+            "save_plots is enabled but no plot was written (is plotly installed?)"
+        )
+        logger.warning("eddy_seek: save_plots enabled but no plot was written")
+
     def warn(self, msg: str) -> None:
         """
         Prints a warning message with this format:

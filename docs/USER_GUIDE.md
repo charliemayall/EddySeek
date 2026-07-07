@@ -223,7 +223,7 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 | `EDDY_SEEK_RESET`               | Clear capture buffer                         |
 | `EDDY_SEEK_SET`                 | Override settings until restart              |
 | `EDDY_SEEK_START`               | XY search from current position              |
-| `EDDY_SEEK_ACCURACY`            | Repeat alignment and report repeatability    |
+| `EDDY_SEEK_ACCURACY REPEATS=n`  | Repeat alignment (default 3, min 2, max 50) and report repeatability |
 | `EDDY_SEEK_TOOL TOOL=n`         | Align one tool (caller loads the tool)       |
 | `EDDY_SEEK_TOOL TOOL=n REPEATS=3` | Align with 3 seeks averaged per tool         |
 | `EDDY_SEEK_TOOLS`               | Align all tools                              |
