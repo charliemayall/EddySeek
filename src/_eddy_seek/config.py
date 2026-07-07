@@ -371,10 +371,6 @@ def load_seek_config(config: ConfigWrapper) -> SeekConfig:
                 values[name] = config.getfloat(name, default)
             else:
                 values[name] = config.get(name, default)
-        if config.getboolean("save_sweep_plots", False) and not _config_option_set(
-            config, "save_plots"
-        ):
-            values["save_plots"] = True  # legacy key; save_plots wins if both set
         cfg = SeekConfig(**values)
         logger.info(f"eddy_seek: loaded config {cfg.format_seek_config()}")
         return cfg

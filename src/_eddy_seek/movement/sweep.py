@@ -32,6 +32,7 @@ from .handler import (
 from .paths import (
     iter_cross_offsets,
     min_leg_span_mm,
+    plan_axis_leg_connectors,
     plan_axis_legs,
     plan_grid_legs,
     y_lines,
@@ -55,6 +56,7 @@ class SweepSettings:
     sweep_cross_offset: float
     min_sweep_samples: int
     search_for: Literal["min", "max"]
+    circle_arc_resolution: float
 
     @classmethod
     def from_config(
@@ -84,6 +86,8 @@ class MotionCapture:
         min_samples: int | None = None,
         span_mm: float | None = None,
         lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
+        between_leg_moves: Sequence[Sequence[tuple[Offset, Offset]] | None]
+        | None = None,
     ) -> list[MotionSample]: ...
 
     @overload
@@ -96,6 +100,8 @@ class MotionCapture:
         min_samples: int | None = None,
         span_mm: float | None = None,
         lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
+        between_leg_moves: Sequence[Sequence[tuple[Offset, Offset]] | None]
+        | None = None,
     ) -> list[list[MotionSample]]: ...
 
     def run(
@@ -107,6 +113,8 @@ class MotionCapture:
         min_samples: int | None = None,
         span_mm: float | None = None,
         lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
+        between_leg_moves: Sequence[Sequence[tuple[Offset, Offset]] | None]
+        | None = None,
     ) -> list[MotionSample] | list[list[MotionSample]]:
         """
         Run a sequence of legs, returning motion samples.
@@ -118,6 +126,7 @@ class MotionCapture:
             min_samples: Minimum number of samples to collect.
             span_mm: Span in mm.
             lead_in_legs: Uncaptured warmup legs before ``legs`` (same session).
+            between_leg_moves: Uncaptured connector chords between captured legs.
         Returns:
             If ``flat`` is True --> list[MotionSample]
 
@@ -131,7 +140,10 @@ class MotionCapture:
             )
         self.handler.begin(self.origin)
         self.handler.run_capture_legs(
-            legs, speed_mm_min, lead_in_legs=lead_in_legs or None
+            legs,
+            speed_mm_min,
+            lead_in_legs=lead_in_legs or None,
+            between_leg_moves=between_leg_moves,
         )
         if self.sync_offset is not None:
             self.sync_offset(self.handler.position)
@@ -175,11 +187,21 @@ def sweep_axis(
     legs = plan_axis_legs(
         axis, lo, hi, cross_center, cross_offsets, settings.sweep_overscan
     )
+    between: list[list[tuple[Offset, Offset]] | None] | None = None
+    if len(legs) > 1:
+        between = plan_axis_leg_connectors(
+            legs,
+            axis,
+            overscan=settings.sweep_overscan,
+            cross_offset=settings.sweep_cross_offset,
+            resolution=settings.circle_arc_resolution,
+        )
     samples = capture.run(
         legs,
         speed_mm_min,
         min_samples=settings.min_sweep_samples,
         span_mm=span_mm,
+        between_leg_moves=between,
     )
     profile = axis_profile(samples, axis, lo, hi)
 

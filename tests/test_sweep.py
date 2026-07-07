@@ -136,6 +136,50 @@ def test_capture_leg_requires_active_session():
         handler.capture_leg(Offset.zero(), Offset(1.0, 0.0), 2400.0)
 
 
+def test_run_capture_legs_between_leg_moves_skip_reposition():
+    toolhead = MagicMock()
+    toolhead.get_last_move_time.return_value = 1.0
+    callbacks: list = []
+    toolhead.register_lookahead_callback.side_effect = callbacks.append
+    printer, _toolhead = fake_motion_printer(toolhead)
+
+    handler = _make_handler(printer)
+    handler.begin(Position.zero())
+    legs = [
+        (Offset(0.0, 0.0), Offset(3.0, 0.0)),
+        (Offset(-3.0, 0.3), Offset(3.0, 0.3)),
+    ]
+    connector = [
+        (Offset(3.0, 0.0), Offset(2.7, 0.15)),
+        (Offset(2.7, 0.15), Offset(-3.0, 0.3)),
+    ]
+
+    handler.run_capture_legs(legs, 600.0, between_leg_moves=[connector])
+
+    assert len(callbacks) == 2
+    assert toolhead.manual_move.call_count == 5
+
+
+def test_run_capture_legs_without_connector_repositions():
+    toolhead = MagicMock()
+    toolhead.get_last_move_time.return_value = 1.0
+    callbacks: list = []
+    toolhead.register_lookahead_callback.side_effect = callbacks.append
+    printer, _toolhead = fake_motion_printer(toolhead)
+
+    handler = _make_handler(printer)
+    handler.begin(Position.zero())
+    legs = [
+        (Offset(0.0, 0.0), Offset(3.0, 0.0)),
+        (Offset(-3.0, 0.3), Offset(3.0, 0.3)),
+    ]
+
+    handler.run_capture_legs(legs, 600.0)
+
+    assert len(callbacks) == 2
+    assert toolhead.manual_move.call_count == 4
+
+
 def test_axis_profile_filters_sweep_range():
     samples = [
         MotionSample(Offset(-3.0, 0.0), 1.0, 0.0),
@@ -189,7 +233,9 @@ def test_run_clamps_speed_for_min_samples():
     capture.run(legs, 3000.0, min_samples=20, span_mm=0.2)
 
     # span=0.2 mm -> cap = 0.2 * 400 Hz * 60 / 20 = 240 mm/min
-    handler.run_capture_legs.assert_called_once_with(legs, 240.0, lead_in_legs=None)
+    handler.run_capture_legs.assert_called_once_with(
+        legs, 240.0, lead_in_legs=None, between_leg_moves=None
+    )
 
 
 def test_run_applies_lead_in_before_capture():
@@ -201,7 +247,9 @@ def test_run_applies_lead_in_before_capture():
 
     capture.run(legs, 600.0, lead_in_legs=lead_in)
 
-    handler.run_capture_legs.assert_called_once_with(legs, 600.0, lead_in_legs=lead_in)
+    handler.run_capture_legs.assert_called_once_with(
+        legs, 600.0, lead_in_legs=lead_in, between_leg_moves=None
+    )
 
 
 def test_sweep_axis_passes_speed_clamp_params():
@@ -258,6 +306,87 @@ def test_sweep_axis_coarse_uses_coarse_cross_passes():
         )
 
     assert plan_legs.call_args.args[4] == [0.0]
+
+
+def test_sweep_axis_coarse_multi_cross_wires_connectors():
+    settings = SweepSettings.from_config(
+        SeekConfig(min_sweep_samples=3, coarse_cross_passes=3),
+    )
+    capture = MagicMock()
+    capture.run.return_value = [
+        MotionSample(Offset(i * 0.01, 0.0), 100.0, 0.0) for i in range(3)
+    ]
+    fake_legs = [
+        (Offset(0.0, 0.0), Offset(1.0, 0.0)),
+        (Offset(1.0, 0.0), Offset(0.0, 0.0)),
+    ]
+    fake_between = [[(Offset(1.0, 0.0), Offset(1.0, 0.15))], None]
+
+    with (
+        patch(
+            "_eddy_seek.movement.sweep.plan_axis_legs",
+            return_value=fake_legs,
+        ),
+        patch(
+            "_eddy_seek.movement.sweep.plan_axis_leg_connectors",
+            return_value=fake_between,
+        ) as plan_connectors,
+    ):
+        sweep_axis(
+            capture,
+            settings,
+            axis=Axis.X,
+            lo=-1.0,
+            hi=1.0,
+            cross_center=0.0,
+            speed_mm_min=600.0,
+            phase=Phase.COARSE,
+            pass_num=1,
+        )
+
+    plan_connectors.assert_called_once()
+    assert capture.run.call_args.kwargs["between_leg_moves"] == fake_between
+
+
+def test_sweep_axis_fine_wires_uturn_connectors():
+    settings = SweepSettings.from_config(
+        SeekConfig(min_sweep_samples=3, coarse_cross_passes=3),
+    )
+    capture = MagicMock()
+    capture.run.return_value = [
+        MotionSample(Offset(i * 0.01, 0.0), 100.0, 0.0) for i in range(3)
+    ]
+    fake_between = [
+        [(Offset(3.0, 0.0), Offset(2.7, 0.15)), (Offset(2.7, 0.15), Offset(3.0, 0.0))]
+    ]
+
+    with (
+        patch(
+            "_eddy_seek.movement.sweep.plan_axis_legs",
+            return_value=[
+                (Offset(-3.0, 0.0), Offset(3.0, 0.0)),
+                (Offset(3.0, 0.0), Offset(-3.0, 0.0)),
+            ],
+        ),
+        patch(
+            "_eddy_seek.movement.sweep.plan_axis_leg_connectors",
+            return_value=fake_between,
+        ) as plan_connectors,
+    ):
+        sweep_axis(
+            capture,
+            settings,
+            axis=Axis.X,
+            lo=-1.0,
+            hi=1.0,
+            cross_center=0.0,
+            speed_mm_min=600.0,
+            phase=Phase.FINE,
+            pass_num=3,
+        )
+
+    plan_connectors.assert_called_once()
+    assert capture.run.call_args.kwargs["between_leg_moves"] == fake_between
 
 
 def test_sweep_axis_fine_phase_uses_single_cross_pass():
