@@ -76,10 +76,6 @@ class Tool:
             is_calibrated=section.getboolean("is_calibrated", False),
         )
 
-    def set_offset(self, offset: Offset | None = None) -> None:
-        if offset is not None:
-            self.offset = offset
-
     def save(self, config: PrinterConfig, prefix: str) -> None:
         """Write this tool's fields into a config section."""
         section = _prefix_and_num_to_section(prefix, self.tool_number)

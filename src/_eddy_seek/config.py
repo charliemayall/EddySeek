@@ -339,17 +339,6 @@ def _validate(cfg: SeekConfig) -> None:
         raise ValueError(f"circle_lead_in must be in [0, 1) (got {cfg.circle_lead_in})")
 
 
-def _config_option_set(config: Any, key: str) -> bool:
-    options = getattr(config, "_options", None)
-    if options is not None:
-        return key in options
-    fileconfig = getattr(config, "fileconfig", None)
-    section = getattr(config, "section", None)
-    if fileconfig is not None and section is not None:
-        return fileconfig.has_option(section, key)
-    return False
-
-
 def load_seek_config(config: ConfigWrapper) -> SeekConfig:
     """Parse alignment options from an ``[eddy_seek]`` config section."""
     d = SeekConfig()
