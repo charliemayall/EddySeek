@@ -45,6 +45,15 @@ def test_validate_var():
     assert _runtime_value_ok("max_passes", -1) is False
 
 
+def test_strategy_from_gcmd():
+    cfg = SeekConfig()
+    assert cfg.strategy_from_gcmd(FakeGcmd()) == "sweep_centroid"
+    assert cfg.strategy_from_gcmd(FakeGcmd({"STRATEGY": "centroid"})) == "centroid"
+
+    with raises(CommandError, match="invalid STRATEGY='bogus'"):
+        cfg.strategy_from_gcmd(FakeGcmd({"STRATEGY": "bogus"}))
+
+
 def test_apply_runtime_set():
     cfg = SeekConfig()
     changed = cfg.apply_runtime_set(FakeGcmd({"STRATEGY": "centroid"}))
@@ -157,3 +166,19 @@ def test_load_seek_config_rejects_circle_radius_min_above_start():
 def test_load_seek_config_debug():
     assert load_seek_config(FakeKlipperConfig()).debug is False
     assert load_seek_config(FakeKlipperConfig(debug="true")).debug is True
+
+
+def test_load_seek_config_sweep_coarse_defaults():
+    cfg = load_seek_config(FakeKlipperConfig())
+    assert cfg.coarse_phases == 2
+    assert cfg.coarse_cross_passes == 3
+
+
+def test_apply_runtime_set_coarse_sweep_params():
+    cfg = SeekConfig()
+    changed = cfg.apply_runtime_set(
+        FakeGcmd({"COARSE_PHASES": "3", "COARSE_CROSS_PASSES": "2"})
+    )
+    assert changed == ["coarse_phases --> 3", "coarse_cross_passes --> 2"]
+    assert cfg.coarse_phases == 3
+    assert cfg.coarse_cross_passes == 2

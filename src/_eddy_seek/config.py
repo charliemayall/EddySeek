@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import Field, asdict, dataclass, field, fields
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
@@ -97,6 +98,10 @@ class SeekConfig:
     min_sweep_samples: int = field(
         default=20, metadata={"gcode": "MIN_SWEEP_SAMPLES", "min": 3}
     )
+    coarse_phases: int = field(default=2, metadata={"gcode": "COARSE_PHASES", "min": 1})
+    coarse_cross_passes: int = field(
+        default=3, metadata={"gcode": "COARSE_CROSS_PASSES", "min": 1}
+    )
     circle_radius_start: float = field(
         default=2.0, metadata={"gcode": "CIRCLE_RADIUS_START", "positive": True}
     )
@@ -158,6 +163,10 @@ class SeekConfig:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    def strategy_from_gcmd(self, gcmd: GCodeCommand) -> str:
+        """Resolve optional per-command ``STRATEGY=`` using SeekConfig enum rules."""
+        return _strategy_from_gcmd(gcmd, self.strategy)
+
     def apply_runtime_set(self, gcmd: GCodeCommand) -> list[str]:
         """
         Apply ``EDDY_SEEK_SET`` parameters in place.
@@ -211,6 +220,7 @@ def _mm_s_to_mm_min(mm_s: float) -> float:
     return mm_s * 60.0
 
 
+@lru_cache(maxsize=1)
 def _runtime_settable_map() -> dict[str, str]:
     """Get the map of G-code keys to SeekConfig field names, for fields with a "gcode" metadata key (runtime settable)"""
     return {
@@ -218,6 +228,19 @@ def _runtime_settable_map() -> dict[str, str]:
         for spec in fields(SeekConfig)
         if "gcode" in spec.metadata
     }
+
+
+def _validate_field_value(
+    field_name: str, value: Any, *, label: str | None = None
+) -> None:
+    meta = _seek_field(field_name).metadata
+    name = label or field_name
+    if meta.get("positive") and value <= 0.0:
+        raise ValueError(f"{name} must be > 0")
+    if "min" in meta and value < meta["min"]:
+        raise ValueError(f"{name} must be >= {meta['min']}")
+    if "enum" in meta and value not in meta["enum"]:
+        raise ValueError(f"{name} must be one of {meta['enum']!r} (got {value!r})")
 
 
 class SetKeyCheck(NamedTuple):
@@ -253,29 +276,35 @@ def _can_set_key(key: str) -> SetKeyCheck:
     return SetKeyCheck(is_field=True, is_settable=True)
 
 
+def _strategy_from_gcmd(gcmd: GCodeCommand, default: str) -> str:
+    params = gcmd.get_command_parameters()
+    if "STRATEGY" not in params:
+        return default
+    raw = params["STRATEGY"]
+    try:
+        return _parse_runtime_value("strategy", "STRATEGY", raw)
+    except ValueError as exc:
+        raise gcmd.error(f"invalid STRATEGY={raw!r} ({exc})") from exc
+
+
 def _parse_runtime_value(field_name: str, label: str, raw: Any) -> Any:
     meta = _seek_field(field_name).metadata
     if meta.get("bool"):
         return _parse_bool(raw, label)
     if "enum" in meta:
-        text = str(raw).lower()
-        if text not in meta["enum"]:
-            raise ValueError(
-                f"invalid {label}={raw!r}, allowed: {', '.join(meta['enum'])}"
-            )
-        return text
+        value = str(raw).lower()
+        _validate_field_value(field_name, value, label=label)
+        return value
     if "min" in meta:
-        parsed = int(raw)
-        if parsed < meta["min"]:
-            raise ValueError(f"{label} must be >= {meta['min']}")
-        return parsed
+        value = int(raw)
+        _validate_field_value(field_name, value, label=label)
+        return value
     if meta.get("positive"):
-        parsed = float(raw)
-        if parsed <= 0.0:
-            raise ValueError(f"{label} must be > 0")
+        value = float(raw)
         if meta.get("speed"):
-            return _mm_s_to_mm_min(parsed)
-        return parsed
+            value = _mm_s_to_mm_min(value)
+        _validate_field_value(field_name, value, label=label)
+        return value
     raise ValueError(f"EDDY_SEEK_SET: invalid {label}={raw!r}")
 
 
@@ -302,16 +331,7 @@ def _parse_bool(raw: Any, label: str) -> bool:
 
 def _validate(cfg: SeekConfig) -> None:
     for spec in fields(SeekConfig):
-        value = getattr(cfg, spec.name)
-        meta = spec.metadata
-        if meta.get("positive") and value <= 0.0:
-            raise ValueError(f"{spec.name} must be > 0")
-        if "min" in meta and value < meta["min"]:
-            raise ValueError(f"{spec.name} must be >= {meta['min']}")
-        if "enum" in meta and value not in meta["enum"]:
-            raise ValueError(
-                f"{spec.name} must be one of {meta['enum']!r} (got {value!r})"
-            )
+        _validate_field_value(spec.name, getattr(cfg, spec.name))
 
     if cfg.circle_radius_min > cfg.circle_radius_start:
         raise ValueError(

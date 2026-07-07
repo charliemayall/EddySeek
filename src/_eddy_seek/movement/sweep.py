@@ -58,14 +58,11 @@ class SweepSettings:
 
     @classmethod
     def from_config(
-        cls, cfg: SeekConfig, *, coarse_cross_passes: int = 3
+        cls, cfg: SeekConfig, *, coarse_cross_passes: int | None = None
     ) -> SweepSettings:
-        values = {
-            f.name: getattr(cfg, f.name)
-            for f in fields(cls)
-            if f.name != "coarse_cross_passes"
-        }
-        values["coarse_cross_passes"] = coarse_cross_passes
+        values = {f.name: getattr(cfg, f.name) for f in fields(cls)}
+        if coarse_cross_passes is not None:
+            values["coarse_cross_passes"] = coarse_cross_passes
         return cls(**values)
 
 
