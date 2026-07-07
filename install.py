@@ -71,7 +71,22 @@ def purge_pycache(*roots: Path) -> int:
     return removed
 
 
+def warn_for_python_version():
+    MIN = (3, 10)
+    if sys.version_info < MIN:
+        print(
+            _c(
+                f"Error: Python version is not supported\n"
+                f"Minimum version --> {MIN[0]}.{MIN[1]}\n"
+                f"Your version --> {sys.version_info.major}.{sys.version_info.minor}\n"
+                f"EddySeek may not work as expected",
+                COLORS.RED,
+            )
+        )
+
+
 def main() -> None:
+    warn_for_python_version()
     dest = (
         Path(sys.argv[1]).expanduser().resolve()
         if len(sys.argv) > 1  # handle custom destination arg
