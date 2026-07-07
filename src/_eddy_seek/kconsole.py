@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn, Protocol
+from typing import TYPE_CHECKING, NoReturn
 
 if TYPE_CHECKING:
     from klippy.gcode import GCodeCommand
@@ -21,10 +21,6 @@ if TYPE_CHECKING:
     from .config import SeekConfig
 
 logger = logging.getLogger(__name__)
-
-
-class SeekReporter(Protocol):
-    def info(self, msg: str) -> None: ...
 
 
 class ConsoleSymbols(str, Enum):
