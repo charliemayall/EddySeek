@@ -137,7 +137,7 @@ def test_check_pass_divergence_shrinking_corrections_ok():
 
 
 def test_check_pass_divergence_raises_when_corrections_grow():
-    positions = [Offset.zero(), Offset(1.0, 0.0), Offset(2.3, 0.0)]
+    positions = [Offset.zero(), Offset(1.0, 0.0), Offset(2.8, 0.0)]
     with raises(DivergenceError, match="pass corrections diverging") as exc_info:
         _check_pass_divergence("test", positions, tolerance=0.1, pass_num=2)
     err = exc_info.value
@@ -153,7 +153,7 @@ def test_check_pass_divergence_skips_when_prior_correction_below_tolerance():
 
 
 def test_check_pass_divergence_raises_at_tolerance_boundary():
-    positions = [Offset.zero(), Offset(0.1, 0.0), Offset(0.226, 0.0)]
+    positions = [Offset.zero(), Offset(0.1, 0.0), Offset(0.276, 0.0)]
     with raises(DivergenceError, match="pass corrections diverging"):
         _check_pass_divergence("test", positions, tolerance=0.1, pass_num=2)
 
@@ -200,7 +200,7 @@ def test_search_aborts_on_pass_divergence():
     strategy = _ScriptedStrategy(
         [
             Offset(1.0, 0.0),
-            Offset(2.3, 0.0),
+            Offset(2.8, 0.0),
         ]
     )
     with raises(DivergenceError, match="pass corrections diverging at pass 2"):

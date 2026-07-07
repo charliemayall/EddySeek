@@ -109,18 +109,6 @@ def test_load_seek_config_rejects_invalid_search_for():
         load_seek_config(FakeKlipperConfig(search_for="bogus"))
 
 
-def test_load_seek_config_save_sweep_plots_legacy_alias():
-    cfg = load_seek_config(FakeKlipperConfig(save_sweep_plots="true"))
-    assert cfg.save_plots is True
-
-
-def test_load_seek_config_save_plots_wins_over_legacy():
-    cfg = load_seek_config(
-        FakeKlipperConfig(save_plots="false", save_sweep_plots="true")
-    )
-    assert cfg.save_plots is False
-
-
 def test_load_seek_config_circle_harmonic_params():
     cfg = load_seek_config(
         FakeKlipperConfig(

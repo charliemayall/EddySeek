@@ -115,14 +115,19 @@ class ToolAlignConfig:
         self.load_tool_macro = config.get("load_tool_macro_prefix", "T")
         self.sensor_x = config.getfloat("sensor_x")
         self.sensor_y = config.getfloat("sensor_y")
+        sensor_z_raw = config.get("sensor_z", None)
+        self.sensor_z = (
+            config.getfloat("sensor_z") if sensor_z_raw is not None else None
+        )
         main_config = self._configfile().read_main_config()
         self.tools = [
             self._load_tool_or_default(main_config, tool_number)
             for tool_number in range(self.tool_count)
         ]
+        sensor_z_text = f"{self.sensor_z:.4f}" if self.sensor_z is not None else "unset"
         logger.info(
             f"eddy_seek: tools config tool_count={self.tool_count} "
-            f"sensor=({self.sensor_x:.4f}, {self.sensor_y:.4f}) "
+            f"sensor=({self.sensor_x:.4f}, {self.sensor_y:.4f}, {sensor_z_text}) "
             f"prefix={self.tool_prefix!r} load_macro={self.load_tool_macro!r}"
         )
 

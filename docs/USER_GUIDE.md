@@ -60,13 +60,14 @@ i2c_mcu: mcu
 i2c_bus: i2c1
 sensor_x: 150.0   # machine XY of coil - rough is fine
 sensor_y: 150.0
+sensor_z: 5.0     # optional — seek commands error if machine Z is outside [sensor_z, sensor_z + 0.25] mm
 ```
 
 Optional LDC1612 tuning keys (`frequency`, `max_sensor_hz`, `reg_drive_current`, …) can live here too.
 
 ## Minimal calibration workflow
 
-1. Add `[eddy_seek]` with I2C settings and `sensor_x` / `sensor_y` (doesn't have to be absolutely accurate).
+1. Add `[eddy_seek]` with I2C settings and `sensor_x` / `sensor_y` / `sensor_z`.
 2. `FIRMWARE_RESTART`
 3. `EDDY_SEEK_QUERY` - confirm samples increment.
 4. Load tool 0, park at probe height above the sensor (EddySeek does not move Z).
@@ -80,29 +81,32 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 
 ## Configuration reference
 
+See [example.cfg](../example.cfg) for a complete example.
+
 ### `[eddy_seek]` - main options
 
-| Option                    | Default                                   | Description                                                                               |
-| ------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `sensor_type`             | _(required)_                              | `ldc1612`                                                                                 |
-| `i2c_address`             | `42`                                      | LDC1612 I2C address (`0x2a`)                                                              |
-| `i2c_mcu`                 | _(required)_                              | MCU name, e.g. `mcu`                                                                      |
-| `i2c_bus`                 | _(required)_                              | I2C bus, e.g. `i2c1`                                                                      |
-| `tool_count`              | `1`                                       | Number of tools                                                                           |
-| `tool_prefix`             | `es_T`                                    | Prefix for saved offset sections (`es_T1`, …)                                             |
-| `load_tool_macro_prefix`  | `T`                                       | Prefix for load macros (`T0`, `T1`, …)                                                    |
-| `sensor_x` / `sensor_y`   | _(required)_                              | Machine XY of sensor coil; tool 0 jogs here before seeking                                |
-| `max_jog_x` / `max_jog_y` | `2.5`                                     | Max search radius from start (mm)                                                         |
-| `tolerance`               | `0.05`                                    | Stop when both axes move less than this (mm)                                              |
-| `dwell_time`              | `0.5`                                     | Seconds at each probe point (grid strategies only)                                        |
-| `jog_speed`               | `80`                                      | Feedrate for search jogs (mm/s)                                                           |
-| `search_for`              | `max`                                     | `max` or `min` - which frequency extreme marks the nozzle centre, `max` for most users    |
-| `strategy`                | `sweep_centroid`                          | `sweep_centroid`, `centroid`, `circle_harmonic`, or `debug_scan` (diag only)              |
-| `max_passes`              | `6`                                       | Search passes before giving up; for `circle_harmonic`, held/rejected retries do not count |
-| `save_session_trace`      | `False`                                   | Write probe JSON to `result_folder` (debug)                                               |
-| `save_plots`              | `False`                                   | Write HTML plots to `result_folder` (needs plotly)                                        |
-| `result_folder`           | `~/printer_data/config/eddy_seek_results` | Output directory for debug artefacts                                                      |
-| `debug`                   | `False`                                   | Verbose console; pass `VERBOSE=1` on any command for one-off verbosity                    |
+| Option                               | Default                                   | Description                                                                                                              |
+| ------------------------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `sensor_type`                        | _(required)_                              | `ldc1612`                                                                                                                |
+| `i2c_address`                        | `42`                                      | LDC1612 I2C address (`0x2a`)                                                                                             |
+| `i2c_mcu`                            | _(required)_                              | MCU name, e.g. `mcu`                                                                                                     |
+| `i2c_bus`                            | _(required)_                              | I2C bus, e.g. `i2c1`                                                                                                     |
+| `tool_count`                         | `1`                                       | Number of tools                                                                                                          |
+| `tool_prefix`                        | `es_T`                                    | Prefix for saved offset sections (`es_T1`, …)                                                                            |
+| `load_tool_macro_prefix`             | `T`                                       | Prefix for load macros (`T0`, `T1`, …)                                                                                   |
+| `sensor_x` / `sensor_y` | _(required)_ | Machine XY of sensor coil; tool 0 jogs here before seeking |
+| `sensor_z`              | _(optional)_ | Machine Z for seek commands; errors if outside `[sensor_z, sensor_z + 0.25]` mm |
+| `max_jog_x` / `max_jog_y`            | `2.5`                                     | Max search radius from start (mm)                                                                                        |
+| `tolerance`                          | `0.05`                                    | Stop when both axes move less than this (mm)                                                                             |
+| `dwell_time`                         | `0.5`                                     | Seconds at each probe point (grid strategies only)                                                                       |
+| `jog_speed`                          | `80`                                      | Feedrate for search jogs (mm/s)                                                                                          |
+| `search_for`                         | `max`                                     | `max` or `min` - which frequency extreme marks the nozzle centre, `max` for most users                                   |
+| `strategy`                           | `sweep_centroid`                          | `sweep_centroid`, `centroid`, `circle_harmonic`, or `debug_scan` (diag only)                                             |
+| `max_passes`                         | `6`                                       | Search passes before giving up; for `circle_harmonic`, held/rejected retries do not count                                |
+| `save_session_trace`                 | `False`                                   | Write probe JSON to `result_folder` (debug)                                                                              |
+| `save_plots`                         | `False`                                   | Write HTML plots to `result_folder` (needs plotly)                                                                       |
+| `result_folder`                      | `~/printer_data/config/eddy_seek_results` | Output directory for debug artefacts                                                                                     |
+| `debug`                              | `False`                                   | Verbose console; pass `VERBOSE=1` on any command for one-off verbosity                                                   |
 
 ### `[eddy_seek]` - `strategy: sweep_centroid` options
 
@@ -140,25 +144,6 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 
 > **Travel limits:** `sensor_x ± max_jog_x` and `sensor_y ± max_jog_y` must be within machine limits.
 
-Example for a four-tool changer:
-
-```ini
-[eddy_seek]
-sensor_type: ldc1612
-i2c_address: 42
-i2c_mcu: mcu
-i2c_bus: i2c1
-
-tool_count: 4
-tool_prefix: es_T
-load_tool_macro_prefix: T
-
-sensor_x: 20.0
-sensor_y: 20.0
-tolerance: 0.05
-strategy: sweep_centroid
-max_passes: 6
-```
 
 ### Per-tool offset sections
 
@@ -205,7 +190,7 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 - Set `sensor_x`/`sensor_y` near the coil; tool 0 jogs there automatically.
 - The seek refines within `max_jog` - You will get a warning and suggested change if your sensor position is borderline wrong.
-- **Z is not changed** - park at probe height first.
+- **Z is not changed** — park at `sensor_z` before running alignment commands. EddySeek errors if machine Z is outside `[sensor_z, sensor_z + 0.25]` mm.
 
 **One tool:** load each tool, then `EDDY_SEEK_TOOL TOOL=n`. Run `SAVE_CONFIG` after each.
 
@@ -234,8 +219,6 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 ### Sweep centroid (`strategy: sweep_centroid`) - default
 
-**99% of users should use this strategy**
-
 Continuous axis sweeps (like Klipper's bed mesh `rapid_scan` method). Coarse bidirectional sweeps, then finer passes; samples merged into a frequency-weighted 2D centroid. Best compromise between speed and reliability.
 
 ### Centroid (`strategy: centroid`)
@@ -246,7 +229,7 @@ Continuous axis sweeps (like Klipper's bed mesh `rapid_scan` method). Coarse bid
 
 **_In testing_**
 
-Fastest strategy (sub-second per tool) when calibrated correctly
+Very fast strategy when calibrated correctly
 
 However, it is extremely unreliable, and perfect calibration requires that you can get the nozzle to the sensor_position with no error, and no one nozzle is offset from T0 by more than ~0.2mm.
 
