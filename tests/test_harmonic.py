@@ -289,7 +289,7 @@ def _prepare_finish_anchor(anchor: Offset):
         ),
     ],
 )
-def test_finish_circle_pass(prepare, pass_num, make_outcome, check):
+def test_apply_circle_outcome(prepare, pass_num, make_outcome, check):
     from _eddy_seek.strategy.circle_harmonic import (
         CircleHarmonicStrategy,
         _outcome_accept,
@@ -300,7 +300,7 @@ def test_finish_circle_pass(prepare, pass_num, make_outcome, check):
     prepare(strategy)
     ctx = _plateau_ctx()
     outcome = make_outcome(_outcome_accept, _outcome_reject, _harmonic_fit_stub)
-    ret = strategy._finish_circle_pass(ctx, pass_num, Offset.zero(), outcome)
+    ret = strategy._apply_circle_outcome(ctx, pass_num, Offset.zero(), outcome)
     check(strategy, ret)
 
 
@@ -498,7 +498,9 @@ def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one()
     ctx.config = SeekConfig(circle_skip_bootstrap=True)
 
     with (
-        patch.object(strategy, "_bootstrap_pass") as bootstrap,
+        patch(
+            "_eddy_seek.strategy.circle_harmonic.strategy.bootstrap_pass"
+        ) as bootstrap,
         patch.object(strategy, "_compute_circle_pass") as compute,
         patch.object(
             strategy, "_apply_circle_outcome", return_value=Offset.zero()

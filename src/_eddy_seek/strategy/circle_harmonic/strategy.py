@@ -187,15 +187,6 @@ class CircleHarmonicStrategy(SeekStrategy):
             )
         return new
 
-    def _finish_circle_pass(
-        self,
-        ctx: SeekSession,
-        pass_num: int,
-        best: Offset,
-        outcome: CirclePassOutcome,
-    ) -> Offset:
-        return self._apply_circle_outcome(ctx, pass_num, best, outcome)
-
     def _pass_message(
         self,
         pass_num: int,
@@ -207,14 +198,6 @@ class CircleHarmonicStrategy(SeekStrategy):
             "bootstrap" if pass_num == 1 and not self._mode.skip_bootstrap else "circle"
         )
         return f"Pass {pass_num} ({label}): {new.to_console_str()}"
-
-    def _bootstrap_pass(
-        self,
-        ctx: SeekSession,
-        pass_num: int,
-        best: Offset,
-    ) -> Offset:
-        return bootstrap_pass(self, ctx, pass_num, best)
 
     def _compute_circle_pass(
         self,
