@@ -52,7 +52,7 @@ def _warn_sensor_position_if_needed(
     suggested_y = tools.sensor_y + seek_offset.y
     console.warn(
         f"Tool 0 seek result center: {seek_offset.to_console_str()} "
-        f"is signifcantly different from your configured sensor_x/sensor_y position "
+        f"is significantly different from your configured sensor_x/sensor_y position "
         f"This makes seeks slower for Tool 0, and less accurate for all tools. Consider updating "
         f"(suggested: sensor_x: {suggested_x:.2f}, sensor_y: {suggested_y:.2f}), "
         f"then FIRMWARE_RESTART"
