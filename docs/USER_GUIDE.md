@@ -106,16 +106,16 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 
 ### `[eddy_seek]` - `strategy: sweep_centroid` options
 
-| Option               | Default | Description                                          |
-| -------------------- | ------- | ---------------------------------------------------- |
-| `sweep_coarse_speed` | `20`    | Coarse sweep feedrate (mm/s)                         |
-| `sweep_fine_speed`   | `10`    | Fine sweep feedrate (mm/s)                           |
-| `sweep_overscan`     | `1.0`   | Extra travel beyond jog range (mm)                   |
-| `sweep_cross_offset` | `0.3`   | Stagger between parallel sweeps (mm)                 |
-| `coarse_phases`      | `2`     | Coarse search passes before fine passes               |
-| `coarse_cross_passes`| `3`     | Staggered sweep lines per coarse pass (fine uses 1)  |
-| `fine_shrink`        | `0.6`   | Fine pass range multiplier (× max_jog)               |
-| `min_sweep_samples`  | `20`    | Minimum profile points before centroid fit           |
+| Option                | Default | Description                                         |
+| --------------------- | ------- | --------------------------------------------------- |
+| `sweep_coarse_speed`  | `20`    | Coarse sweep feedrate (mm/s)                        |
+| `sweep_fine_speed`    | `10`    | Fine sweep feedrate (mm/s)                          |
+| `sweep_overscan`      | `1.0`   | Extra travel beyond jog range (mm)                  |
+| `sweep_cross_offset`  | `0.3`   | Stagger between parallel sweeps (mm)                |
+| `coarse_phases`       | `2`     | Coarse search passes before fine passes             |
+| `coarse_cross_passes` | `3`     | Staggered sweep lines per coarse pass (fine uses 1) |
+| `fine_shrink`         | `0.6`   | Fine pass range multiplier (× max_jog)              |
+| `min_sweep_samples`   | `20`    | Minimum profile points before centroid fit          |
 
 ### `[eddy_seek]` - `strategy: circle_harmonic` options
 
@@ -218,32 +218,32 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 ## G-code commands
 
-| Command                         | Description                                  |
-| ------------------------------- | -------------------------------------------- |
-| `EDDY_SEEK_QUERY`               | Print frequency statistics                   |
-| `EDDY_SEEK_RESET`               | Clear capture buffer                         |
-| `EDDY_SEEK_SET`                 | Override settings until restart              |
-| `EDDY_SEEK_START`               | XY search from current position              |
-| `EDDY_SEEK_START STRATEGY=centroid` | One-off seek using a different strategy  |
-| `EDDY_SEEK_ACCURACY REPEATS=n`  | Repeat alignment (default 3, min 2, max 50) and report repeatability |
-| `EDDY_SEEK_TOOL TOOL=n`         | Align one tool (caller loads the tool)       |
-| `EDDY_SEEK_TOOL TOOL=n LOAD=1`  | Run the tool load macro before seeking       |
-| `EDDY_SEEK_TOOL TOOL=n STRATEGY=centroid` | One-off strategy for this tool align |
-| `EDDY_SEEK_TOOL TOOL=n REPEATS=3` | Align with 3 seeks averaged per tool         |
-| `EDDY_SEEK_TOOLS`               | Align all tools                              |
-| `EDDY_SEEK_TOOLS REPEATS=3`     | Align all tools with averaged seeks          |
-| `EDDY_SEEK_TOOLS TOOLS=n`       | Align tools 0…n−1 only                       |
-| `EDDY_SEEK_APPLY_OFFSET TOOL=n` | Apply saved XY offset via `SET_GCODE_OFFSET` |
-
-`EDDY_SEEK_SET STRATEGY=centroid TOLERANCE=0.05` - overrides last until firmware restart. Run bare `EDDY_SEEK_SET` to print current values.
-
-`EDDY_SEEK_ACCURACY REPEATS=5` - runs full seeks (default 3, min 2, max 50) and prints σ / max scatter.
+| Command                                          | Description                                                                                                                                                       |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EDDY_SEEK_QUERY`                                | Print frequency statistics                                                                                                                                        |
+| `EDDY_SEEK_RESET`                                | Manually clear capture buffer (Not usually ever needed)                                                                                                           |
+| `EDDY_SEEK_SET`                                  | Override settings until FIRMWARE_RESTART                                                                                                                          |
+| `EDDY_SEEK_START`                                | XY search from current position                                                                                                                                   |
+| `EDDY_SEEK_START STRATEGY=centroid`              | One-off seek using a different strategy                                                                                                                           |
+| `EDDY_SEEK_ACCURACY REPEATS=n MOCK=0/1`          | Repeat EDDY_SEEK_START n times (default 3, min 2, max 50) and report repeatability. Mock mode applies a small random offset to the start position of each repeat. |
+| `EDDY_SEEK_TOOL TOOL=n`                          | Align one tool (caller loads the tool)                                                                                                                            |
+| `EDDY_SEEK_TOOL TOOL=n LOAD=1`                   | Run the tool load macro before seeking                                                                                                                            |
+| `EDDY_SEEK_TOOL TOOL=n STRATEGY=centroid`        | One-off strategy for this tool align                                                                                                                              |
+| `EDDY_SEEK_TOOL TOOL=n REPEATS=3`                | Align with 3 seeks averaged per tool                                                                                                                              |
+| `EDDY_SEEK_TOOLS`                                | Align all tools                                                                                                                                                   |
+| `EDDY_SEEK_TOOLS REPEATS=3`                      | Align all tools with averaged seeks                                                                                                                               |
+| `EDDY_SEEK_TOOLS TOOLS=n`                        | Align tools 0…n−1 only                                                                                                                                            |
+| `EDDY_SEEK_APPLY_OFFSET TOOL=n`                  | Apply saved XY offset via `SET_GCODE_OFFSET`                                                                                                                      |
+| `EDDY_SEEK_SET STRATEGY=centroid TOLERANCE=0.05` | Override last settings until FIRMWARE_RESTART. Run bare `EDDY_SEEK_SET` to print current values.                                                                  |
+| `EDDY_SEEK_ACCURACY REPEATS=5`                   | Runs full seeks (default 3, min 2, max 50) and prints σ / max scatter.                                                                                            |
 
 ---
 
 ## Search strategies
 
 ### Sweep centroid (`strategy: sweep_centroid`) - default
+
+**99% of users should use this strategy**
 
 Continuous axis sweeps (like Klipper's bed mesh `rapid_scan` method). Coarse bidirectional sweeps, then finer passes; samples merged into a frequency-weighted 2D centroid. Best compromise between speed and reliability.
 
@@ -253,11 +253,15 @@ Continuous axis sweeps (like Klipper's bed mesh `rapid_scan` method). Coarse bid
 
 ### Circle harmonic (`strategy: circle_harmonic`)
 
-Initial axis sweep, then circles at a fixed radius while passes are accepted. After a rejected pass the radius steps down by `circle_shrink`. Search stops at `circle_radius_min` when the correction is within tolerance, or immediately on reject at min radius. Does not stop on harmonic convergence alone at larger radii.
+**_In testing_**
 
-Fastest strategy, and very accurate. However, it can be **sensitive to larger initial misalignment** - `sensor_x`/`sensor_y` must put the nozzle close to the true centre.
+Fastest strategy (sub-second per tool) when calibrated correctly
 
-> `circle_harmonic` does many very small moves, don't panic if you hear your printer vibrating.
+However, it is extremely unreliable, and perfect calibration requires that you can get the nozzle to the sensor_position with no error, and no one nozzle is offset from T0 by more than ~0.2mm.
+
+However, it can be **sensitive to magnitude of initial misalignment**
+
+Try it if you are curious, but expect to be tweaking settings for a long time.
 
 ### Debug scan (`strategy: debug_scan`)
 
@@ -285,15 +289,15 @@ With `save_plots: True`, HTML plots land under `{result_folder}/YYYY-MM-DD_HH-MM
 
 ## Troubleshooting
 
-| Symptom                                     | Things to check                                                       |
-| ------------------------------------------- | --------------------------------------------------------------------- |
-| `total` stays 0 on `EDDY_SEEK_QUERY`        | I2C wiring, `i2c_mcu` / `i2c_bus`, `klippy.log`                       |
-| `no samples at offset` during seek          | Increase `dwell_time`; check coil height and sensor stream            |
-| Search does not converge                    | `max_passes`, `max_jog_x/y`, `search_for`, try another `strategy`     |
-| `pass corrections diverging`                | Nozzle too far from centre - fix `sensor_x/y`, `max_jog`, or Z height |
-| Sweep centroid: too few samples             | Lower `sweep_fine_speed`; check LDC1612 stream                        |
+| Symptom                                     | Things to check                                                                         |
+| ------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `total` stays 0 on `EDDY_SEEK_QUERY`        | I2C wiring, `i2c_mcu` / `i2c_bus`, `klippy.log`                                         |
+| `no samples at offset` during seek          | Increase `dwell_time`; check coil height and sensor stream                              |
+| Search does not converge                    | `max_passes`, `max_jog_x/y`, `search_for`, try another `strategy`                       |
+| `pass corrections diverging`                | Nozzle too far from centre - fix `sensor_x/y`, `max_jog`, or Z height                   |
+| Sweep centroid: too few samples             | Lower `sweep_fine_speed`; check LDC1612 stream                                          |
 | `tool 0 must be aligned before other tools` | Klipper restart cleared the reference; run `EDDY_SEEK_TOOL TOOL=0` or `EDDY_SEEK_TOOLS` |
-| Offsets not in `printer.cfg`                | Run `SAVE_CONFIG` after alignment                                     |
+| Offsets not in `printer.cfg`                | Run `SAVE_CONFIG` after alignment                                                       |
 
 ### Debug scan (`strategy: debug_scan`)
 
@@ -310,13 +314,11 @@ Runs a grid over the full jog area. Useful to confirm the sensor sees a signal w
 
 ## Example plots
 
-### Sweep centroid
-
-![Sweep centroid example](./plots/sweep_centroid.png)
-
-### Debug scan
-
-![Debug scan example](./plots/debug_scan.png)
+| Method              | Example Plot                                    |
+| ------------------- | ----------------------------------------------- |
+| **Sweep centroid**  | ![Sweep centroid](./plots/sweep_centroid.png)   |
+| **Circle harmonic** | ![Circle harmonic](./plots/circle_harmonic.png) |
+| **Debug scan**      | ![Debug scan](./plots/debug_scan.png)           |
 
 ## License
 
