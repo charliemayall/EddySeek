@@ -27,7 +27,7 @@ from .config import SeekConfig
 from .kconsole import ConsoleSymbols, KConsole
 from .movement.gcode_state import GCodeState
 from .movement.guard import KnownKinematicLimits, clear_gcode_offset_xy
-from .movement.handler import MotionHandler
+from .movement.handler import MIN_CAPTURE_SAMPLES, MotionHandler
 from .plotting.primitives import PlotArtifactRecord, ProbeRecord
 from .plotting.recorder import SessionRecorder
 
@@ -46,7 +46,9 @@ class SeekHost(Protocol):
     console: KConsole | None
 
     def reset_capture(self) -> None: ...
-    def get_capture_mean(self, min_samples: int = 5) -> float | None: ...
+    def get_capture_mean(
+        self, min_samples: int = MIN_CAPTURE_SAMPLES
+    ) -> float | None: ...
     def peek_capture_samples(self) -> list[float]: ...
     @property
     def capture_count(self) -> int: ...
@@ -64,6 +66,7 @@ class _SearchRun:
     passes_run: int
     error_message: str | None
     session_plot_path: str | None
+    exit_kind: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +79,7 @@ class SeekSessionResult:
     passes_run: int
     error_message: str | None
     plot_path: str | None = None
+    exit_kind: str | None = None
 
 
 class SeekSession:
@@ -185,6 +189,7 @@ class SeekSession:
             passes_run=search.passes_run,
             error_message=search.error_message,
             plot_path=search.session_plot_path,
+            exit_kind=search.exit_kind,
         )
         if self._save_trace:
             _write_seek_trace(
@@ -206,7 +211,7 @@ class SeekSession:
         boundaries: bool,
         show_plot_saved: bool,
     ) -> _SearchRun:
-        from .strategy.base import DivergenceError, MaxPassesError
+        from .strategy.base import DivergenceError, SeekExitError, SeekExitKind
 
         best = Offset.zero()
         passes_run = 0
@@ -214,6 +219,7 @@ class SeekSession:
         session_plot_path: str | None = None
         status: Literal["ok", "failed"] = "ok"
         offset: Offset | None = None
+        exit_kind: str | None = None
         try:
             with (
                 KnownKinematicLimits(self._printer),
@@ -239,18 +245,17 @@ class SeekSession:
                 )
             status = "ok"
             offset = best
-        except MaxPassesError as err:
+            exit_kind = SeekExitKind.CONVERGED.value
+        except SeekExitError as err:
             error_message = self._report_search_failure(console, err)
             status = "failed"
             offset = None
-        except DivergenceError as err:
-            error_message = self._report_search_failure(console, err)
-            status = "failed"
-            offset = None
-            self._recover_motion_jog(
-                err.previous,
-                warning="eddy_seek: failed to return to previous offset after divergence",
-            )
+            exit_kind = err.exit_kind.value
+            if isinstance(err, DivergenceError):
+                self._recover_motion_jog(
+                    err.previous,
+                    warning="eddy_seek: failed to return to previous offset after divergence",
+                )
         except Exception as exc:
             error_message = self._report_search_failure(console, exc)
             status = "failed"
@@ -274,6 +279,7 @@ class SeekSession:
             passes_run=passes_run,
             error_message=error_message,
             session_plot_path=session_plot_path,
+            exit_kind=exit_kind,
         )
 
     def _report_search_failure(self, console: KConsole, err: BaseException) -> str:
@@ -351,6 +357,7 @@ def _write_seek_trace(
             ),
             "passes_run": result.passes_run,
             "error_message": result.error_message,
+            "exit_kind": result.exit_kind,
             "config": host.session_trace_config(),
         },
         "probes": probes,
