@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from .common import Offset, Position
+from .common import Offset, Position, yield_to_reactor
 from .kconsole import KConsole
 from .movement.gcode_state import GCodeState
 from .movement.handler import move_to_xy
@@ -47,6 +47,8 @@ def write_repeat_scatter_plot(
     fig = write_accuracy_plot(repeats=list(records))
     if fig is None:
         return None
+    reactor = host.printer.get_reactor()
+    yield_to_reactor(reactor)
     return write_figure(
         Path(cfg.result_folder),
         fig,

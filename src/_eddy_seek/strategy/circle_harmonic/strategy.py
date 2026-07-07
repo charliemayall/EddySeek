@@ -238,6 +238,8 @@ class CircleHarmonicStrategy(SeekStrategy):
         samples: list[MotionSample],
         box: tuple[float, float, float, float],
     ) -> None:
+        if not ctx.recorder.active:
+            return
         ctx.recorder.record(
             CircleBootstrapRecord(
                 pass_num=pass_num,
@@ -262,6 +264,8 @@ class CircleHarmonicStrategy(SeekStrategy):
         rejected: bool,
         reject_reasons: str = "",
     ) -> None:
+        if not ctx.recorder.active:
+            return
         ctx.recorder.record(
             CircleHarmonicPassRecord(
                 pass_num=pass_num,

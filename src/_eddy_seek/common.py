@@ -16,6 +16,8 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, overload
 
+from klippy.klippy import Reactor
+
 if TYPE_CHECKING:
     from typing import Self
 
@@ -25,6 +27,14 @@ if TYPE_CHECKING:
 
 _ROUND_PRECISION = 2
 CHAR_DELTA = "\u0394"
+BASE_REACTOR_YIELD_S = 0.001
+
+
+def yield_to_reactor(reactor: Reactor, seconds: float = BASE_REACTOR_YIELD_S) -> None:
+    """Let Klipper service the MCU before blocking on plot I/O."""
+    reactor.pause(  # pyright: ignore[reportAttributeAccessIssue]
+        reactor.monotonic() + seconds
+    )
 
 
 class StrEnum(str, Enum):

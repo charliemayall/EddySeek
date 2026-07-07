@@ -265,14 +265,15 @@ class SeekSession:
                 warning="eddy_seek: failed to return to session start after error",
             )
         finally:
+            # close motion before plot I/O so reactor isn't blocked with client active
+            if self._motion is not None:
+                self._motion.close()
             session_plot_path = self._finalize_session_plot(
                 strategy,
                 console,
                 status=status,
                 show_plot_saved=show_plot_saved,
             )
-            if self._motion is not None:
-                self._motion.close()
         return _SearchRun(
             status=status,
             offset=offset,

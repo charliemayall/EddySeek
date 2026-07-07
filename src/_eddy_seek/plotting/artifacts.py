@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..common import session_artifact_filename
+from ..common import session_artifact_filename, yield_to_reactor
 from ._plotly import plotly_available, write_html
 
 if TYPE_CHECKING:
@@ -53,11 +53,14 @@ def finalize_strategy_plot(ctx: SeekSession, strategy_name: str) -> str | None:
 
     if not ctx.config.save_plots:
         return None
+    reactor = ctx._printer.get_reactor()
+    yield_to_reactor(reactor)
     fig = render_session_plot(
         strategy_name,
         ctx.recorder.records(),
         search_for=ctx.config.search_for,
     )
+    yield_to_reactor(reactor)
     if fig is None:
         return None
     return write_figure(
