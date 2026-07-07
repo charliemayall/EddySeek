@@ -18,9 +18,7 @@ from typing import TYPE_CHECKING, overload
 
 if TYPE_CHECKING:
     from klippy.klippy import Reactor
-
-if TYPE_CHECKING:
-    from klippy.klippy import Printer
+    from klippy.toolhead import ToolHead
     from typing_extensions import Self
 
     from _eddy_seek.movement.handler import MotionSample
@@ -167,9 +165,8 @@ class Position(_Vector2):
         return True
 
     @classmethod
-    def from_toolhead(cls, printer: Printer) -> Position:
-        pos = printer.lookup_object("toolhead").get_position()
-        return cls.from_pair(pos)
+    def from_toolhead(cls, toolhead: ToolHead) -> Position:
+        return cls.from_pair(toolhead.get_position())
 
     @overload
     def __sub__(self, other: Position) -> Offset: ...

@@ -330,7 +330,9 @@ class EddySeek(SeekHost):
 
     def cmd_EDDY_SEEK_START(self, gcmd: GCodeCommand) -> None:
         logger.info("eddy_seek: EDDY_SEEK_START")
-        assert_sensor_z(self.printer.lookup_object("toolhead"), self._tools, gcmd)
+        assert_sensor_z(
+            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
+        )
         console = self.refresh_console(gcmd)
         console.entry("Seeking nozzle centre…")
         write_at = datetime.now()
@@ -348,7 +350,9 @@ class EddySeek(SeekHost):
         tool_number = gcmd.get_int("TOOL", -1, minval=0)
         if tool_number == -1:
             raise gcmd.error("TOOL=<number> is required for EDDY_SEEK_TOOL")
-        assert_sensor_z(self.printer.lookup_object("toolhead"), self._tools, gcmd)
+        assert_sensor_z(
+            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
+        )
         repeats = gcmd.get_int("REPEATS", 3, minval=1, maxval=50)
         load_tool = gcmd.get_int("LOAD", 0, minval=0, maxval=1) == 1
         strategy = self.seek_config.strategy_from_gcmd(gcmd)
@@ -388,7 +392,9 @@ class EddySeek(SeekHost):
             clear_gcode_offset_xy(self.printer)
 
     def cmd_EDDY_SEEK_TOOLS(self, gcmd: GCodeCommand) -> None:
-        assert_sensor_z(self.printer.lookup_object("toolhead"), self._tools, gcmd)
+        assert_sensor_z(
+            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
+        )
         self.refresh_console(gcmd)
         tool_count = gcmd.get_int("TOOLS", self._tools.tool_count, minval=1)
         repeats = gcmd.get_int("REPEATS", 3, minval=1, maxval=50)
@@ -419,7 +425,9 @@ class EddySeek(SeekHost):
             )
 
     def cmd_EDDY_SEEK_ACCURACY(self, gcmd: GCodeCommand) -> None:
-        assert_sensor_z(self.printer.lookup_object("toolhead"), self._tools, gcmd)
+        assert_sensor_z(
+            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
+        )
         repeats = gcmd.get_int("REPEATS", 3, minval=2, maxval=50)
         mock_enabled = bool(gcmd.get_int("MOCK", 0, minval=0, maxval=1))
         logger.info(

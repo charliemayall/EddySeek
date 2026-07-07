@@ -225,7 +225,9 @@ class SeekSession:
                 KnownKinematicLimits(self._printer),
                 self._host.acquire_sensor_stream(),
             ):
-                self._session_start = Position.from_toolhead(self._printer)
+                self._session_start = Position.from_toolhead(
+                    self._printer.lookup_object("toolhead")
+                )
                 self._motion = MotionHandler(
                     self._printer,
                     self._host,

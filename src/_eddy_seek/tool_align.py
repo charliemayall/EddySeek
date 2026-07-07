@@ -41,7 +41,7 @@ class ToolAlignResult:
 
 
 def _warn_sensor_position_if_needed(
-    tools: ToolAlignConfig,
+    sensor: Position,
     seek_offset: Offset,
     *,
     console: KConsole,
@@ -49,8 +49,8 @@ def _warn_sensor_position_if_needed(
     abs_offset = seek_offset.abs_components()
     if max(abs_offset.x, abs_offset.y) <= _TARGET_SENSOR_OFFSET_FROM_REF:
         return
-    suggested_x = tools.sensor_x + seek_offset.x
-    suggested_y = tools.sensor_y + seek_offset.y
+    suggested_x = sensor.x + seek_offset.x
+    suggested_y = sensor.y + seek_offset.y
     console.warn(
         f"Tool 0 seek result center: {seek_offset.to_console_str()} "
         f"is significantly different from your configured sensor_x/sensor_y position "
@@ -74,7 +74,7 @@ def move_to_seek_start_pos(
     logger.info(f"eddy_seek: moving tool 0 to sensor position {sensor.to_gcode()}")
     toolhead = host.printer.lookup_object("toolhead")
     move_to_xy(toolhead, sensor, host.seek_config.jog_speed, wait=True)
-    return Position.from_toolhead(host.printer)
+    return Position.from_toolhead(toolhead)
 
 
 def align_tool(
@@ -220,7 +220,9 @@ def align_tool_number(
             f"seek_offset=({mean_offset.x:.4f}, {mean_offset.y:.4f})"
         )
         console.info(f"Tool 0 reference - {center.to_console_str()}")
-        _warn_sensor_position_if_needed(tools, mean_offset, console=console)
+        _warn_sensor_position_if_needed(
+            tools.sensor_position(), mean_offset, console=console
+        )
         if repeats == 1 and last_result is not None:
             announce_seek_plot(
                 console,

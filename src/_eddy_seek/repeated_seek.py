@@ -133,12 +133,13 @@ def run_repeated_seeks(
             last_result=result,
         )
 
-    start_pos = Position.from_toolhead(host.printer)
+    toolhead = host.printer.lookup_object("toolhead")
+    start_pos = Position.from_toolhead(toolhead)
     with GCodeState(gcode, gcode_state_name, move_on_restore=True):
         for repeat in range(1, repeats + 1):
             if repeat > 1:
                 move_to_xy(
-                    host.printer.lookup_object("toolhead"),
+                    toolhead,
                     start_pos,
                     host.seek_config.jog_speed,
                     wait=True,

@@ -15,16 +15,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from klippy.toolhead import ToolHead
 
-    from .tools import ToolAlignConfig
-
 
 _SENSOR_Z_TOLERANCE_ABOVE = 0.25
 _SENSOR_Z_TOLERANCE_BELOW = 0.0  # above is ok-ish, below could crash
 
 
-def assert_sensor_z(toolhead: ToolHead, tools: ToolAlignConfig, gcmd) -> None:
+def assert_sensor_z(toolhead: ToolHead, sensor_z: float | None, gcmd) -> None:
     """Raise ``gcmd.error`` when machine Z is outside the ``sensor_z`` band."""
-    expected = tools.sensor_z
+    expected = sensor_z
     if expected is None:
         return
     actual_z = float(toolhead.get_position()[2])

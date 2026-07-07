@@ -12,30 +12,22 @@ from pytest import raises
 from _eddy_seek.sensor_z import assert_sensor_z
 
 
-class _SensorTools:
-    sensor_z = 5.0
-
-
-class _NoSensorZTools:
-    sensor_z = None
-
-
 def test_assert_sensor_z_skips_when_unset():
     toolhead = RecordingToolhead()
     toolhead.pos[2] = 99.0
-    assert_sensor_z(toolhead, _NoSensorZTools(), FakeGcmd())  # type: ignore[arg-type]
+    assert_sensor_z(toolhead, None, FakeGcmd())
 
 
 def test_assert_sensor_z_passes_at_exact_height():
     toolhead = RecordingToolhead()
     toolhead.pos[2] = 5.0
-    assert_sensor_z(toolhead, _SensorTools(), FakeGcmd())  # type: ignore[arg-type]
+    assert_sensor_z(toolhead, 5.0, FakeGcmd())
 
 
 def test_assert_sensor_z_passes_at_upper_band():
     toolhead = RecordingToolhead()
     toolhead.pos[2] = 5.25
-    assert_sensor_z(toolhead, _SensorTools(), FakeGcmd())  # type: ignore[arg-type]
+    assert_sensor_z(toolhead, 5.0, FakeGcmd())
 
 
 def test_assert_sensor_z_raises_when_too_low():
@@ -43,7 +35,7 @@ def test_assert_sensor_z_raises_when_too_low():
     toolhead.pos[2] = 4.999
     gcmd = FakeGcmd()
     with raises(CommandError, match="Sensor Z guard") as exc_info:
-        assert_sensor_z(toolhead, _SensorTools(), gcmd)  # type: ignore[arg-type]
+        assert_sensor_z(toolhead, 5.0, gcmd)
     assert "5.000" in str(exc_info.value)
     assert "4.999" in str(exc_info.value)
 
@@ -53,5 +45,5 @@ def test_assert_sensor_z_raises_when_too_high():
     toolhead.pos[2] = 5.251
     gcmd = FakeGcmd()
     with raises(CommandError, match="Sensor Z guard") as exc_info:
-        assert_sensor_z(toolhead, _SensorTools(), gcmd)  # type: ignore[arg-type]
+        assert_sensor_z(toolhead, 5.0, gcmd)
     assert "5.251" in str(exc_info.value)
