@@ -10,3 +10,4 @@ dist/
 scripts/
 references
 experiments/
+.env
