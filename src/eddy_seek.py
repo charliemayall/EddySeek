@@ -29,9 +29,13 @@ from ._eddy_seek.tool_align import align_all_tools, align_tool_number
 from ._eddy_seek.tools import ToolAlignConfig, apply_tool_offset
 
 if TYPE_CHECKING:
-    from klippy.extras.configfile import ConfigWrapper
-    from klippy.extras.ldc1612 import LDC1612
-    from klippy.gcode import GCodeCommand
+    from klippy.extras.configfile import (  # pyright: ignore[reportMissingModuleSource]
+        ConfigWrapper,
+    )
+    from klippy.extras.ldc1612 import (  # pyright: ignore[reportMissingModuleSource]
+        LDC1612,
+    )
+    from klippy.gcode import GCodeCommand  # pyright: ignore[reportMissingModuleSource]
 
 try:
     from .ldc1612 import LDC1612  # pyright: ignore[reportMissingImports]
@@ -165,6 +169,11 @@ class EddySeek(SeekHost):
         return self._capture_count
 
     def peek_capture_samples(self) -> list[float]:
+        """
+        Use this to grab a copy of the capture buffer.
+
+        Do not read from the capture buffer directly, as it may be modified by the caller.
+        """
         return list(self._capture_buf)
 
     def session_trace_config(self) -> dict[str, Any]:
@@ -180,13 +189,15 @@ class EddySeek(SeekHost):
         }
 
     @staticmethod
-    def _load_ldc1612(config: ConfigWrapper) -> LDC1612:
+    def _load_ldc1612(
+        config: ConfigWrapper,
+    ) -> LDC1612:  # pyright: ignore[reportInvalidTypeForm]
         sensor_type = config.get("sensor_type", "").strip().lower()
         if sensor_type != "ldc1612":
             raise config.error(
                 f"eddy_seek: sensor_type must be 'ldc1612' (got {sensor_type!r})"
             )
-        return LDC1612(config)  # pyright: ignore[reportUnknownReturnType]
+        return LDC1612(config)  # pyright: ignore[reportOptionalCall]
 
     def _handle_batch(self, msg: dict) -> bool:
         if self._stream_refs <= 0:  # No one is listening, don't process msg
