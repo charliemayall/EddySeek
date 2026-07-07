@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DIVERGE_TOL = 1.25
+_DIVERGE_TOL = 1.75
 
 
 class SeekExitKind(StrEnum):
