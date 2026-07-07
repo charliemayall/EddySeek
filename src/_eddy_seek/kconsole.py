@@ -11,9 +11,10 @@ Klipper console output with echo:/!! prefixes and logger pairing.
 from __future__ import annotations
 
 import logging
-from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
+
+from .common import StrEnum
 
 if TYPE_CHECKING:
     from klippy.gcode import GCodeCommand
@@ -23,14 +24,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class ConsoleSymbols(str, Enum):
+class ConsoleSymbols(StrEnum):
     WARN = "⚠️"
     ERROR = "❌"
     PLOT = "📊"
     BR = "</br>"
-
-    def __str__(self) -> str:
-        return self.value
 
 
 class KConsole:

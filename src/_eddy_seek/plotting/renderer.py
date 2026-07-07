@@ -12,10 +12,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Literal
 
-from ..common import Offset
+from ..common import Offset, StrEnum
 from ._plotly import (
     apply_axes_theme,
     freq_marker,
@@ -35,7 +34,7 @@ from .primitives import (
 )
 
 
-class ScatterMode(str, Enum):
+class ScatterMode(StrEnum):
     MARKERS = "markers"
     MARKERS_LINES = "markers+lines"
 

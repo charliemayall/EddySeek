@@ -27,17 +27,24 @@ _ROUND_PRECISION = 2
 CHAR_DELTA = "\u0394"
 
 
-class Axis(str, Enum):
+class StrEnum(str, Enum):
+    """String enum for Python 3.10+ (stdlib ``enum.StrEnum`` is 3.11+)."""
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class Axis(StrEnum):
     X = "x"
     Y = "y"
 
 
-class Phase(str, Enum):
+class Phase(StrEnum):
     COARSE = "coarse"
     FINE = "fine"
 
 
-class Direction(str, Enum):
+class Direction(StrEnum):
     PLUS = "+"
     MINUS = "-"
 

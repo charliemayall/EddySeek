@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from enum import Enum
 from typing import TYPE_CHECKING
 
-from ..common import Offset
+from ..common import Offset, StrEnum
 from ..kconsole import KConsole
 
 if TYPE_CHECKING:
@@ -24,7 +23,7 @@ logger = logging.getLogger(__name__)
 _DIVERGE_TOL = 1.25
 
 
-class SeekExitKind(str, Enum):
+class SeekExitKind(StrEnum):
     """How a seek session or pass ended."""
 
     CONVERGED = "converged"
