@@ -75,15 +75,18 @@ class PlateauState:
         bootstrap: Offset,
     ) -> tuple[PassAction, Offset]:
         at_min = is_min_radius(outcome.trace_radius, radius_min)
+        at_floor = is_min_radius(outcome.nominal_radius, radius_min)
 
         if outcome.rejected:
             self.last_rejected = True
-            if at_min:
+            if at_min or at_floor:
                 hold = self.anchor if self.anchor is not None else outcome.result
                 self.frozen = hold
                 logger.info(
                     f"eddy_seek: circle_harmonic at min radius "
-                    f"r={outcome.trace_radius:.4f} - stopping after rejected pass"
+                    f"(trace_r={outcome.trace_radius:.4f} "
+                    f"nominal_r={outcome.nominal_radius:.4f}) "
+                    f"- stopping after rejected pass"
                 )
                 return PassAction.STOP, hold
             self.tier += 1

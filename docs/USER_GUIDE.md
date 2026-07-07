@@ -218,24 +218,16 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 ## G-code commands
 
-| Command                                          | Description                                                                                                                                                       |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EDDY_SEEK_QUERY`                                | Print frequency statistics                                                                                                                                        |
-| `EDDY_SEEK_RESET`                                | Manually clear capture buffer (Not usually ever needed)                                                                                                           |
-| `EDDY_SEEK_SET`                                  | Override settings until FIRMWARE_RESTART                                                                                                                          |
-| `EDDY_SEEK_START`                                | XY search from current position                                                                                                                                   |
-| `EDDY_SEEK_START STRATEGY=centroid`              | One-off seek using a different strategy                                                                                                                           |
-| `EDDY_SEEK_ACCURACY REPEATS=n MOCK=0/1`          | Repeat EDDY_SEEK_START n times (default 3, min 2, max 50) and report repeatability. Mock mode applies a small random offset to the start position of each repeat. |
-| `EDDY_SEEK_TOOL TOOL=n`                          | Align one tool (caller loads the tool)                                                                                                                            |
-| `EDDY_SEEK_TOOL TOOL=n LOAD=1`                   | Run the tool load macro before seeking                                                                                                                            |
-| `EDDY_SEEK_TOOL TOOL=n STRATEGY=centroid`        | One-off strategy for this tool align                                                                                                                              |
-| `EDDY_SEEK_TOOL TOOL=n REPEATS=3`                | Align with 3 seeks averaged per tool                                                                                                                              |
-| `EDDY_SEEK_TOOLS`                                | Align all tools                                                                                                                                                   |
-| `EDDY_SEEK_TOOLS REPEATS=3`                      | Align all tools with averaged seeks                                                                                                                               |
-| `EDDY_SEEK_TOOLS TOOLS=n`                        | Align tools 0…n−1 only                                                                                                                                            |
-| `EDDY_SEEK_APPLY_OFFSET TOOL=n`                  | Apply saved XY offset via `SET_GCODE_OFFSET`                                                                                                                      |
-| `EDDY_SEEK_SET STRATEGY=centroid TOLERANCE=0.05` | Override last settings until FIRMWARE_RESTART. Run bare `EDDY_SEEK_SET` to print current values.                                                                  |
-| `EDDY_SEEK_ACCURACY REPEATS=5`                   | Runs full seeks (default 3, min 2, max 50) and prints σ / max scatter.                                                                                            |
+| Command                                                                 | Description                                                                                                                     |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `EDDY_SEEK_QUERY`                                                       | Print frequency statistics                                                                                                      |
+| `EDDY_SEEK_RESET`                                                       | Manually clear capture buffer (not usually needed)                                                                              |
+| `EDDY_SEEK_SET [<key>=<value> …]`                                       | Override config until `FIRMWARE_RESTART`. Bare command prints current values (e.g. `STRATEGY=<enum>`, `TOLERANCE=<float>`).     |
+| `EDDY_SEEK_START [STRATEGY=<enum>]`                                     | XY search from current position                                                                                                 |
+| `EDDY_SEEK_ACCURACY [REPEATS=<int> MOCK=<0\|1>]`                        | Run full seeks (default 3, min 2, max 50) and report σ / max scatter. `MOCK=1` applies a small random start offset each repeat. |
+| `EDDY_SEEK_TOOL TOOL=<int> [REPEATS=<int> LOAD=<0\|1> STRATEGY=<enum>]` | Align one tool. Caller loads the tool unless `LOAD=1`. `REPEATS` seeks are averaged per tool (default 3).                       |
+| `EDDY_SEEK_TOOLS [TOOLS=<int> REPEATS=<int>]`                           | Align tools 0…n−1 with averaged seeks (default: all tools, 3 repeats each).                                                     |
+| `EDDY_SEEK_APPLY_OFFSET [TOOL=<int>]`                                   | Apply saved XY offset via `SET_GCODE_OFFSET`                                                                                    |
 
 ---
 

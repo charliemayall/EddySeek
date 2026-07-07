@@ -79,6 +79,7 @@ class CirclePassOutcome:
     result: Offset
     trace_center: Offset
     trace_radius: float
+    nominal_radius: float
     samples: list[MotionSample]
     binned: list[tuple[float, float]]
     fit: HarmonicFit | None
@@ -91,6 +92,7 @@ def outcome_hold(
     best: Offset,
     trace_center: Offset,
     trace_radius: float,
+    nominal_radius: float,
     *,
     samples: list[MotionSample] | None = None,
     binned: list[tuple[float, float]] | None = None,
@@ -99,6 +101,7 @@ def outcome_hold(
         result=best,
         trace_center=trace_center,
         trace_radius=trace_radius,
+        nominal_radius=nominal_radius,
         samples=samples or [],
         binned=binned or [],
         fit=None,
@@ -112,6 +115,7 @@ def outcome_reject(
     best: Offset,
     trace_center: Offset,
     trace_radius: float,
+    nominal_radius: float,
     samples: list[MotionSample],
     binned: list[tuple[float, float]],
     *,
@@ -122,6 +126,7 @@ def outcome_reject(
         result=best,
         trace_center=trace_center,
         trace_radius=trace_radius,
+        nominal_radius=nominal_radius,
         samples=samples,
         binned=binned,
         fit=fit,
@@ -135,6 +140,7 @@ def outcome_accept(
     result: Offset,
     trace_center: Offset,
     trace_radius: float,
+    nominal_radius: float,
     samples: list[MotionSample],
     binned: list[tuple[float, float]],
     fit: HarmonicFit,
@@ -145,6 +151,7 @@ def outcome_accept(
         result=result,
         trace_center=trace_center,
         trace_radius=trace_radius,
+        nominal_radius=nominal_radius,
         samples=samples,
         binned=binned,
         fit=fit,
@@ -185,7 +192,7 @@ def _circle_trace_geometry(
     best: Offset,
     cfg,
     pass_num: int,
-) -> CirclePassOutcome | tuple[Offset, float, list[tuple[Offset, Offset]]]:
+) -> CirclePassOutcome | tuple[Offset, float, float, list[tuple[Offset, Offset]]]:
     radius = circle_radius_for_tier(
         plateau.tier,
         radius_start=cfg.circle_radius_start,
@@ -198,14 +205,14 @@ def _circle_trace_geometry(
     if is_below_min_radius(trace_radius, cfg.circle_radius_min):
         logger.warning(
             f"eddy_seek: circle_harmonic pass {pass_num} radius {trace_radius:.4f} "
-            f"< min {cfg.circle_radius_min} - holding bootstrap"
+            f"< min {cfg.circle_radius_min} - holding position"
         )
-        return outcome_hold(best, trace_center, trace_radius)
+        return outcome_hold(best, trace_center, trace_radius, radius)
 
     legs = circle_arc_legs(trace_center, trace_radius, cfg.circle_arc_resolution)
     if not legs:
-        return outcome_hold(best, trace_center, trace_radius)
-    return trace_center, trace_radius, legs
+        return outcome_hold(best, trace_center, trace_radius, radius)
+    return trace_center, trace_radius, radius, legs
 
 
 def _collect_circle_harmonic(
@@ -214,6 +221,7 @@ def _collect_circle_harmonic(
     best: Offset,
     trace_center: Offset,
     trace_radius: float,
+    nominal_radius: float,
     legs: Sequence[tuple[Offset, Offset]],
     lead_in: Sequence[tuple[Offset, Offset]] | None,
     segment_span: float,
@@ -274,12 +282,13 @@ def _collect_circle_harmonic(
     if fit is None:
         logger.warning(
             f"eddy_seek: circle_harmonic pass {pass_num} fit failed "
-            f"(r={trace_radius:.3f}) - holding bootstrap"
+            f"(r={trace_radius:.3f}) - rejecting pass"
         )
         return outcome_reject(
             best,
             trace_center,
             trace_radius,
+            nominal_radius,
             samples,
             binned,
             fit=None,
@@ -302,6 +311,7 @@ def _collect_circle_harmonic(
             best,
             trace_center,
             trace_radius,
+            nominal_radius,
             samples,
             binned,
             fit=fit,
@@ -319,6 +329,7 @@ def _harmonic_correction_outcome(
     mode: CircleHarmonicMode,
     trace_center: Offset,
     trace_radius: float,
+    nominal_radius: float,
     samples: list[MotionSample],
     binned: list[tuple[float, float]],
     fit: HarmonicFit,
@@ -361,6 +372,7 @@ def _harmonic_correction_outcome(
             best,
             trace_center,
             trace_radius,
+            nominal_radius,
             samples,
             binned,
             fit=fit,
@@ -376,6 +388,7 @@ def _harmonic_correction_outcome(
         result,
         trace_center,
         trace_radius,
+        nominal_radius,
         samples,
         binned,
         fit,
@@ -397,7 +410,7 @@ def compute_circle_pass(
     geometry = _circle_trace_geometry(plateau, best, cfg, pass_num)
     if isinstance(geometry, CirclePassOutcome):
         return geometry
-    trace_center, trace_radius, legs = geometry
+    trace_center, trace_radius, nominal_radius, legs = geometry
 
     circumference = 2 * math.pi * trace_radius
     segment_span = circumference / len(legs)
@@ -422,6 +435,7 @@ def compute_circle_pass(
         best,
         trace_center,
         trace_radius,
+        nominal_radius,
         legs,
         lead_in or None,
         segment_span,
@@ -438,6 +452,7 @@ def compute_circle_pass(
         mode,
         trace_center,
         trace_radius,
+        nominal_radius,
         samples,
         binned,
         fit,

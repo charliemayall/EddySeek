@@ -346,7 +346,7 @@ class EddySeek(SeekHost):
         tool_number = gcmd.get_int("TOOL", -1, minval=0)
         if tool_number == -1:
             raise gcmd.error("TOOL=<number> is required for EDDY_SEEK_TOOL")
-        repeats = gcmd.get_int("REPEATS", 2, minval=2, maxval=50)
+        repeats = gcmd.get_int("REPEATS", 3, minval=1, maxval=50)
         load_tool = gcmd.get_int("LOAD", 0, minval=0, maxval=1) == 1
         strategy = self.seek_config.strategy_from_gcmd(gcmd)
         logger.info(
@@ -387,7 +387,7 @@ class EddySeek(SeekHost):
     def cmd_EDDY_SEEK_TOOLS(self, gcmd: GCodeCommand) -> None:
         self.refresh_console(gcmd)
         tool_count = gcmd.get_int("TOOLS", self._tools.tool_count, minval=1)
-        repeats = gcmd.get_int("REPEATS", 1, minval=1, maxval=50)
+        repeats = gcmd.get_int("REPEATS", 3, minval=1, maxval=50)
         logger.info(f"eddy_seek: EDDY_SEEK_TOOLS tools={tool_count} repeats={repeats}")
         result = align_all_tools(self, self._tools, gcmd, tool_count, repeats=repeats)
         if result.tool0_center is not None:

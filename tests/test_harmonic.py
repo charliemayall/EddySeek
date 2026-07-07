@@ -164,6 +164,7 @@ def test_finish_circle_pass_accept_sets_last_ok():
         result,
         Offset.zero(),
         2.0,
+        2.0,
         [],
         [],
         _harmonic_fit_stub(),
@@ -186,6 +187,7 @@ def test_finish_circle_pass_reject_bumps_tier():
     outcome = _outcome_reject(
         Offset.zero(),
         Offset.zero(),
+        2.0,
         2.0,
         [],
         [],
@@ -210,6 +212,7 @@ def test_finish_circle_pass_reject_at_min_freezes():
         Offset.zero(),
         Offset.zero(),
         0.5,
+        0.5,
         [],
         [],
         fit=None,
@@ -217,6 +220,32 @@ def test_finish_circle_pass_reject_at_min_freezes():
     )
     strategy._finish_circle_pass(ctx, 3, Offset.zero(), outcome)
     assert strategy._plateau.frozen == Offset(0.1, 0.2)
+
+
+def test_finish_circle_pass_reject_at_tier_floor_freezes():
+    from _eddy_seek.strategy.circle_harmonic import (
+        CircleHarmonicStrategy,
+        _outcome_reject,
+    )
+
+    strategy = CircleHarmonicStrategy()
+    strategy._plateau.anchor = Offset(0.1, 0.2)
+    ctx = _plateau_ctx()
+    # pony: trace barely above min+eps; nominal tier already at floor.
+    trace_r = 0.5 + 2e-9
+    outcome = _outcome_reject(
+        Offset.zero(),
+        Offset.zero(),
+        trace_r,
+        0.5,
+        [],
+        [],
+        fit=None,
+        reason="bad model",
+    )
+    strategy._finish_circle_pass(ctx, 3, Offset.zero(), outcome)
+    assert strategy._plateau.frozen == Offset(0.1, 0.2)
+    assert strategy._plateau.tier == 0
 
 
 def test_finish_circle_pass_reject_returns_last_ok():
@@ -231,6 +260,7 @@ def test_finish_circle_pass_reject_returns_last_ok():
     outcome = _outcome_reject(
         Offset.zero(),
         Offset.zero(),
+        2.0,
         2.0,
         [],
         [],
@@ -252,6 +282,7 @@ def test_finish_circle_pass_accept_does_not_freeze_at_large_radius():
     outcome = _outcome_accept(
         Offset(0.01, 0.01),
         Offset.zero(),
+        2.0,
         2.0,
         [],
         [],
