@@ -10,11 +10,13 @@ Shared repeat-and-average seek loop for EDDY_SEEK_ACCURACY and tool alignment.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from .accuracy_stats import compute_accuracy_stats, report_accuracy_stats
 from .common import Offset, Position, yield_to_reactor
 from .kconsole import KConsole
 from .movement.gcode_state import GCodeState
@@ -22,7 +24,9 @@ from .movement.handler import move_to_xy
 from .plotting.accuracy import write_accuracy_plot
 from .plotting.artifacts import write_figure
 from .plotting.primitives import AccuracyRepeatRecord
-from .session import SeekHost, SeekSessionResult, compute_accuracy_stats
+from .session import SeekHost, SeekSessionResult
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +60,40 @@ def write_repeat_scatter_plot(
         suffix=suffix,
         run_label=run_label,
     )
+
+
+def finalize_repeat_seek(
+    host: SeekHost,
+    console: KConsole,
+    repeated: RepeatedSeekResult,
+    *,
+    run_id: str,
+    write_at: datetime,
+    suffix: str,
+    run_label: str,
+    log_plot_saved: bool = False,
+) -> None:
+    """Report repeatability stats and optionally write the scatter plot."""
+    report_accuracy_stats(
+        console,
+        list(repeated.offsets),
+        durations_s=list(repeated.durations_s),
+    )
+    if not host.seek_config.save_plots:
+        return
+    plot_path = write_repeat_scatter_plot(
+        host,
+        records=repeated.records,
+        run_id=run_id,
+        write_at=write_at,
+        suffix=suffix,
+        run_label=run_label,
+    )
+    if plot_path is None:
+        return
+    console.plot_saved(plot_path)
+    if log_plot_saved:
+        logger.info(f"eddy_seek: accuracy plot saved to {plot_path}")
 
 
 def run_repeated_seeks(

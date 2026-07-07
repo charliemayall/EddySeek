@@ -20,8 +20,8 @@ from .common import Offset, Position
 from .config import SeekConfig
 from .kconsole import KConsole
 from .movement.handler import manual_move_xy
-from .repeated_seek import run_repeated_seeks, write_repeat_scatter_plot
-from .session import SeekHost, SeekSession, SeekSessionResult, report_accuracy_stats
+from .repeated_seek import finalize_repeat_seek, run_repeated_seeks
+from .session import SeekHost, SeekSession, SeekSessionResult
 from .strategy import strategy_for
 
 logger = logging.getLogger(__name__)
@@ -88,22 +88,18 @@ def run_accuracy_test(
         return
 
     offsets = list(repeated.offsets)
-    durations_s = list(repeated.durations_s)
     if len(offsets) < 2:
         console.error("Need at least 2 successful repeats for deviation report")
         return
 
-    report_accuracy_stats(console, offsets, durations_s=durations_s)
-    if cfg.save_plots and len(offsets) >= 2:
-        plot_path = write_repeat_scatter_plot(
-            host,
-            records=repeated.records,
-            run_id=run_id,
-            write_at=write_at,
-            suffix="accuracy",
-            run_label="accuracy",
-        )
-        if plot_path is not None:
-            console.plot_saved(plot_path)
-            logger.info(f"eddy_seek: accuracy plot saved to {plot_path}")
+    finalize_repeat_seek(
+        host,
+        console,
+        repeated,
+        run_id=run_id,
+        write_at=write_at,
+        suffix="accuracy",
+        run_label="accuracy",
+        log_plot_saved=True,
+    )
     console.exit(f"Accuracy test complete ({len(offsets)} repeats)")

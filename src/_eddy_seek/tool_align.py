@@ -20,8 +20,9 @@ from .common import Offset, Position
 from .kconsole import KConsole
 from .movement.guard import clear_gcode_offset_xy
 from .movement.handler import move_to_xy
-from .repeated_seek import run_repeated_seeks, write_repeat_scatter_plot
-from .session import SeekHost, SeekSession, SeekSessionResult, report_accuracy_stats
+from .plot_announce import announce_seek_plot
+from .repeated_seek import finalize_repeat_seek, run_repeated_seeks
+from .session import SeekHost, SeekSession, SeekSessionResult
 from .strategy import strategy_for
 from .tools import Tool, ToolAlignConfig
 
@@ -74,17 +75,6 @@ def move_to_seek_start_pos(
     toolhead = host.printer.lookup_object("toolhead")
     move_to_xy(toolhead, sensor, host.seek_config.jog_speed, wait=True)
     return Position.from_toolhead(host.printer)
-
-
-def _announce_plot_result(
-    host: SeekHost,
-    console: KConsole,
-    result: SeekSessionResult,
-) -> None:
-    if result.plot_path is not None:
-        console.plot_saved(result.plot_path)
-    elif host.seek_config.save_plots and result.status == "ok":
-        console.warn_plot_missing()
 
 
 def align_tool(
@@ -154,24 +144,17 @@ def _seek_tool_repeated(
         return None
 
     if repeats >= 2:
-        report_accuracy_stats(
+        assert run_id is not None
+        assert artifact_write_at is not None
+        finalize_repeat_seek(
+            host,
             console,
-            list(repeated.offsets),
-            durations_s=list(repeated.durations_s),
+            repeated,
+            run_id=run_id,
+            write_at=artifact_write_at,
+            suffix=base_artifact_label,
+            run_label=run_label,
         )
-        if host.seek_config.save_plots:
-            assert run_id is not None
-            assert artifact_write_at is not None
-            plot_path = write_repeat_scatter_plot(
-                host,
-                records=repeated.records,
-                run_id=run_id,
-                write_at=artifact_write_at,
-                suffix=base_artifact_label,
-                run_label=run_label,
-            )
-            if plot_path is not None:
-                console.plot_saved(plot_path)
 
     return repeated.mean, repeated.last_result
 
@@ -239,7 +222,12 @@ def align_tool_number(
         console.info(f"Tool 0 reference - {center.to_console_str()}")
         _warn_sensor_position_if_needed(tools, mean_offset, console=console)
         if repeats == 1 and last_result is not None:
-            _announce_plot_result(host, console, last_result)
+            announce_seek_plot(
+                console,
+                plot_path=last_result.plot_path,
+                status=last_result.status,
+                save_plots=host.seek_config.save_plots,
+            )
         return tool, center, None
 
     if tool0_center is None:
@@ -274,7 +262,12 @@ def align_tool_number(
     )
     console.info(f"Tool {tool_number} offset - {mean_offset.to_gcode()} mm")
     if repeats == 1 and last_result is not None:
-        _announce_plot_result(host, console, last_result)
+        announce_seek_plot(
+            console,
+            plot_path=last_result.plot_path,
+            status=last_result.status,
+            save_plots=host.seek_config.save_plots,
+        )
     return tool, tool0_center, None
 
 

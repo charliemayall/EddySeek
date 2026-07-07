@@ -458,9 +458,10 @@ def test_align_tool_number_averages_repeats(
     seek_results = [ok_seek_result(offset=offset) for offset in offsets]
     stats_called = False
 
-    def capture_stats(_console, recorded, *, durations_s=None):
+    def capture_finalize(_host, _console, repeated, **kwargs):
         nonlocal stats_called
         stats_called = True
+        recorded = list(repeated.offsets)
         assert len(recorded) == 3
         assert recorded[0].x == pytest.approx(offsets[0].x)
         assert recorded[2].x == pytest.approx(offsets[2].x)
@@ -476,8 +477,8 @@ def test_align_tool_number_averages_repeats(
         if check_stats:
             stack.enter_context(
                 patch(
-                    "_eddy_seek.tool_align.report_accuracy_stats",
-                    side_effect=capture_stats,
+                    "_eddy_seek.tool_align.finalize_repeat_seek",
+                    side_effect=capture_finalize,
                 )
             )
         stack.enter_context(
