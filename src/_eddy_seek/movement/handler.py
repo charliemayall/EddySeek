@@ -296,10 +296,32 @@ class MotionHandler(_SessionMotionBase):
         speed: float,
         *,
         lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
+        between_leg_moves: (
+            Sequence[Sequence[tuple[Offset, Offset]] | None] | None
+        ) = None,
     ) -> None:
+        """Run captured sweep legs, optionally with connector legs between them
+
+        ``lead_in_legs`` are uncaptured chords before the first captured leg
+        (e.g. circle warmup).
+
+        ``between_leg_moves`` Uncaptured moves,  length ``len(legs) - 1``
+                              between_leg_moves[i] is a sequence of chord legs that cumulatively move between legs[i] and legs[i+1]
+                              or None when no connector is needed
+
+        """
         for line_start, line_end in lead_in_legs or ():
             self.move_leg(line_start, line_end, speed)
-        for line_start, line_end in legs:
+        if between_leg_moves is not None and len(between_leg_moves) != len(legs) - 1:
+            raise ValueError(
+                "eddy_seek: between_leg_moves must have length len(legs) - 1"
+            )
+        for index, (line_start, line_end) in enumerate(legs):
+            if between_leg_moves and index > 0:
+                connector = between_leg_moves[index - 1]
+                if connector:
+                    for seg_start, seg_end in connector:
+                        self.move_leg(seg_start, seg_end, speed)
             self.capture_leg(line_start, line_end, speed)
         self.th.wait_moves()
         self.th.get_last_move_time()
@@ -309,7 +331,7 @@ class MotionHandler(_SessionMotionBase):
         speed_mm_s = speed / 60.0
         self.th.limit_next_junction_speed(
             min(speed_mm_s, MAX_SCV)
-        )  # jerky cornering leeds to dwell like behaviour
+        )  # jerky cornering leeds to odd behaviour and it is noisy
         manual_move_xy(self.th, machine, speed_mm_s)
 
     def _register_capture_window(self, capture_start: float) -> None:
