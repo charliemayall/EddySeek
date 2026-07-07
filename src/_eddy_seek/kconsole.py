@@ -11,6 +11,7 @@ Klipper console output with echo:/!! prefixes and logger pairing.
 from __future__ import annotations
 
 import logging
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn, Protocol
 
@@ -26,79 +27,76 @@ class SeekReporter(Protocol):
     def info(self, msg: str) -> None: ...
 
 
-class Emoji:
+class ConsoleSymbols(str, Enum):
     WARN = "⚠️"
     ERROR = "❌"
     PLOT = "📊"
+    BR = "</br>"
 
 
 class KConsole:
     """Wrap ``GCodeCommand.respond_raw`` for user-facing output."""
 
     prefix: str = "ES"
-    BR = "</br>"
 
-    def __init__(self, gcmd: GCodeCommand, *, verbose: bool = False) -> None:
-        self._gcmd = gcmd
-        self.verbose = verbose
-
-    def _emit(
-        self, klipper_prefix: str, msg: str, *, log_level: int = logging.INFO
+    def __init__(
+        self,
+        gcmd: GCodeCommand,
+        cfg: SeekConfig,
+        *,
+        verbose: bool | None = None,
     ) -> None:
+        self._gcmd = gcmd
+        if verbose is not None:
+            self.verbose = verbose
+        else:
+            from_param = False
+            try:
+                raw = gcmd.get("VERBOSE", "0")
+                from_param = str(raw).strip().lower() in ("1", "true", "yes", "on")
+            except Exception:
+                pass
+            self.verbose = from_param or cfg.debug
+
+    def _emit(self, klipper_prefix: str, msg: str) -> None:
         self._gcmd.respond_raw(f"{klipper_prefix}{msg}")
-        logger.log(log_level, f"eddy_seek: {msg}")
 
     def _prefix_msg(self, msg: str) -> str:
         return f"{self.prefix}: {msg}"
 
     def entry(self, msg: str) -> None:
-        """First message of a command flow (includes ``ES:`` prefix)."""
+        """First message of a command flow (includes prefix)."""
         self._emit("echo: ", self._prefix_msg(msg))
 
     def exit(self, msg: str) -> None:
-        """Last message of a command flow (includes ``ES:`` prefix)."""
+        """Last message of a command flow (includes prefix)."""
         self._emit("echo: ", self._prefix_msg(msg))
 
     def info(self, msg: str) -> None:
-        """Progress line without ``ES:`` prefix."""
+        """Use for info lines without prefix."""
         self._emit("echo: ", msg)
 
     def plot_saved(self, plot_path: str | Path) -> None:
         """Report a saved plot with its full resolved path."""
-        self.info(f"{Emoji.PLOT} Plot saved: {Path(plot_path)}")
+        self.info(f"{ConsoleSymbols.PLOT.value} Plot saved: {Path(plot_path)}")
 
     def warn(self, msg: str) -> None:
         self._emit(
             "echo: ",
-            f"{(Emoji.WARN + '  ') * 3}"
-            f"{self.BR}"
-            f"WARNING: {msg}{self.BR}"
-            f"{(Emoji.WARN + '  ') * 3}",
+            f"{(ConsoleSymbols.WARN + '  ') * 3}"
+            f"{ConsoleSymbols.BR}"
+            f"WARNING: {msg}{ConsoleSymbols.BR}"
+            f"{(ConsoleSymbols.WARN + '  ') * 3}",
         )
 
-    def error(self, msg: str) -> None:
-        self._emit("!! ", msg, log_level=logging.ERROR)
-
     def detail(self, msg: str) -> None:
+        """Print a info line, but only when KConsole.verbose is True."""
         if self.verbose:
             self._emit("echo: ", msg)
-        else:
-            logger.info(f"eddy_seek: {msg}")
 
-    def fail(self, msg: str) -> NoReturn:
+    def error(self, msg: str) -> None:
+        self._emit("!! ", msg)
+
+    def raise_error(self, msg: str) -> NoReturn:
+        # do not print here as Klipper will print the error message automatically
         raise self._gcmd.error(msg)
-
-
-def console_for_gcmd(gcmd: GCodeCommand, cfg: SeekConfig) -> KConsole:
-    """
-    Create a console for the given gcmd and seek config.
-    Verbosity is determined by the VERBOSE gcode param or debug config.
-    """
-    verbose = False
-    try:
-        raw = gcmd.get("VERBOSE", "0")
-        verbose = str(raw).strip().lower() in ("1", "true", "yes", "on")
-    except Exception:
-        pass
-    console = KConsole(gcmd, verbose=verbose or cfg.debug)
-    return console

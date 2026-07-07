@@ -86,6 +86,7 @@ class MotionCapture:
         flat: Literal[True] = True,
         min_samples: int | None = None,
         span_mm: float | None = None,
+        lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
     ) -> list[MotionSample]: ...
 
     @overload
@@ -97,6 +98,7 @@ class MotionCapture:
         flat: Literal[False],
         min_samples: int | None = None,
         span_mm: float | None = None,
+        lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
     ) -> list[list[MotionSample]]: ...
 
     def run(

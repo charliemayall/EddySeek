@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 from ._eddy_seek.accuracy_test import run_accuracy_test
 from ._eddy_seek.common import Offset, Position
 from ._eddy_seek.config import SeekConfig, load_seek_config
-from ._eddy_seek.kconsole import KConsole, console_for_gcmd
+from ._eddy_seek.kconsole import KConsole
 from ._eddy_seek.movement.guard import clear_gcode_offset_xy
 from ._eddy_seek.session import SeekHost, SeekSession
 from ._eddy_seek.strategy import strategy_for
@@ -113,7 +113,7 @@ class EddySeek(SeekHost):
             gcode.register_command(
                 "ES_DEBUG_CONSOLE",
                 self.cmd_DEBUG_CONSOLE,
-                desc="test console_for_gcmd",
+                desc="test KConsole",
             )
 
         self.printer.add_object("eddy_seek", self)
@@ -126,7 +126,7 @@ class EddySeek(SeekHost):
         self._sensor.add_client(callback)
 
     def refresh_console(self, gcmd: GCodeCommand) -> KConsole:
-        self.console = console_for_gcmd(gcmd, self.seek_config)
+        self.console = KConsole(gcmd, self.seek_config)
         return self.console
 
     def _stop_sensor_stream(self) -> None:

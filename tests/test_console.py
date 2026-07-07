@@ -11,12 +11,12 @@ from pathlib import Path
 from fakes import PLOT_HTML_SUFFIX, FakeGcmd
 
 from _eddy_seek.config import SeekConfig
-from _eddy_seek.kconsole import KConsole, console_for_gcmd
+from _eddy_seek.kconsole import KConsole
 
 
 def test_console_prefix_mapping():
     gcmd = FakeGcmd()
-    console = KConsole(gcmd)  # pyright: ignore[reportArgumentType]
+    console = KConsole(gcmd, SeekConfig())  # pyright: ignore[reportArgumentType]
 
     console.info("Pass 1: X=+0.12 Y=-0.06 mm")
     console.entry("Seeking nozzle centre (sweep_centroid)…")
@@ -33,19 +33,19 @@ def test_console_prefix_mapping():
 
 def test_console_detail_gated_on_verbose():
     gcmd = FakeGcmd()
-    quiet = KConsole(gcmd, verbose=False)  # pyright: ignore[reportArgumentType]
+    quiet = KConsole(gcmd, SeekConfig(), verbose=False)  # pyright: ignore[reportArgumentType]
     quiet.detail("internal config dump")
     assert gcmd.raw == []
 
     gcmd.raw.clear()
-    loud = KConsole(gcmd, verbose=True)  # pyright: ignore[reportArgumentType]
+    loud = KConsole(gcmd, SeekConfig(), verbose=True)  # pyright: ignore[reportArgumentType]
     loud.detail("internal config dump")
     assert gcmd.raw == ["echo: internal config dump"]
 
 
 def test_console_for_verbose_gcode_param():
     gcmd = FakeGcmd(VERBOSE="1")
-    console = console_for_gcmd(
+    console = KConsole(
         gcmd,
         SeekConfig(),  # pyright: ignore[reportArgumentType]
     )
@@ -54,7 +54,7 @@ def test_console_for_verbose_gcode_param():
 
 def test_console_for_verbose_from_config():
     gcmd = FakeGcmd()
-    console = console_for_gcmd(
+    console = KConsole(
         gcmd,
         SeekConfig(debug=True),  # pyright: ignore[reportArgumentType]
     )
@@ -63,7 +63,7 @@ def test_console_for_verbose_from_config():
 
 def test_console_plot_saved():
     gcmd = FakeGcmd()
-    console = KConsole(gcmd)  # pyright: ignore[reportArgumentType]
+    console = KConsole(gcmd, SeekConfig())  # pyright: ignore[reportArgumentType]
     plot_path = Path("/tmp/eddy_seek_results") / PLOT_HTML_SUFFIX
     console.plot_saved(plot_path)
     assert gcmd.raw == [f"echo: 📊 Plot saved: {plot_path}"]
@@ -76,7 +76,7 @@ def test_console_stored_on_host():
             self.console: KConsole | None = None
 
         def refresh_console(self, gcmd) -> KConsole:
-            self.console = console_for_gcmd(gcmd, self.seek_config)  # pyright: ignore[reportArgumentType]
+            self.console = KConsole(gcmd, self.seek_config)  # pyright: ignore[reportArgumentType]
             return self.console
 
     host = _Host()

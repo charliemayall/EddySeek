@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from .common import Offset, Position, session_artifact_filename
 from .config import SeekConfig
-from .kconsole import KConsole, console_for_gcmd
+from .kconsole import ConsoleSymbols, KConsole
 from .movement.gcode_state import GCodeState
 from .movement.guard import KnownKinematicLimits, clear_gcode_offset_xy
 from .movement.handler import MotionHandler
@@ -55,6 +55,15 @@ class SeekHost(Protocol):
     def acquire_sensor_stream(self) -> AbstractContextManager[None]:
         """Acquire a context manager that will release the sensor stream when exited."""
         ...
+
+
+@dataclass(frozen=True, slots=True)
+class _SearchRun:
+    status: Literal["ok", "failed"]
+    offset: Offset | None
+    passes_run: int
+    error_message: str | None
+    session_plot_path: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,10 +158,8 @@ class SeekSession:
         boundaries: bool = True,
         announce_plot: bool | None = None,
     ) -> SeekSessionResult:
-        from .strategy.base import DivergenceError, MaxPassesError
-
         cfg = self.config
-        console = console_for_gcmd(gcmd, self._host.seek_config)
+        console = KConsole(gcmd, self._host.seek_config)
         self._host.console = console
         logger.info(
             f"eddy_seek: session {self.session_id} start "
@@ -161,105 +168,23 @@ class SeekSession:
 
         strategy.announce_start(self, console)
         clear_gcode_offset_xy(self._printer)
-        best = Offset.zero()
-        passes_run = 0
-        error_message = None
-        session_plot_path: str | None = None
         show_plot_saved = announce_plot if announce_plot is not None else boundaries
-        status: Literal["ok", "failed"] = "ok"
         with GCodeState(self._gcode, self._GCODE_STATE_MOVE):
-            try:
-                with (
-                    KnownKinematicLimits(self._printer),
-                    self._host.acquire_sensor_stream(),
-                ):
-                    self._session_start = Position.from_toolhead(self._printer)
-                    self._motion = MotionHandler(
-                        self._printer,
-                        self._host,
-                        self.config,
-                        self._session_start,
-                        self._get_single_sample if self.recorder.trace else None,
-                    )
-                    best, passes_run = strategy.search(self, console)
-                    self._motion.jog(best)
-                logger.info(
-                    f"eddy_seek: session {self.session_id} ok "
-                    f"offset=({best.x:.4f}, {best.y:.4f}) passes={passes_run}"
-                )
-                if boundaries:
-                    console.exit(
-                        f"Done - offset {best.to_console_str()} ({passes_run} passes)"
-                    )
-                status = "ok"
-                offset = best
-
-            except MaxPassesError as err:
-                error_message = str(err)
-                logger.exception("eddy_seek: search failed")
-                console.error(f"Seek failed: {error_message}")
-                status = "failed"
-                offset = None
-            except DivergenceError as err:
-                error_message = str(err)
-                logger.exception("eddy_seek: search failed")
-                console.error(f"Seek failed: {error_message}")
-                status = "failed"
-                offset = None
-                try:
-                    if self._motion is not None:
-                        self._motion.jog(
-                            err.previous
-                        )  # keep at last good result, so we can try again from there.
-                except Exception:
-                    logger.warning(
-                        "eddy_seek: failed to return to previous offset after divergence",
-                        exc_info=True,
-                    )
-            except Exception as exc:
-                error_message = str(exc)
-                logger.exception("eddy_seek: search failed")
-                console.error(f"Seek failed: {error_message}")
-                status = "failed"
-                offset = None
-                try:
-                    if self._motion is not None:
-                        self._motion.jog(Offset.zero())
-                except Exception:
-                    logger.warning(
-                        "eddy_seek: failed to return to session start after error",
-                        exc_info=True,
-                    )
-            finally:
-                session_plot_path = strategy.on_session_end(self)
-                if session_plot_path is not None:
-                    self.recorder.record(
-                        PlotArtifactRecord(
-                            strategy=strategy.name,
-                            passes=self.recorder.pass_count(),
-                            path=session_plot_path,
-                        )
-                    )
-                    if show_plot_saved:
-                        console.plot_saved(session_plot_path)
-                elif cfg.save_plots and status == "ok":
-                    console.warn(
-                        "save_plots is enabled but no plot was written (is plotly installed?)"
-                    )
-                    logger.warning(
-                        "eddy_seek: save_plots enabled but no plot was written"
-                    )
-                if self._motion is not None:
-                    self._motion.close()
+            search = self._execute_search(
+                strategy,
+                console,
+                boundaries=boundaries,
+                show_plot_saved=show_plot_saved,
+            )
         result = SeekSessionResult(
             session_id=self.session_id,
             start_time=self.start_time,
             end_time=time.time(),
-            status=status,
-            offset=offset,
-            passes_run=passes_run,
-            error_message=error_message,
-            plot_path=session_plot_path,
+            status=search.status,
+            offset=search.offset,
+            passes_run=search.passes_run,
+            error_message=search.error_message,
+            plot_path=search.session_plot_path,
         )
         if self._save_trace:
             _write_seek_trace(
@@ -273,6 +198,124 @@ class SeekSession:
             )
 
         return result
+
+    def _execute_search(
+        self,
+        strategy: SeekStrategy,
+        console: KConsole,
+        *,
+        boundaries: bool,
+        show_plot_saved: bool,
+    ) -> _SearchRun:
+        from .strategy.base import DivergenceError, MaxPassesError
+
+        best = Offset.zero()
+        passes_run = 0
+        error_message: str | None = None
+        session_plot_path: str | None = None
+        status: Literal["ok", "failed"] = "ok"
+        offset: Offset | None = None
+        try:
+            with (
+                KnownKinematicLimits(self._printer),
+                self._host.acquire_sensor_stream(),
+            ):
+                self._session_start = Position.from_toolhead(self._printer)
+                self._motion = MotionHandler(
+                    self._printer,
+                    self._host,
+                    self.config,
+                    self._session_start,
+                    self._get_single_sample if self.recorder.trace else None,
+                )
+                best, passes_run = strategy.search(self, console)
+                self._motion.jog(best)
+            logger.info(
+                f"eddy_seek: session {self.session_id} ok "
+                f"offset=({best.x:.4f}, {best.y:.4f}) passes={passes_run}"
+            )
+            if boundaries:
+                console.exit(
+                    f"Done - offset {best.to_console_str()} ({passes_run} passes)"
+                )
+            status = "ok"
+            offset = best
+        except MaxPassesError as err:
+            error_message = self._report_search_failure(console, err)
+            status = "failed"
+            offset = None
+        except DivergenceError as err:
+            error_message = self._report_search_failure(console, err)
+            status = "failed"
+            offset = None
+            self._recover_motion_jog(
+                err.previous,
+                warning="eddy_seek: failed to return to previous offset after divergence",
+            )
+        except Exception as exc:
+            error_message = self._report_search_failure(console, exc)
+            status = "failed"
+            offset = None
+            self._recover_motion_jog(
+                Offset.zero(),
+                warning="eddy_seek: failed to return to session start after error",
+            )
+        finally:
+            session_plot_path = self._finalize_session_plot(
+                strategy,
+                console,
+                status=status,
+                show_plot_saved=show_plot_saved,
+            )
+            if self._motion is not None:
+                self._motion.close()
+        return _SearchRun(
+            status=status,
+            offset=offset,
+            passes_run=passes_run,
+            error_message=error_message,
+            session_plot_path=session_plot_path,
+        )
+
+    def _report_search_failure(self, console: KConsole, err: BaseException) -> str:
+        error_message = str(err)
+        logger.exception("eddy_seek: search failed")
+        console.error(f"Seek failed: {error_message}")
+        return error_message
+
+    def _recover_motion_jog(self, offset: Offset, *, warning: str) -> None:
+        try:
+            if self._motion is not None:
+                self._motion.jog(offset)
+        except Exception:
+            logger.warning(warning, exc_info=True)
+
+    def _finalize_session_plot(
+        self,
+        strategy: SeekStrategy,
+        console: KConsole,
+        *,
+        status: Literal["ok", "failed"],
+        show_plot_saved: bool,
+    ) -> str | None:
+        cfg = self.config
+        session_plot_path = strategy.on_session_end(self)
+        if session_plot_path is not None:
+            self.recorder.record(
+                PlotArtifactRecord(
+                    strategy=strategy.name,
+                    passes=self.recorder.pass_count(),
+                    path=session_plot_path,
+                )
+            )
+            if show_plot_saved:
+                console.plot_saved(session_plot_path)
+        elif cfg.save_plots and status == "ok":
+            console.warn(
+                "save_plots is enabled but no plot was written (is plotly installed?)"
+            )
+            logger.warning("eddy_seek: save_plots enabled but no plot was written")
+        return session_plot_path
 
     def _get_single_sample(self, probe: ProbeRecord) -> None:
         self.recorder.record(probe)
@@ -400,16 +443,16 @@ def report_accuracy_stats(
     output.extend(
         [
             f"Repeatability ({n} runs):",
-            console.BR,
+            ConsoleSymbols.BR,
             f"mean X={stats.mean.x:+.2f} Y={stats.mean.y:+.2f} mm",
-            console.BR,
+            ConsoleSymbols.BR,
             f"σ X={stats.std_x:.3f} Y={stats.std_y:.3f} mm",
-            console.BR,
-            console.BR,
+            ConsoleSymbols.BR,
+            ConsoleSymbols.BR,
             f"Max scatter: {stats.max_radial:.3f} mm",
-            console.BR,
+            ConsoleSymbols.BR,
             f"Max pairwise {stats.max_pair:.3f} mm",
-            console.BR,
+            ConsoleSymbols.BR,
         ]
     )
 
@@ -417,11 +460,11 @@ def report_accuracy_stats(
         mean_t = sum(durations_s) / len(durations_s)
         output.extend(
             [
-                console.BR,
+                ConsoleSymbols.BR,
                 f"Seek time ({len(durations_s)} runs): ",
-                console.BR,
+                ConsoleSymbols.BR,
                 f"mean {mean_t:.1f}s ",
-                console.BR,
+                ConsoleSymbols.BR,
                 f"(min {min(durations_s):.1f}s, max {max(durations_s):.1f}s)",
             ]
         )

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -184,7 +185,7 @@ def _circle_trace_geometry(
     best: Offset,
     cfg,
     pass_num: int,
-) -> CirclePassOutcome | tuple[Offset, float, list]:
+) -> CirclePassOutcome | tuple[Offset, float, list[tuple[Offset, Offset]]]:
     radius = circle_radius_for_tier(
         plateau.tier,
         radius_start=cfg.circle_radius_start,
@@ -213,8 +214,8 @@ def _collect_circle_harmonic(
     best: Offset,
     trace_center: Offset,
     trace_radius: float,
-    legs: list,
-    lead_in: list | None,
+    legs: Sequence[tuple[Offset, Offset]],
+    lead_in: Sequence[tuple[Offset, Offset]] | None,
     segment_span: float,
 ) -> (
     CirclePassOutcome

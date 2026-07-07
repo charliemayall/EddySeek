@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Literal
 
 from .common import Offset, Position
-from .kconsole import KConsole, console_for_gcmd
+from .kconsole import KConsole
 from .movement.guard import clear_gcode_offset_xy
 from .movement.handler import move_to_xy
 from .repeated_seek import run_repeated_seeks, write_repeat_scatter_plot
@@ -301,7 +301,7 @@ def align_all_tools(
     *,
     repeats: int = 1,
 ) -> ToolAlignResult:
-    console = console_for_gcmd(gcmd, host.seek_config)
+    console = KConsole(gcmd, host.seek_config)
     host.console = console
     count = tool_count or tools.tool_count
 
