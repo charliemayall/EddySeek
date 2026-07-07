@@ -114,7 +114,7 @@ class ToolAlignConfig:
         self.sensor_z = (
             config.getfloat("sensor_z") if sensor_z_raw is not None else None
         )
-        main_config = self._configfile().read_main_config()
+        main_config = self._configfile.read_main_config()
         self.tools = [
             self._load_tool_or_default(main_config, tool_number)
             for tool_number in range(self.tool_count)
@@ -181,14 +181,17 @@ class ToolAlignConfig:
             f"offset=({tool.offset.x:.6f}, {tool.offset.y:.6f}) "
             f"calibrated={tool.is_calibrated}"
         )
-        configfile = self._configfile()
+        configfile = self._configfile
         configfile.remove_section(self.section_name(tool.tool_number))
         tool.save(configfile, self.tool_prefix)
 
-    def _configfile(self):
+    @property
+    def _configfile(self) -> PrinterConfig:
         return self._printer.lookup_object("configfile")
 
-    def _load_tool_or_default(self, main_config, tool_number: int) -> Tool:
+    def _load_tool_or_default(
+        self, main_config: ConfigWrapper, tool_number: int
+    ) -> Tool:
         if not main_config.has_section(self.section_name(tool_number)):
             return Tool.create_default(tool_number)
         return Tool.load(main_config, self.tool_prefix, tool_number)
