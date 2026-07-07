@@ -112,7 +112,8 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | `sweep_fine_speed`   | `10`    | Fine sweep feedrate (mm/s)                           |
 | `sweep_overscan`     | `1.0`   | Extra travel beyond jog range (mm)                   |
 | `sweep_cross_offset` | `0.3`   | Stagger between parallel sweeps (mm)                 |
-| _(fixed)_            | `3`/`1` | Coarse/fine staggered sweep lines (not configurable) |
+| `coarse_phases`      | `2`     | Coarse search passes before fine passes               |
+| `coarse_cross_passes`| `3`     | Staggered sweep lines per coarse pass (fine uses 1)  |
 | `fine_shrink`        | `0.6`   | Fine pass range multiplier (× max_jog)               |
 | `min_sweep_samples`  | `20`    | Minimum profile points before centroid fit           |
 
@@ -223,8 +224,11 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 | `EDDY_SEEK_RESET`               | Clear capture buffer                         |
 | `EDDY_SEEK_SET`                 | Override settings until restart              |
 | `EDDY_SEEK_START`               | XY search from current position              |
+| `EDDY_SEEK_START STRATEGY=centroid` | One-off seek using a different strategy  |
 | `EDDY_SEEK_ACCURACY REPEATS=n`  | Repeat alignment (default 3, min 2, max 50) and report repeatability |
 | `EDDY_SEEK_TOOL TOOL=n`         | Align one tool (caller loads the tool)       |
+| `EDDY_SEEK_TOOL TOOL=n LOAD=1`  | Run the tool load macro before seeking       |
+| `EDDY_SEEK_TOOL TOOL=n STRATEGY=centroid` | One-off strategy for this tool align |
 | `EDDY_SEEK_TOOL TOOL=n REPEATS=3` | Align with 3 seeks averaged per tool         |
 | `EDDY_SEEK_TOOLS`               | Align all tools                              |
 | `EDDY_SEEK_TOOLS REPEATS=3`     | Align all tools with averaged seeks          |
@@ -288,7 +292,7 @@ With `save_plots: True`, HTML plots land under `{result_folder}/YYYY-MM-DD_HH-MM
 | Search does not converge                    | `max_passes`, `max_jog_x/y`, `search_for`, try another `strategy`     |
 | `pass corrections diverging`                | Nozzle too far from centre - fix `sensor_x/y`, `max_jog`, or Z height |
 | Sweep centroid: too few samples             | Lower `sweep_fine_speed`; check LDC1612 stream                        |
-| `tool 0 must be aligned before other tools` | Run `EDDY_SEEK_TOOL TOOL=0` or start `EDDY_SEEK_TOOLS` from tool 0    |
+| `tool 0 must be aligned before other tools` | Klipper restart cleared the reference; run `EDDY_SEEK_TOOL TOOL=0` or `EDDY_SEEK_TOOLS` |
 | Offsets not in `printer.cfg`                | Run `SAVE_CONFIG` after alignment                                     |
 
 ### Debug scan (`strategy: debug_scan`)
