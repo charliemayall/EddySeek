@@ -5,7 +5,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-SeekConfig and printer.cfg section parsing.
+SeekConfig - parsing of [eddy_seek] section in printer.cfg.
 
 Field ``metadata`` drives validation, ``EDDY_SEEK_SET`` parsing, and (mostly)
 ``load_seek_config``:
