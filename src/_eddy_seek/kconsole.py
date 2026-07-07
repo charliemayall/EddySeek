@@ -33,6 +33,9 @@ class ConsoleSymbols(str, Enum):
     PLOT = "📊"
     BR = "</br>"
 
+    def __str__(self) -> str:
+        return self.value
+
 
 class KConsole:
     """Wrap ``GCodeCommand.respond_raw`` for user-facing output."""
@@ -78,9 +81,19 @@ class KConsole:
 
     def plot_saved(self, plot_path: str | Path) -> None:
         """Report a saved plot with its full resolved path."""
-        self.info(f"{ConsoleSymbols.PLOT.value} Plot saved: {Path(plot_path)}")
+        self.info(f"{ConsoleSymbols.PLOT} Plot saved: {Path(plot_path)}")
 
     def warn(self, msg: str) -> None:
+        """
+        Prints a warning message with this format:
+
+        ⚠️ ⚠️ ⚠️
+
+        WARNING: {msg}
+
+        ⚠️ ⚠️ ⚠️
+
+        """
         self._emit(
             "echo: ",
             f"{(ConsoleSymbols.WARN + '  ') * 3}"

@@ -23,7 +23,7 @@ DEFAULT_DEST = Path.home() / "klipper" / "klippy" / "extras"
 _RESET = "\x1b[0m"
 
 
-class COLORS(Enum):
+class COLORS(str, Enum):
     RED = "\x1b[31;20m"
     GREEN = "\x1b[32;20m"
     GRAY = "\x1b[90;20m"
@@ -48,7 +48,12 @@ def restart_klipper() -> None:
 
 
 def purge_pycache(*roots: Path) -> int:
-    """Remove stale bytecode caches under ``roots`` (returns dirs removed)."""
+    """
+    Remove stale bytecode caches under ``roots`` (returns dirs removed).
+
+    Likely not necessary using git install route, but __pycache__ dirs
+    caused issues when direct deploying via `make deploy` route.
+    """
     removed = 0
     seen: set[Path] = set()
     for root in roots:
@@ -99,7 +104,7 @@ def main() -> None:
 
     caches = purge_pycache(src_dir, dest)
     if caches:
-        print(f"{_c('-- ', COLORS.GRAY)}cleared {caches} __pycache__ dir(s)")
+        print(f"{_c('-- ', COLORS.GRAY)}cleaned up caches")
 
     cprint("\u2728 EddySeek: installed \u2728".center(60), COLORS.GREEN)
     print(f"{_c('-- ', COLORS.GRAY)}{dest / 'eddy_seek.py'}")

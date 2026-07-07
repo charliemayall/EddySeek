@@ -14,9 +14,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Self, overload
+from typing import TYPE_CHECKING, overload
 
 if TYPE_CHECKING:
+    from typing import Self
+
     from klippy.klippy import Printer
 
     from _eddy_seek.movement.handler import MotionSample
@@ -200,16 +202,14 @@ def session_artifact_run_dir(
     when: datetime | None = None,
     *,
     run_label: str = "run",
-    run_id: str | None = None,
 ) -> str:
-    """``YYYY-MM-DD_HH-MM-SS_{run_label}_{run_id}`` under ``result_folder``."""
+    """``YYYY-MM-DD_HH-MM-SS_{run_label}`` under ``result_folder``."""
     t = when or datetime.now()
     ts = (
         f"{t.year:04d}-{t.month:02d}-{t.day:02d}_"
         f"{t.hour:02d}-{t.minute:02d}-{t.second:02d}"
     )
-    rid = (run_id or "")[:8]
-    return f"{ts}_{run_label}_{rid}" if rid else f"{ts}_{run_label}"
+    return f"{ts}_{run_label}"
 
 
 def session_artifact_basename(*, suffix: str = "", ext: str = "html") -> str:
