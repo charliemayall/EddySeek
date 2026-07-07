@@ -344,7 +344,7 @@ class EddySeek(SeekHost):
         tool_number = gcmd.get_int("TOOL", -1, minval=0)
         if tool_number == -1:
             raise gcmd.error("TOOL=<number> is required for EDDY_SEEK_TOOL")
-        repeats = gcmd.get_int("REPEATS", 1, minval=1, maxval=50)
+        repeats = gcmd.get_int("REPEATS", 2, minval=2, maxval=50)
         logger.info(f"eddy_seek: EDDY_SEEK_TOOL tool={tool_number} repeats={repeats}")
         console = self.refresh_console(gcmd)
         console.entry(f"Aligning tool {tool_number}…")
