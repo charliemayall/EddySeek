@@ -103,10 +103,10 @@ class SeekConfig:
         default=3, metadata={"gcode": "COARSE_CROSS_PASSES", "min": 1}
     )
     circle_radius_start: float = field(
-        default=2.0, metadata={"gcode": "CIRCLE_RADIUS_START", "positive": True}
+        default=0.8, metadata={"gcode": "CIRCLE_RADIUS_START", "positive": True}
     )
     circle_radius_min: float = field(
-        default=0.5, metadata={"gcode": "CIRCLE_RADIUS_MIN", "positive": True}
+        default=0.4, metadata={"gcode": "CIRCLE_RADIUS_MIN", "positive": True}
     )
     circle_shrink: float = field(
         default=0.6, metadata={"gcode": "CIRCLE_SHRINK", "positive": True}
@@ -134,7 +134,7 @@ class SeekConfig:
         metadata={"gcode": "CIRCLE_REFRESH_SWEEPS", "bool": True},
     )
     circle_skip_bootstrap: bool = field(
-        default=False,
+        default=True,
         metadata={"gcode": "CIRCLE_SKIP_BOOTSTRAP", "bool": True},
     )
     debug: bool = field(default=False, metadata={"bool": True})
