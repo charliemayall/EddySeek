@@ -110,31 +110,6 @@ def align_tool(
     ).run(gcmd, strategy, boundaries=False, announce_plot=announce_plot)
 
 
-def align_tool_at(
-    host: SeekHost,
-    gcmd,
-    start_pos: Position,
-    *,
-    run_id: str | None = None,
-    run_label: str = "run",
-    artifact_label: str = "",
-    artifact_write_at: datetime | None = None,
-    announce_plot: bool = False,
-) -> SeekSessionResult:
-    """Move to absolute XY, then run XY seek."""
-    toolhead = host.printer.lookup_object("toolhead")
-    move_to_xy(toolhead, start_pos, host.seek_config.jog_speed, wait=True)
-    return align_tool(
-        host,
-        gcmd,
-        run_id=run_id,
-        run_label=run_label,
-        artifact_label=artifact_label,
-        artifact_write_at=artifact_write_at,
-        announce_plot=announce_plot,
-    )
-
-
 def _seek_tool_repeated(
     host: SeekHost,
     gcmd,
