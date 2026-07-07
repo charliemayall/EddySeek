@@ -146,7 +146,7 @@ def bin_frequencies(
         if x_lo <= sample.offset.x <= x_hi and y_lo <= sample.offset.y <= y_hi
     ]
     if not in_box_freqs:
-        z = [[None] * nx for _ in range(ny)]
+        z: list[list[float | None]] = [[None] * nx for _ in range(ny)]
         return z, x_centers, y_centers
     f_min = min(in_box_freqs)
     f_max = max(in_box_freqs)

@@ -33,7 +33,7 @@ def _default_label(path: Path) -> str:
 
 def _write_png(fig: object, output: Path) -> None:
     try:
-        import kaleido  # noqa: F401
+        import kaleido  # noqa: F401  # pyright: ignore[reportMissingImports]
     except ImportError as exc:
         msg = "PNG export requires kaleido: pip install kaleido"
         raise SystemExit(msg) from exc

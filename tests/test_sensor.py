@@ -134,7 +134,9 @@ def test_disconnect_stops_sensor_stream(eddy_seek_mod):
 
 
 def test_sample_rate_from_count():
-    from extras.eddy_seek import _sample_rate_from_count
+    from extras.eddy_seek import (
+        _sample_rate_from_count,  # pyright: ignore[reportMissingImports]
+    )
 
     assert _sample_rate_from_count(count=0, duration_s=0.2) is None
     assert _sample_rate_from_count(count=80, duration_s=0.2) == pytest.approx(400.0)

@@ -534,7 +534,7 @@ def test_circle_harmonic_held_passes_do_not_count_toward_max_passes():
 
     strategy._step = fake_step  # pyright: ignore[reportAttributeAccessIssue]
     best, passes_run = strategy.search(
-        _Session(),
+        _Session(),  # pyright: ignore[reportArgumentType]
         _FakeReporter(),  # pyright: ignore[reportArgumentType]
     )
     assert passes_run == 6
@@ -568,7 +568,7 @@ def test_circle_harmonic_search_retries_after_rejected_pass():
 
     strategy._step = fake_step  # pyright: ignore[reportAttributeAccessIssue]
     best, passes_run = strategy.search(
-        _RetrySession(),
+        _RetrySession(),  # pyright: ignore[reportArgumentType]
         _FakeReporter(),  # pyright: ignore[reportArgumentType]
     )
     assert passes_run == 3
@@ -609,7 +609,7 @@ def test_circle_harmonic_rejected_pass_holds_best():
 
     strategy._step = fake_step  # pyright: ignore[reportAttributeAccessIssue]
     best, passes_run = strategy.search(
-        _Session(),
+        _Session(),  # pyright: ignore[reportArgumentType]
         _FakeReporter(),  # pyright: ignore[reportArgumentType]
     )
     assert passes_run == 7

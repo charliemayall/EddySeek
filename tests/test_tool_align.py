@@ -15,6 +15,9 @@ from fakes import (
     FakeKlipperConfig,
     FakePrinter,
     RecordingToolhead,
+    as_config,
+    as_printer,
+    as_tools,
     ok_seek_result,
 )
 from pytest import raises
@@ -63,7 +66,7 @@ def test_apply_tool_offset_sets_gcode_offset():
             ),
         ]
     )
-    tool = apply_tool_offset(tools, printer, 1)
+    tool = apply_tool_offset(as_tools(tools), as_printer(printer), 1)
     assert tool.offset.x == 1.5
     assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=1.500000 Y=-0.500000"]
 
@@ -80,7 +83,7 @@ def test_apply_tool_offset_includes_manual_adjust():
             ),
         ]
     )
-    apply_tool_offset(tools, printer, 0)
+    apply_tool_offset(as_tools(tools), as_printer(printer), 0)
     assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=1.100000 Y=1.800000"]
 
 
@@ -97,7 +100,7 @@ def test_apply_tool_offset_rejects_uncalibrated():
         ]
     )
     with raises(ValueError, match="not calibrated"):
-        apply_tool_offset(tools, printer, 0)
+        apply_tool_offset(as_tools(tools), as_printer(printer), 0)
 
 
 def _console(gcmd: FakeGcmd | None = None) -> KConsole:
@@ -161,16 +164,20 @@ def test_sensor_position_is_required():
         return _ConfigfilePrinter()
 
     with raises(ValueError, match="sensor_x"):
-        ToolAlignConfig(FakeKlipperConfig(get_printer=configfile_printer))  # type: ignore[arg-type]
+        ToolAlignConfig(as_config(FakeKlipperConfig(get_printer=configfile_printer)))
 
     with raises(ValueError, match="sensor_y"):
         ToolAlignConfig(
-            FakeKlipperConfig(sensor_x=10.0, get_printer=configfile_printer)
-        )  # type: ignore[arg-type]
+            as_config(FakeKlipperConfig(sensor_x=10.0, get_printer=configfile_printer))
+        )
 
     cfg = ToolAlignConfig(
-        FakeKlipperConfig(sensor_x=10.0, sensor_y=20.0, get_printer=configfile_printer)
-    )  # type: ignore[arg-type]
+        as_config(
+            FakeKlipperConfig(
+                sensor_x=10.0, sensor_y=20.0, get_printer=configfile_printer
+            )
+        )
+    )
     assert cfg.sensor_position() == Position(10.0, 20.0)
 
 

@@ -8,7 +8,7 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 
 from datetime import datetime
 
-from fakes import CommandError, FakeGcmd, FakeKlipperConfig
+from fakes import CommandError, FakeGcmd, FakeKlipperConfig, as_config
 from pytest import raises
 
 from _eddy_seek.common import session_artifact_run_dir
@@ -92,7 +92,11 @@ def test_session_artifact_run_dir_sortable():
 
 def test_load_seek_config_speeds_mm_s_to_mm_min():
     cfg = load_seek_config(
-        FakeKlipperConfig(jog_speed="10", sweep_coarse_speed="20", sweep_fine_speed="5")
+        as_config(
+            FakeKlipperConfig(
+                jog_speed="10", sweep_coarse_speed="20", sweep_fine_speed="5"
+            )
+        )
     )
     assert cfg.jog_speed == 600.0
     assert cfg.sweep_coarse_speed == 1200.0
@@ -101,22 +105,24 @@ def test_load_seek_config_speeds_mm_s_to_mm_min():
 
 def test_load_seek_config_rejects_invalid_strategy():
     with raises(ValueError, match="strategy"):
-        load_seek_config(FakeKlipperConfig(strategy="bogus"))
+        load_seek_config(as_config(FakeKlipperConfig(strategy="bogus")))
 
 
 def test_load_seek_config_rejects_invalid_search_for():
     with raises(ValueError, match="search_for"):
-        load_seek_config(FakeKlipperConfig(search_for="bogus"))
+        load_seek_config(as_config(FakeKlipperConfig(search_for="bogus")))
 
 
 def test_load_seek_config_circle_harmonic_params():
     cfg = load_seek_config(
-        FakeKlipperConfig(
-            strategy="circle_harmonic",
-            circle_radius_start="1.2",
-            circle_radius_min="0.5",
-            circle_speed="10",
-            harmonic_step_gain="0.2",
+        as_config(
+            FakeKlipperConfig(
+                strategy="circle_harmonic",
+                circle_radius_start="1.2",
+                circle_radius_min="0.5",
+                circle_speed="10",
+                harmonic_step_gain="0.2",
+            )
         )
     )
     assert cfg.strategy == "circle_harmonic"
@@ -127,10 +133,12 @@ def test_load_seek_config_circle_harmonic_params():
 
 
 def test_load_seek_config_circle_refresh_sweeps():
-    assert load_seek_config(FakeKlipperConfig()).circle_refresh_sweeps is False
+    assert (
+        load_seek_config(as_config(FakeKlipperConfig())).circle_refresh_sweeps is False
+    )
     assert (
         load_seek_config(
-            FakeKlipperConfig(circle_refresh_sweeps="true")
+            as_config(FakeKlipperConfig(circle_refresh_sweeps="true"))
         ).circle_refresh_sweeps
         is True
     )
@@ -142,12 +150,12 @@ def test_load_seek_config_rejects_circle_radius_min_above_start():
 
 
 def test_load_seek_config_debug():
-    assert load_seek_config(FakeKlipperConfig()).debug is False
-    assert load_seek_config(FakeKlipperConfig(debug="true")).debug is True
+    assert load_seek_config(as_config(FakeKlipperConfig())).debug is False
+    assert load_seek_config(as_config(FakeKlipperConfig(debug="true"))).debug is True
 
 
 def test_load_seek_config_sweep_coarse_defaults():
-    cfg = load_seek_config(FakeKlipperConfig())
+    cfg = load_seek_config(as_config(FakeKlipperConfig()))
     assert cfg.coarse_phases == 2
     assert cfg.coarse_cross_passes == 3
 

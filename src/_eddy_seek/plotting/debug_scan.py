@@ -91,7 +91,7 @@ def _grid_tolerance(
     return 1.0
 
 
-def _z_for_display(z: list[list[float | None]]) -> list[list[float]]:
+def _z_for_display(z: Sequence[Sequence[float | None]]) -> list[list[float]]:
     return [
         [value if value is not None else float("nan") for value in row] for row in z
     ]
@@ -129,7 +129,12 @@ def _marginal_max(
         profile: list[tuple[float, float]] = []
         for ix, coord in enumerate(x_centers):
             values = [row[ix] for row in z if ix < len(row) and row[ix] is not None]
-            profile.append((coord, max(values) if values else float("nan")))
+            # Filter out None before calling max to satisfy type checker
+            non_none_values = [v for v in values if v is not None]
+            profile.append(
+                (coord, max(non_none_values) if non_none_values else float("nan"))
+            )
+
         return profile
     profile = []
     for iy, coord in enumerate(y_centers):
@@ -370,9 +375,12 @@ def _add_heatmap_panel(
     x_edges = _bin_edges(x_centers, tolerance)
     y_edges = _bin_edges(y_centers, tolerance)
     if z and isinstance(z[0][0], int):
-        display_z = [[float(value) for value in row] for row in z]
+        display_z = [
+            [float(value) if value is not None else float("nan") for value in row]
+            for row in z
+        ]
     else:
-        display_z = _z_for_display(z)  # pyright: ignore[reportArgumentType]
+        display_z = _z_for_display(z)
     fig.add_trace(
         go.Heatmap(
             x=x_edges,

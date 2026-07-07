@@ -20,9 +20,8 @@ if TYPE_CHECKING:
     from klippy.klippy import Reactor
 
 if TYPE_CHECKING:
-    from typing import Self
-
     from klippy.klippy import Printer
+    from typing_extensions import Self
 
     from _eddy_seek.movement.handler import MotionSample
 

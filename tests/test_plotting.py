@@ -10,7 +10,8 @@ import math
 import os
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from typing import Literal
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fakes import PLOT_HTML_SUFFIX, PLOT_RUN_DIR, PLOT_WRITE_AT
@@ -68,7 +69,13 @@ def test_plot_filename():
     )
 
 
-def _write_strategy_plot(tmp_path, strategy_name: str, records, *, search_for="max"):
+def _write_strategy_plot(
+    tmp_path,
+    strategy_name: str,
+    records,
+    *,
+    search_for: Literal["min", "max"] = "max",
+):
     fig = render_session_plot(strategy_name, records, search_for=search_for)
     assert fig is not None
     return write_figure(tmp_path, fig, write_at=PLOT_WRITE_AT)
@@ -165,7 +172,7 @@ def test_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
     recorder = SessionRecorder(trace=False, plots=True)
     ctx = SimpleNamespace(recorder=recorder)
     _record_centroid_pass(
-        ctx,
+        ctx,  # pyright: ignore[reportArgumentType]
         1,
         Offset.zero(),
         Offset(0.1, 0.0),
@@ -173,7 +180,7 @@ def test_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
         probes,  # pyright: ignore[reportArgumentType]
     )
     _record_centroid_pass(
-        ctx,
+        ctx,  # pyright: ignore[reportArgumentType]
         2,
         Offset(0.1, 0.0),
         Offset(0.0, 0.0),
@@ -479,7 +486,7 @@ def test_render_returns_none_without_plotly(tmp_path):
         recorder = SessionRecorder(trace=False, plots=True)
         ctx = SimpleNamespace(recorder=recorder)
         _record_centroid_pass(
-            ctx,
+            ctx,  # pyright: ignore[reportArgumentType]
             1,
             Offset.zero(),
             Offset.zero(),
@@ -583,6 +590,7 @@ def test_centroid_on_session_end_returns_plot_path(requires_plotly, tmp_path):
     strategy = CentroidStrategy()
     cfg = SeekConfig(save_plots=True, result_folder=str(tmp_path))
     recorder = SessionRecorder(trace=False, plots=True)
+    printer = MagicMock()
     ctx = type(
         "Ctx",
         (),
@@ -595,10 +603,11 @@ def test_centroid_on_session_end_returns_plot_path(requires_plotly, tmp_path):
             "artifact_write_at": PLOT_WRITE_AT,
             "artifact_suffix": lambda _self, name: f"tools_t0_{name}",
             "recorder": recorder,
+            "_printer": printer,
         },
     )()
     _record_centroid_pass(
-        ctx,
+        ctx,  # pyright: ignore[reportArgumentType]
         1,
         Offset.zero(),
         Offset(0.1, 0.0),
