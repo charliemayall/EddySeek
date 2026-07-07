@@ -78,55 +78,62 @@ class CircleHarmonicStrategy(SeekStrategy):
         self._plateau.reset()
         best = Offset.zero()
         positions = [best]
-        passes_run = 0
+        attempt = 0
+        circle_passes = 0
 
-        for pass_num in range(1, cfg.max_passes + 1):
-            passes_run = pass_num
+        while True:
+            attempt += 1
             logger.info(
-                f"eddy_seek: {self.name} pass {pass_num} start "
+                f"eddy_seek: {self.name} pass {attempt} start "
                 f"best=({best.x:.4f}, {best.y:.4f})"
             )
             self._plateau.last_rejected = False
-            new = self._step(ctx, pass_num, best)
+            new = self._step(ctx, attempt, best)
             moved = (new - best).abs_components()
-            console.info(self._pass_message(pass_num, new, moved, ctx))
+            console.info(self._pass_message(attempt, new, moved, ctx))
             positions.append(new)
             if not self._plateau.last_rejected:
                 _check_pass_divergence(
                     self.name,
                     positions,
                     tolerance=cfg.tolerance,
-                    pass_num=pass_num,
+                    pass_num=attempt,
                 )
             best = new
 
             if self._plateau.frozen is not None:
                 logger.info(
-                    f"eddy_seek: {self.name} finished after pass {pass_num} "
+                    f"eddy_seek: {self.name} finished after pass {attempt} "
                     f"(frozen at {best.x:.4f}, {best.y:.4f})"
                 )
                 break
 
+            bootstrap = attempt == 1 and not self._mode.skip_bootstrap
+            counted = not bootstrap and not self._plateau.last_rejected
+            if counted:
+                circle_passes += 1
+
             if moved.x < cfg.tolerance and moved.y < cfg.tolerance:
                 if self._plateau.last_rejected:
                     logger.info(
-                        f"eddy_seek: {self.name} pass {pass_num} rejected "
+                        f"eddy_seek: {self.name} pass {attempt} rejected "
                         f"- continuing at smaller circle"
                     )
                     continue
                 logger.info(
-                    f"eddy_seek: {self.name} converged after pass {pass_num} "
+                    f"eddy_seek: {self.name} converged after pass {attempt} "
                     f"(moved {moved.x:.4f}, {moved.y:.4f})"
                 )
                 break
-        else:
-            raise MaxPassesError(
-                self.name,
-                max_passes=cfg.max_passes,
-                tolerance=cfg.tolerance,
-            )
 
-        return best, passes_run
+            if counted and circle_passes >= cfg.max_passes:
+                raise MaxPassesError(
+                    self.name,
+                    max_passes=cfg.max_passes,
+                    tolerance=cfg.tolerance,
+                )
+
+        return best, attempt
 
     def _sync_mode(self, ctx: SeekSession) -> None:
         self._mode = CircleHarmonicMode.from_config(ctx.config)

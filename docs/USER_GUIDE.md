@@ -98,7 +98,7 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | `jog_speed`               | `80`                                      | Feedrate for search jogs (mm/s)                                                        |
 | `search_for`              | `max`                                     | `max` or `min` - which frequency extreme marks the nozzle centre, `max` for most users |
 | `strategy`                | `sweep_centroid`                          | `sweep_centroid`, `centroid`, `circle_harmonic`, or `debug_scan` (diag only)           |
-| `max_passes`              | `6`                                       | Search passes before giving up                                                         |
+| `max_passes`              | `6`                                       | Search passes before giving up; for `circle_harmonic`, held/rejected retries do not count |
 | `save_session_trace`      | `False`                                   | Write probe JSON to `result_folder` (debug)                                            |
 | `save_plots`              | `False`                                   | Write HTML plots to `result_folder` (needs plotly)                                     |
 | `result_folder`           | `~/printer_data/config/eddy_seek_results` | Output directory for debug artefacts                                                   |
@@ -122,8 +122,7 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | Option                  | Default | Description                                                                                 |
 | ----------------------- | ------- | ------------------------------------------------------------------------------------------- |
 | `circle_radius_start`   | `0.8`   | First circle radius (mm)                                                                    |
-| `circle_radius_min`     | `0.4`   | Smallest circle radius (mm)                                                                 |
-| `circle_shrink`         | `0.6`   | Radius multiplier when stepping down a tier after a rejected pass                           |
+| `circle_radius_min`     | `0.4`   | Smallest circle radius (mm); tier step size is `(start - min) / max_passes`               |
 | `circle_arc_resolution` | `0.1`   | Arc segment length along the circle (mm)                                                    |
 | `circle_speed`          | `10`    | Circle trace feedrate (mm/s)                                                                |
 | `noise_k`               | `1`     | SNR threshold (amplitude vs noise) for model fit                                            |

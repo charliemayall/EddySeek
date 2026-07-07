@@ -426,10 +426,11 @@ def circle_radius_for_tier(
     *,
     radius_start: float,
     radius_min: float,
-    radius_shrink: float,
+    max_passes: int,
 ) -> float:
     """Radius for plateau tier ``tier`` (0 = ``radius_start``; steps down after rejects)."""
-    return max(radius_start * (radius_shrink**tier), radius_min)
+    step = (radius_start - radius_min) / max_passes
+    return max(radius_start - tier * step, radius_min)
 
 
 def _axis_radial_slope(

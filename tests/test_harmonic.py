@@ -96,14 +96,16 @@ def test_inner_leg_samples_drops_end_legs():
 
 def test_circle_radius_for_tier():
     assert (
-        circle_radius_for_tier(0, radius_start=2.0, radius_min=0.5, radius_shrink=0.4)
-        == 2.0
+        circle_radius_for_tier(0, radius_start=2.0, radius_min=0.5, max_passes=6) == 2.0
     )
     assert circle_radius_for_tier(
-        1, radius_start=2.0, radius_min=0.5, radius_shrink=0.4
-    ) == pytest.approx(0.8)
+        1, radius_start=2.0, radius_min=0.5, max_passes=6
+    ) == pytest.approx(1.75)
+    assert circle_radius_for_tier(
+        6, radius_start=2.0, radius_min=0.5, max_passes=6
+    ) == pytest.approx(0.5)
     assert (
-        circle_radius_for_tier(99, radius_start=2.0, radius_min=0.5, radius_shrink=0.4)
+        circle_radius_for_tier(99, radius_start=2.0, radius_min=0.5, max_passes=6)
         == 0.5
     )
 
@@ -135,7 +137,7 @@ def _plateau_ctx(**overrides):
     ctx.config = SeekConfig(
         circle_radius_start=2.0,
         circle_radius_min=0.5,
-        circle_shrink=0.4,
+        max_passes=6,
         tolerance=0.05,
         **overrides,
     )
@@ -231,7 +233,6 @@ def test_finish_circle_pass_reject_at_tier_floor_freezes():
     strategy = CircleHarmonicStrategy()
     strategy._plateau.anchor = Offset(0.1, 0.2)
     ctx = _plateau_ctx()
-    # pony: trace barely above min+eps; nominal tier already at floor.
     trace_r = 0.5 + 2e-9
     outcome = _outcome_reject(
         Offset.zero(),
@@ -500,6 +501,45 @@ def test_circle_harmonic_skip_bootstrap_uses_session_start_and_circle_pass_one()
     finish.assert_called_once()
     assert strategy._bootstrap == Offset.zero()
     assert result == Offset.zero()
+
+
+def test_circle_harmonic_held_passes_do_not_count_toward_max_passes():
+    from _eddy_seek.strategy.circle_harmonic import CircleHarmonicStrategy
+
+    class _FakeReporter:
+        def info(self, msg: str) -> None:
+            pass
+
+    class _Session:
+        config = SeekConfig(
+            max_passes=2,
+            tolerance=0.05,
+            circle_skip_bootstrap=True,
+        )
+
+    strategy = CircleHarmonicStrategy()
+    calls: list[int] = []
+
+    def fake_step(_ctx, pass_num, best):
+        calls.append(pass_num)
+        if pass_num <= 3:
+            strategy._plateau.last_rejected = True
+            return best
+        if pass_num == 4:
+            return Offset(1.0, 0.0)
+        if pass_num == 5:
+            strategy._plateau.last_rejected = True
+            return Offset(1.0, 0.0)
+        return Offset(0.96, 0.0)
+
+    strategy._step = fake_step  # pyright: ignore[reportAttributeAccessIssue]
+    best, passes_run = strategy.search(
+        _Session(),
+        _FakeReporter(),  # pyright: ignore[reportArgumentType]
+    )
+    assert passes_run == 6
+    assert calls == [1, 2, 3, 4, 5, 6]
+    assert best.x == pytest.approx(0.96)
 
 
 def test_circle_harmonic_search_retries_after_rejected_pass():

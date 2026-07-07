@@ -108,9 +108,6 @@ class SeekConfig:
     circle_radius_min: float = field(
         default=0.4, metadata={"gcode": "CIRCLE_RADIUS_MIN", "positive": True}
     )
-    circle_shrink: float = field(
-        default=0.6, metadata={"gcode": "CIRCLE_SHRINK", "positive": True}
-    )
     circle_arc_resolution: float = field(
         default=0.1, metadata={"gcode": "CIRCLE_ARC_RESOLUTION", "positive": True}
     )

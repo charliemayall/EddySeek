@@ -197,7 +197,7 @@ def _circle_trace_geometry(
         plateau.tier,
         radius_start=cfg.circle_radius_start,
         radius_min=cfg.circle_radius_min,
-        radius_shrink=cfg.circle_shrink,
+        max_passes=cfg.max_passes,
     )
     trace_center, trace_radius = circle_in_jog_box(
         plateau.estimate(best), radius, cfg.max_jog_x, cfg.max_jog_y
