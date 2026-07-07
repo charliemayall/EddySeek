@@ -12,7 +12,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fakes import FakeGcmd, FakePrinter, ok_seek_result
+from fakes import FakeGcmd, FakePrinter, RecordingToolhead, ok_seek_result
 
 from _eddy_seek.accuracy_test import run_accuracy_test
 from _eddy_seek.common import Offset
@@ -51,13 +51,62 @@ def test_mock_does_not_inflate_reference_relative_spread():
     assert ref_stats.mean.y == pytest.approx(true_center.y)
 
 
+def test_run_accuracy_test_uses_repeated_seeks():
+    host = MagicMock()
+    host.printer = FakePrinter()
+    host.seek_config = SeekConfig(save_plots=False)
+    console = MagicMock()
+    expected = MagicMock()
+
+    with (
+        patch(
+            "_eddy_seek.accuracy_test.run_repeated_seeks",
+            return_value=expected,
+        ) as repeated_mock,
+        patch("_eddy_seek.accuracy_test.report_accuracy_stats"),
+    ):
+        repeated_mock.return_value = None
+        run_accuracy_test(
+            host,
+            FakeGcmd(),
+            console=console,
+            repeats=2,
+            mock_enabled=False,
+        )
+        repeated_mock.assert_called_once()
+
+    with (
+        patch(
+            "_eddy_seek.accuracy_test.run_repeated_seeks",
+        ) as repeated_mock,
+        patch("_eddy_seek.accuracy_test.report_accuracy_stats") as stats_mock,
+    ):
+        from _eddy_seek.common import Offset
+        from _eddy_seek.repeated_seek import RepeatedSeekResult
+
+        repeated_mock.return_value = RepeatedSeekResult(
+            offsets=(Offset(0.1, 0.0), Offset(0.2, 0.0)),
+            durations_s=(1.0, 1.0),
+            records=(),
+            mean=Offset(0.15, 0.0),
+        )
+        run_accuracy_test(
+            host,
+            FakeGcmd(),
+            console=console,
+            repeats=2,
+            mock_enabled=False,
+        )
+        stats_mock.assert_called_once()
+
+
 def test_run_accuracy_test_records_reference_relative_offsets_with_mock():
     true_center = Offset(0.05, -0.03)
     mocks = [Offset(0.2, 0.1), Offset(-0.15, 0.25)]
     seek_corrections = [true_center - mock for mock in mocks]
 
     host = MagicMock()
-    host.printer = FakePrinter()
+    host.printer = FakePrinter(toolhead=RecordingToolhead())
     host.seek_config = SeekConfig(save_plots=False)
 
     console = MagicMock()

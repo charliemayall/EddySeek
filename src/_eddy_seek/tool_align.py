@@ -20,13 +20,14 @@ from .common import Offset, Position
 from .kconsole import KConsole, console_for_gcmd
 from .movement.guard import clear_gcode_offset_xy
 from .movement.handler import move_to_xy
-from .session import SeekHost, SeekSession, SeekSessionResult
+from .repeated_seek import run_repeated_seeks, write_repeat_scatter_plot
+from .session import SeekHost, SeekSession, SeekSessionResult, report_accuracy_stats
 from .strategy import strategy_for
 from .tools import Tool, ToolAlignConfig
 
 logger = logging.getLogger(__name__)
 
-_GCODE_STATE = "_eddy_seek_tool_align"
+_GCODE_STATE_REPEAT = "_eddy_seek_tool_repeat"
 # Suggest sensor_x/y tweaks when tool 0's seek offset exceeds this (mm).
 _TARGET_SENSOR_OFFSET_FROM_REF = 0.5
 
@@ -96,6 +97,7 @@ def align_tool(
     run_label: str = "run",
     artifact_label: str = "",
     artifact_write_at: datetime | None = None,
+    announce_plot: bool = False,
 ) -> SeekSessionResult:
     """Run XY seek at the current toolhead position."""
     strategy = strategy_for(host.seek_config.strategy)
@@ -105,7 +107,7 @@ def align_tool(
         run_label=run_label,
         artifact_label=artifact_label,
         artifact_write_at=artifact_write_at,
-    ).run(gcmd, strategy, boundaries=False, announce_plot=False)
+    ).run(gcmd, strategy, boundaries=False, announce_plot=announce_plot)
 
 
 def align_tool_at(
@@ -117,6 +119,7 @@ def align_tool_at(
     run_label: str = "run",
     artifact_label: str = "",
     artifact_write_at: datetime | None = None,
+    announce_plot: bool = False,
 ) -> SeekSessionResult:
     """Move to absolute XY, then run XY seek."""
     toolhead = host.printer.lookup_object("toolhead")
@@ -128,7 +131,70 @@ def align_tool_at(
         run_label=run_label,
         artifact_label=artifact_label,
         artifact_write_at=artifact_write_at,
+        announce_plot=announce_plot,
     )
+
+
+def _seek_tool_repeated(
+    host: SeekHost,
+    gcmd,
+    *,
+    repeats: int,
+    console: KConsole,
+    base_artifact_label: str,
+    run_id: str | None,
+    run_label: str,
+    artifact_write_at: datetime | None,
+) -> tuple[Offset, SeekSessionResult | None] | None:
+    """Run ``repeats`` seeks at the current XY; return mean offset or None on failure."""
+    if repeats >= 2 and (run_id is None or artifact_write_at is None):
+        raise RuntimeError(
+            "eddy_seek: repeat seeks require run_id and artifact_write_at"
+        )
+
+    def run_once(repeat: int) -> SeekSessionResult:
+        label = (
+            f"{base_artifact_label}_r{repeat}" if repeats >= 2 else base_artifact_label
+        )
+        return align_tool(
+            host,
+            gcmd,
+            run_id=run_id,
+            run_label=run_label,
+            artifact_label=label,
+            artifact_write_at=artifact_write_at,
+            announce_plot=repeats >= 2,
+        )
+
+    repeated = run_repeated_seeks(
+        host,
+        console=console,
+        repeats=repeats,
+        gcode_state_name=_GCODE_STATE_REPEAT,
+        run_once=run_once,
+    )
+    if repeated is None:
+        return None
+
+    if repeats >= 2:
+        report_accuracy_stats(
+            console,
+            list(repeated.offsets),
+            durations_s=list(repeated.durations_s),
+        )
+        if host.seek_config.save_plots:
+            plot_path = write_repeat_scatter_plot(
+                host,
+                records=repeated.records,
+                run_id=run_id,
+                write_at=artifact_write_at,
+                suffix=base_artifact_label,
+                run_label=run_label,
+            )
+            if plot_path is not None:
+                console.plot_saved(plot_path)
+
+    return repeated.mean, repeated.last_result
 
 
 def align_tool_number(
@@ -144,6 +210,7 @@ def align_tool_number(
     run_label: str = "run",
     artifact_write_at: datetime | None = None,
     batch: bool = False,
+    repeats: int = 1,
 ) -> tuple[Tool | None, Position | None, str | None]:
     """
     Align one tool and return its updated Tool record.
@@ -166,30 +233,33 @@ def align_tool_number(
 
     artifact_label = f"tools_t{tool_number}" if batch else f"tool{tool_number}"
     seek_kw = {
+        "repeats": repeats,
+        "console": console,
+        "base_artifact_label": artifact_label,
         "run_id": run_id,
         "run_label": run_label,
-        "artifact_label": artifact_label,
         "artifact_write_at": artifact_write_at,
     }
 
     if tool_number == 0:
         logger.info("eddy_seek: aligning tool 0 (reference)")
-        clear_gcode_offset_xy(host.printer)
+        clear_gcode_offset_xy(host.printer)  # caller may have an offset applied
         start = move_to_seek_start_pos(host, tools)
-        result = align_tool(host, gcmd, **seek_kw)
-        if result.status != "ok" or result.offset is None:
-            error = result.error_message or "tool 0 alignment failed"
-            return None, None, error
+        seek_result = _seek_tool_repeated(host, gcmd, **seek_kw)
+        if seek_result is None:
+            return None, None, "tool 0 alignment failed"
 
-        center = start + result.offset
+        mean_offset, last_result = seek_result
+        center = start + mean_offset
         tool = tools.get_tool(0).mark_calibrated()
         logger.info(
             f"eddy_seek: tool 0 centered at ({center.x:.4f}, {center.y:.4f}) "
-            f"seek_offset=({result.offset.x:.4f}, {result.offset.y:.4f})"
+            f"seek_offset=({mean_offset.x:.4f}, {mean_offset.y:.4f})"
         )
         console.info(f"Tool 0 reference - X={center.x:.4f} Y={center.y:.4f} mm")
-        _warn_sensor_position_if_needed(tools, result.offset, console=console)
-        _announce_plot_result(host, console, result)
+        _warn_sensor_position_if_needed(tools, mean_offset, console=console)
+        if repeats == 1 and last_result is not None:
+            _announce_plot_result(host, console, last_result)
         return tool, center, None
 
     if tool0_center is None:
@@ -203,20 +273,23 @@ def align_tool_number(
         macro = tools.format_load_macro(tool_number)
         logger.info(f"eddy_seek: loading tool {tool_number} via {macro}")
         tools.run_load_macro(tool_number)
-    clear_gcode_offset_xy(host.printer)
+    clear_gcode_offset_xy(host.printer)  # load macro may have added an offset
+    toolhead = host.printer.lookup_object("toolhead")
+    move_to_xy(toolhead, tool0_center, host.seek_config.jog_speed, wait=True)
 
-    result = align_tool_at(host, gcmd, tool0_center, **seek_kw)
-    if result.status != "ok" or result.offset is None:
-        error = result.error_message or f"tool {tool_number} alignment failed"
-        return None, tool0_center, error
+    seek_result = _seek_tool_repeated(host, gcmd, **seek_kw)
+    if seek_result is None:
+        return None, tool0_center, f"tool {tool_number} alignment failed"
 
-    tool = tools.get_tool(tool_number).mark_calibrated(result.offset)
+    mean_offset, last_result = seek_result
+    tool = tools.get_tool(tool_number).mark_calibrated(mean_offset)
     logger.info(
         f"eddy_seek: tool {tool_number} offset from tool 0 "
-        f"({result.offset.x:.4f}, {result.offset.y:.4f})"
+        f"({mean_offset.x:.4f}, {mean_offset.y:.4f})"
     )
-    console.info(f"Tool {tool_number} offset - {result.offset.to_gcode()} mm")
-    _announce_plot_result(host, console, result)
+    console.info(f"Tool {tool_number} offset - {mean_offset.to_gcode()} mm")
+    if repeats == 1 and last_result is not None:
+        _announce_plot_result(host, console, last_result)
     return tool, tool0_center, None
 
 
@@ -225,16 +298,16 @@ def align_all_tools(
     tools: ToolAlignConfig,
     gcmd,
     tool_count: int | None = None,
+    *,
+    repeats: int = 1,
 ) -> ToolAlignResult:
     console = console_for_gcmd(gcmd, host.seek_config)
     host.console = console
-    printer = host.printer
-    gcode = printer.lookup_object("gcode")
     count = tool_count or tools.tool_count
 
-    logger.info(f"eddy_seek: align_all_tools starting {count} tool(s)")
-    gcode.run_script_from_command(f"SAVE_GCODE_STATE NAME={_GCODE_STATE}")
-
+    logger.info(
+        f"eddy_seek: align_all_tools starting {count} tool(s) repeats={repeats}"
+    )
     tool0_center: Position | None = None
     run_id = uuid.uuid4().hex[:8]
     write_at = datetime.now()
@@ -256,6 +329,7 @@ def align_all_tools(
                 run_label="tools",
                 artifact_write_at=write_at,
                 batch=True,
+                repeats=repeats,
             )
             if error is not None:
                 logger.info(
@@ -271,5 +345,4 @@ def align_all_tools(
         return ToolAlignResult("ok", tool0_center, None)
 
     finally:
-        gcode.run_script_from_command(f"RESTORE_GCODE_STATE NAME={_GCODE_STATE} MOVE=1")
         clear_gcode_offset_xy(host.printer)

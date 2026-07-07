@@ -13,18 +13,15 @@ from __future__ import annotations
 import logging
 import random
 import uuid
+from dataclasses import replace
 from datetime import datetime
-from pathlib import Path
 
 from .common import Offset, Position
 from .config import SeekConfig
 from .kconsole import KConsole
 from .movement.handler import manual_move_xy
-from .plotting.accuracy import write_accuracy_plot
-from .plotting.artifacts import write_figure
-from .plotting.primitives import AccuracyRepeatRecord
-from .plotting.recorder import SessionRecorder
-from .session import SeekHost, SeekSession, report_accuracy_stats
+from .repeated_seek import run_repeated_seeks, write_repeat_scatter_plot
+from .session import SeekHost, SeekSession, SeekSessionResult, report_accuracy_stats
 from .strategy import strategy_for
 
 logger = logging.getLogger(__name__)
@@ -46,27 +43,6 @@ def _apply_mock_offset(host: SeekHost, cfg: SeekConfig, console: KConsole) -> Of
     return mock_offset
 
 
-def _write_accuracy_plot(
-    host: SeekHost,
-    *,
-    records: tuple[AccuracyRepeatRecord, ...],
-    run_id: str,
-    write_at: datetime,
-) -> str | None:
-    cfg = host.seek_config
-    fig = write_accuracy_plot(repeats=list(records))
-    if fig is None:
-        return None
-    return write_figure(
-        Path(cfg.result_folder),
-        fig,
-        write_at=write_at,
-        suffix="accuracy",
-        run_label="accuracy",
-        run_id=run_id,
-    )
-
-
 def run_accuracy_test(
     host: SeekHost,
     gcmd,
@@ -75,79 +51,59 @@ def run_accuracy_test(
     repeats: int,
     mock_enabled: bool,
 ) -> None:
-    gcode = host.printer.lookup_object("gcode")
-    gcode.run_script_from_command(f"SAVE_GCODE_STATE NAME={_GCODE_STATE}")
-
     cfg = host.seek_config
     run_id = uuid.uuid4().hex[:8]
     write_at = datetime.now()
-    recorder = SessionRecorder(trace=False, plots=cfg.save_plots)
 
-    offsets: list[Offset] = []
-    durations_s: list[float] = []
-    try:
-        for repeat in range(1, repeats + 1):
-            if repeat > 1:
-                gcode.run_script_from_command(
-                    f"RESTORE_GCODE_STATE NAME={_GCODE_STATE} MOVE=1"
-                )
+    def run_once(repeat: int) -> SeekSessionResult:
+        mock_offset = Offset.zero()
+        if mock_enabled:
+            mock_offset = _apply_mock_offset(host, cfg, console)
 
-            mock_offset = Offset.zero()
-            if mock_enabled:
-                mock_offset = _apply_mock_offset(host, cfg, console)
+        result = SeekSession(
+            host,
+            run_id=run_id,
+            run_label="accuracy",
+            artifact_label=f"r{repeat}",
+            artifact_write_at=write_at,
+        ).run(
+            gcmd,
+            strategy_for(cfg.strategy),
+            boundaries=False,
+            announce_plot=True,
+        )
+        if result.status != "ok" or result.offset is None:
+            return result
+        return replace(result, offset=mock_offset + result.offset)
 
-            console.info(f"Repeat {repeat}/{repeats}")
-            result = SeekSession(
-                host,
-                run_id=run_id,
-                run_label="accuracy",
-                artifact_label=f"r{repeat}",
-                artifact_write_at=write_at,
-            ).run(
-                gcmd,
-                strategy_for(cfg.strategy),
-                boundaries=False,
-                announce_plot=True,
-            )
+    repeated = run_repeated_seeks(
+        host,
+        console=console,
+        repeats=repeats,
+        gcode_state_name=_GCODE_STATE,
+        run_once=run_once,
+    )
 
-            if result.status != "ok" or result.offset is None:
-                console.error(
-                    f"Repeat {repeat} failed"
-                    + (f": {result.error_message}" if result.error_message else "")
-                )
-                break
+    if repeated is None:
+        return
 
-            found_offset = mock_offset + result.offset
-            offsets.append(found_offset)
-            durations_s.append(result.end_time - result.start_time)
-            recorder.record(
-                AccuracyRepeatRecord(
-                    repeat_num=repeat,
-                    offset=found_offset,
-                    session_plot_path=result.plot_path,
-                )
-            )
-            console.info(
-                f"Repeat {repeat} - X={found_offset.x:+.4f} "
-                f"Y={found_offset.y:+.4f} mm "
-                f"({durations_s[-1]:.1f}s)"
-            )
+    offsets = list(repeated.offsets)
+    durations_s = list(repeated.durations_s)
+    if len(offsets) < 2:
+        console.error("Need at least 2 successful repeats for deviation report")
+        return
 
-        if len(offsets) < 2:
-            console.error("Need at least 2 successful repeats for deviation report")
-            return
-
-        report_accuracy_stats(console, offsets, durations_s=durations_s)
-        if cfg.save_plots and len(offsets) >= 2:
-            plot_path = _write_accuracy_plot(
-                host,
-                records=recorder.records(),
-                run_id=run_id,
-                write_at=write_at,
-            )
-            if plot_path is not None:
-                console.plot_saved(plot_path)
-                logger.info(f"eddy_seek: accuracy plot saved to {plot_path}")
-        console.exit(f"Accuracy test complete ({len(offsets)} repeats)")
-    finally:
-        gcode.run_script_from_command(f"RESTORE_GCODE_STATE NAME={_GCODE_STATE} MOVE=1")
+    report_accuracy_stats(console, offsets, durations_s=durations_s)
+    if cfg.save_plots and len(offsets) >= 2:
+        plot_path = write_repeat_scatter_plot(
+            host,
+            records=repeated.records,
+            run_id=run_id,
+            write_at=write_at,
+            suffix="accuracy",
+            run_label="accuracy",
+        )
+        if plot_path is not None:
+            console.plot_saved(plot_path)
+            logger.info(f"eddy_seek: accuracy plot saved to {plot_path}")
+    console.exit(f"Accuracy test complete ({len(offsets)} repeats)")

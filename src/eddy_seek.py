@@ -333,13 +333,12 @@ class EddySeek(SeekHost):
         tool_number = gcmd.get_int("TOOL", -1, minval=0)
         if tool_number == -1:
             raise gcmd.error("TOOL=<number> is required for EDDY_SEEK_TOOL")
-        logger.info(f"eddy_seek: EDDY_SEEK_TOOL tool={tool_number}")
+        repeats = gcmd.get_int("REPEATS", 1, minval=1, maxval=50)
+        logger.info(f"eddy_seek: EDDY_SEEK_TOOL tool={tool_number} repeats={repeats}")
         console = self.refresh_console(gcmd)
         console.entry(f"Aligning tool {tool_number}…")
         write_at = datetime.now()
         run_id = uuid.uuid4().hex[:8]
-        gcode = self.printer.lookup_object("gcode")
-        gcode.run_script_from_command("SAVE_GCODE_STATE NAME=EDDY_SEEK_TOOL")
         try:
             tool, tool0_center, error = align_tool_number(
                 self,
@@ -351,6 +350,7 @@ class EddySeek(SeekHost):
                 run_id=run_id,
                 run_label="tool",
                 artifact_write_at=write_at,
+                repeats=repeats,
             )
             if error is not None:
                 console.error(f"Tool {tool_number} alignment failed: {error}")
@@ -362,14 +362,14 @@ class EddySeek(SeekHost):
                 if tool_number != 0:
                     self._tools.save_tool(tool)
         finally:
-            gcode.run_script_from_command("RESTORE_GCODE_STATE NAME=EDDY_SEEK_TOOL")
             clear_gcode_offset_xy(self.printer)
 
     def cmd_EDDY_SEEK_TOOLS(self, gcmd: GCodeCommand) -> None:
         self.refresh_console(gcmd)
         tool_count = gcmd.get_int("TOOLS", self._tools.tool_count, minval=1)
-        logger.info(f"eddy_seek: EDDY_SEEK_TOOLS tools={tool_count}")
-        result = align_all_tools(self, self._tools, gcmd, tool_count)
+        repeats = gcmd.get_int("REPEATS", 1, minval=1, maxval=50)
+        logger.info(f"eddy_seek: EDDY_SEEK_TOOLS tools={tool_count} repeats={repeats}")
+        result = align_all_tools(self, self._tools, gcmd, tool_count, repeats=repeats)
         if result.tool0_center is not None:
             self._tool0_center = result.tool0_center
         if result.status == "ok":

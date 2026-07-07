@@ -211,6 +211,8 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 **All tools:** load tool 0, then `EDDY_SEEK_TOOLS` (runs load macros for tools 1…N). Run `SAVE_CONFIG` once at the end.
 
+`REPEATS=n` (default 1) runs each tool's seek `n` times at the same start position and saves the **mean** offset. With `n >= 2`, repeatability stats (σ, max scatter) match `EDDY_SEEK_ACCURACY`.
+
 ---
 
 ## G-code commands
@@ -223,7 +225,9 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 | `EDDY_SEEK_START`               | XY search from current position              |
 | `EDDY_SEEK_ACCURACY`            | Repeat alignment and report repeatability    |
 | `EDDY_SEEK_TOOL TOOL=n`         | Align one tool (caller loads the tool)       |
+| `EDDY_SEEK_TOOL TOOL=n REPEATS=3` | Align with 3 seeks averaged per tool         |
 | `EDDY_SEEK_TOOLS`               | Align all tools                              |
+| `EDDY_SEEK_TOOLS REPEATS=3`     | Align all tools with averaged seeks          |
 | `EDDY_SEEK_TOOLS TOOLS=n`       | Align tools 0…n−1 only                       |
 | `EDDY_SEEK_APPLY_OFFSET TOOL=n` | Apply saved XY offset via `SET_GCODE_OFFSET` |
 
