@@ -28,6 +28,13 @@ from _eddy_seek.plotting.primitives import (
 )
 
 
+def test_offset_console_and_gcode_formatting():
+    offset = Offset(0.1234, -0.5678)
+    assert offset.to_gcode() == "X=0.12 Y=-0.57"
+    assert offset.to_console_str() == "X=+0.12 Y=-0.57 mm"
+    assert offset.to_delta_str() == "ΔX=0.12 ΔY=-0.57"
+
+
 def test_primitives_serialization():
     probe = ProbeRecord(Offset(1.0, 2.0), 100.0, (99.0, 101.0))
 

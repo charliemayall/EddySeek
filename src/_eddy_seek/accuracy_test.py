@@ -35,7 +35,7 @@ def _apply_mock_offset(host: SeekHost, cfg: SeekConfig, console: KConsole) -> Of
         (random.random() * 2 - 1) * mock_span,
         (random.random() * 2 - 1) * mock_span,
     )
-    console.info(f"Mock offset: {mock_offset.to_delta_str()}")
+    console.info(f"Mock offset: {mock_offset.to_console_str()}")
     toolhead = host.printer.lookup_object("toolhead")
     machine = Position.from_pair(toolhead.get_position()) + mock_offset
     manual_move_xy(toolhead, machine, cfg.jog_speed / 60.0)

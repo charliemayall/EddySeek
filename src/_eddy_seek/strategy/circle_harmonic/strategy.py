@@ -196,9 +196,10 @@ class CircleHarmonicStrategy(SeekStrategy):
         moved: Offset,
         ctx: SeekSession,
     ) -> str:
-        if pass_num == 1 and not self._mode.skip_bootstrap:
-            return f"Pass {pass_num} (bootstrap): X={new.x:+.4f} Y={new.y:+.4f} mm"
-        return f"Pass {pass_num} (circle): {new.to_delta_str()}"
+        label = (
+            "bootstrap" if pass_num == 1 and not self._mode.skip_bootstrap else "circle"
+        )
+        return f"Pass {pass_num} ({label}): {new.to_console_str()}"
 
     def _bootstrap_pass(
         self,

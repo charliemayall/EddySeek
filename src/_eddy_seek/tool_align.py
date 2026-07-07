@@ -51,10 +51,10 @@ def _warn_sensor_position_if_needed(
     suggested_x = tools.sensor_x + seek_offset.x
     suggested_y = tools.sensor_y + seek_offset.y
     console.warn(
-        f"Tool 0 seek result center: X={seek_offset.x:+.4f} Y={seek_offset.y:+.4f} mm "
+        f"Tool 0 seek result center: {seek_offset.to_console_str()} "
         f"is signifcantly different from your configured sensor_x/sensor_y position "
         f"This makes seeks slower for Tool 0, and less accurate for all tools. Consider updating "
-        f"(suggested: sensor_x: {suggested_x:.4f}, sensor_y: {suggested_y:.4f}), "
+        f"(suggested: sensor_x: {suggested_x:.2f}, sensor_y: {suggested_y:.2f}), "
         f"then FIRMWARE_RESTART"
     )
 
@@ -256,7 +256,7 @@ def align_tool_number(
             f"eddy_seek: tool 0 centered at ({center.x:.4f}, {center.y:.4f}) "
             f"seek_offset=({mean_offset.x:.4f}, {mean_offset.y:.4f})"
         )
-        console.info(f"Tool 0 reference - X={center.x:.4f} Y={center.y:.4f} mm")
+        console.info(f"Tool 0 reference - {center.to_console_str()}")
         _warn_sensor_position_if_needed(tools, mean_offset, console=console)
         if repeats == 1 and last_result is not None:
             _announce_plot_result(host, console, last_result)

@@ -127,8 +127,7 @@ def run_repeated_seeks(
             )
             last_result = result
             console.info(
-                f"Repeat {repeat} - X={offset.x:+.4f} "
-                f"Y={offset.y:+.4f} mm ({duration:.1f}s)"
+                f"Repeat {repeat} - {offset.to_console_str()} ({duration:.1f}s)"
             )
 
         mean = compute_accuracy_stats(offsets).mean

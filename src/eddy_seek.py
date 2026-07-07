@@ -387,11 +387,11 @@ class EddySeek(SeekHost):
         eff = tool.effective_offset
         if tool.manual_offset != Offset.zero():
             console.info(
-                f"Tool {tool_number} offset applied (manual_adjust + calibrated) - X={eff.x:.4f} Y={eff.y:.4f} mm"
+                f"Tool {tool_number} offset applied (manual_adjust + calibrated) - {eff.to_console_str()}"
             )
         else:
             console.info(
-                f"Tool {tool_number} offset applied (calibrated) - X={eff.x:.4f} Y={eff.y:.4f} mm"
+                f"Tool {tool_number} offset applied (calibrated) - {eff.to_console_str()}"
             )
 
     def cmd_EDDY_SEEK_ACCURACY(self, gcmd: GCodeCommand) -> None:

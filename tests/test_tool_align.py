@@ -246,7 +246,7 @@ def test_align_all_tools_milestone_console_messages():
     assert result.status == "ok"
     assert gcmd.raw == [
         "echo: ES: Aligning tool 1 of 2…",
-        "echo: Tool 0 reference - X=10.1000 Y=19.8000 mm",
+        "echo: Tool 0 reference - X=+10.10 Y=+19.80 mm",
         "echo: Aligning tool 2 of 2…",
         "echo: Tool 1 offset - X=0.1 Y=-0.2 mm",
         "echo: ES: 2 tools aligned - run SAVE_CONFIG to persist",
@@ -369,7 +369,7 @@ def test_align_tool0_warns_for_reported_centre_vs_sensor_position():
 
     assert error is None
     assert center == Position(150.4356, 149.0420)
-    assert any("WARNING" in line and "149.0420" in line for line in gcmd.raw)
+    assert any("WARNING" in line and "X=+0.44 Y=-0.96 mm" in line for line in gcmd.raw)
 
 
 def test_align_tool_number_averages_repeats():

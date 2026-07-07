@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
     from _eddy_seek.movement.handler import MotionSample
 
-_ROUND_PRECISION = 4
+_ROUND_PRECISION = 2
 CHAR_DELTA = "\u0394"
 
 
@@ -100,6 +100,10 @@ class _Vector2(ABC):
         return (
             f"X={round(self.x, _ROUND_PRECISION)} Y={round(self.y, _ROUND_PRECISION)}"
         )
+
+    def to_console_str(self) -> str:
+        fmt = f"+.{_ROUND_PRECISION}f"
+        return f"X={format(self.x, fmt)} Y={format(self.y, fmt)} mm"
 
     def to_dict(self) -> dict[str, float]:
         return {

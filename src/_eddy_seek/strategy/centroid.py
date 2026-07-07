@@ -65,7 +65,7 @@ class CentroidStrategy(SeekStrategy):
             f"eddy_seek: centroid pass {pass_num} moved=({moved.x:.4f}, {moved.y:.4f}) "
             f"grid_step=({step_x:.4f}, {step_y:.4f})"
         )
-        return f"Pass {pass_num}: {new.to_delta_str()}"
+        return f"Pass {pass_num}: {new.to_console_str()}"
 
     def _centroid_pass(
         self,

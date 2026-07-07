@@ -189,7 +189,7 @@ class SeekSession:
                 )
                 if boundaries:
                     console.exit(
-                        f"Done - offset {best.to_delta_str()} ({passes_run} passes)"
+                        f"Done - offset {best.to_console_str()} ({passes_run} passes)"
                     )
                 status = "ok"
                 offset = best
@@ -391,8 +391,8 @@ def report_accuracy_stats(
     output = []
     for i, offset in enumerate(offsets, start=1):
         line = (
-            f"#{i}  X={offset.x:+.4f} mm  Y={offset.y:+.4f} mm  "
-            f"radial={stats.radial[i - 1]:.4f} mm"
+            f"#{i}  X={offset.x:+.2f} mm  Y={offset.y:+.2f} mm  "
+            f"radial={stats.radial[i - 1]:.2f} mm"
         )
         if durations_s is not None and i <= len(durations_s):
             line += f"  t={durations_s[i - 1]:.1f}s"
@@ -401,7 +401,7 @@ def report_accuracy_stats(
         [
             f"Repeatability ({n} runs):",
             console.BR,
-            f"mean X={stats.mean.x:+.4f} Y={stats.mean.y:+.4f} mm",
+            f"mean X={stats.mean.x:+.2f} Y={stats.mean.y:+.2f} mm",
             console.BR,
             f"σ X={stats.std_x:.3f} Y={stats.std_y:.3f} mm",
             console.BR,

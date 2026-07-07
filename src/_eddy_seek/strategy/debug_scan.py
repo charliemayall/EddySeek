@@ -108,7 +108,7 @@ class DebugScanStrategy(SeekStrategy):
         logger.info(
             f"eddy_seek: debug_scan pass {pass_num} moved=({moved.x:.4f}, {moved.y:.4f})"
         )
-        return f"Pass {pass_num}: {new.to_delta_str()}"
+        return f"Pass {pass_num}: {new.to_console_str()}"
 
 
 def _record_debug_scan(
