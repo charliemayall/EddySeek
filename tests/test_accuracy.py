@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fakes import FakeGcmd, FakePrinter, RecordingToolhead, ok_seek_result
 
+from _eddy_seek.accuracy_stats import compute_accuracy_stats
 from _eddy_seek.accuracy_test import run_accuracy_test
 from _eddy_seek.common import Offset
 from _eddy_seek.config import SeekConfig
@@ -30,7 +31,6 @@ from _eddy_seek.plotting.accuracy_io import (
 )
 from _eddy_seek.plotting.artifacts import write_figure
 from _eddy_seek.plotting.primitives import AccuracyRepeatRecord
-from _eddy_seek.session import compute_accuracy_stats
 
 
 def test_mock_does_not_inflate_reference_relative_spread():
@@ -141,7 +141,7 @@ def test_run_accuracy_test_uses_repeated_seeks():
             "_eddy_seek.accuracy_test.run_repeated_seeks",
             return_value=expected,
         ) as repeated_mock,
-        patch("_eddy_seek.accuracy_test.report_accuracy_stats"),
+        patch("_eddy_seek.accuracy_test.finalize_repeat_seek"),
     ):
         repeated_mock.return_value = None
         run_accuracy_test(
@@ -157,7 +157,7 @@ def test_run_accuracy_test_uses_repeated_seeks():
         patch(
             "_eddy_seek.accuracy_test.run_repeated_seeks",
         ) as repeated_mock,
-        patch("_eddy_seek.accuracy_test.report_accuracy_stats") as stats_mock,
+        patch("_eddy_seek.accuracy_test.finalize_repeat_seek") as finalize_mock,
     ):
         from _eddy_seek.common import Offset
         from _eddy_seek.repeated_seek import RepeatedSeekResult
@@ -175,7 +175,7 @@ def test_run_accuracy_test_uses_repeated_seeks():
             repeats=2,
             mock_enabled=False,
         )
-        stats_mock.assert_called_once()
+        finalize_mock.assert_called_once()
 
 
 def test_run_accuracy_test_records_reference_relative_offsets_with_mock():
@@ -190,8 +190,8 @@ def test_run_accuracy_test_records_reference_relative_offsets_with_mock():
     console = MagicMock()
     recorded: list[Offset] = []
 
-    def capture_stats(_console, offsets, *, durations_s=None):
-        recorded.extend(offsets)
+    def capture_finalize(_host, _console, repeated, **kwargs):
+        recorded.extend(repeated.offsets)
 
     seek_results = [ok_seek_result(offset=offset) for offset in seek_corrections]
 
@@ -207,7 +207,8 @@ def test_run_accuracy_test_records_reference_relative_offsets_with_mock():
             ),
         ),
         patch(
-            "_eddy_seek.accuracy_test.report_accuracy_stats", side_effect=capture_stats
+            "_eddy_seek.accuracy_test.finalize_repeat_seek",
+            side_effect=capture_finalize,
         ),
     ):
         run_accuracy_test(

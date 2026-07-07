@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import time
 import uuid
 from collections.abc import Callable
@@ -24,17 +23,18 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from .common import Offset, Position, session_artifact_filename
 from .config import SeekConfig
-from .kconsole import ConsoleSymbols, KConsole
+from .kconsole import KConsole
 from .movement.gcode_state import GCodeState
 from .movement.guard import KnownKinematicLimits, clear_gcode_offset_xy
 from .movement.handler import MIN_CAPTURE_SAMPLES, MotionHandler
+from .plot_announce import announce_seek_plot
 from .plotting.primitives import PlotArtifactRecord, ProbeRecord
 from .plotting.recorder import SessionRecorder
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer
 
-    from .strategy.base import SeekStrategy
+    from .strategy.base import SeekExitKind, SeekStrategy
 
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ class _SearchRun:
     passes_run: int
     error_message: str | None
     session_plot_path: str | None
-    exit_kind: str | None = None
+    exit_kind: SeekExitKind | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +79,7 @@ class SeekSessionResult:
     passes_run: int
     error_message: str | None
     plot_path: str | None = None
-    exit_kind: str | None = None
+    exit_kind: SeekExitKind | None = None
 
 
 class SeekSession:
@@ -219,7 +219,7 @@ class SeekSession:
         session_plot_path: str | None = None
         status: Literal["ok", "failed"] = "ok"
         offset: Offset | None = None
-        exit_kind: str | None = None
+        exit_kind: SeekExitKind | None = None
         try:
             with (
                 KnownKinematicLimits(self._printer),
@@ -245,12 +245,12 @@ class SeekSession:
                 )
             status = "ok"
             offset = best
-            exit_kind = SeekExitKind.CONVERGED.value
+            exit_kind = SeekExitKind.CONVERGED
         except SeekExitError as err:
             error_message = self._report_search_failure(console, err)
             status = "failed"
             offset = None
-            exit_kind = err.exit_kind.value
+            exit_kind = err.exit_kind
             if isinstance(err, DivergenceError):
                 self._recover_motion_jog(
                     err.previous,
@@ -314,10 +314,13 @@ class SeekSession:
                     path=session_plot_path,
                 )
             )
-            if show_plot_saved:
-                console.plot_saved(session_plot_path)
-        elif cfg.save_plots and status == "ok":
-            console.warn_plot_missing()
+            announce_seek_plot(
+                console,
+                plot_path=session_plot_path,
+                status=status,
+                save_plots=cfg.save_plots,
+                enabled=show_plot_saved,
+            )
         return session_plot_path
 
     def _get_single_sample(self, probe: ProbeRecord) -> None:
@@ -358,7 +361,9 @@ def _write_seek_trace(
             ),
             "passes_run": result.passes_run,
             "error_message": result.error_message,
-            "exit_kind": result.exit_kind,
+            "exit_kind": (
+                str(result.exit_kind) if result.exit_kind is not None else None
+            ),
             "config": host.session_trace_config(),
         },
         "probes": probes,
@@ -371,113 +376,3 @@ def _write_seek_trace(
     except OSError as exc:
         logger.warning(f"eddy_seek: failed to write session trace to {path}: {exc}")
         return None
-
-
-def _sample_stdev(values: list[float], mean: float) -> float:
-    if len(values) < 2:
-        return 0.0
-    variance = sum((v - mean) ** 2 for v in values) / (len(values) - 1)
-    return math.sqrt(variance)
-
-
-@dataclass(frozen=True, slots=True)
-class AccuracyStats:
-    mean: Offset
-    std_x: float
-    std_y: float
-    radial: tuple[float, ...]
-    max_radial: float
-    mean_radial: float
-    max_pair: float
-    xs_range: tuple[float, float]
-    ys_range: tuple[float, float]
-
-
-def compute_accuracy_stats(offsets: list[Offset]) -> AccuracyStats:
-    n = len(offsets)
-    xs = [p.x for p in offsets]
-    ys = [p.y for p in offsets]
-    mean_x = sum(xs) / n
-    mean_y = sum(ys) / n
-    std_x = _sample_stdev(xs, mean_x)
-    std_y = _sample_stdev(ys, mean_y)
-
-    mean = Offset(mean_x, mean_y)
-    radial = tuple(offset.distance_to(mean) for offset in offsets)
-    max_radial = max(radial)
-    mean_radial = sum(radial) / n
-
-    max_pair = 0.0
-    for i in range(n):
-        for j in range(i + 1, n):
-            max_pair = max(max_pair, offsets[i].distance_to(offsets[j]))
-
-    return AccuracyStats(
-        mean=mean,
-        std_x=std_x,
-        std_y=std_y,
-        radial=radial,
-        max_radial=max_radial,
-        mean_radial=mean_radial,
-        max_pair=max_pair,
-        xs_range=(min(xs), max(xs)),
-        ys_range=(min(ys), max(ys)),
-    )
-
-
-def report_accuracy_stats(
-    console: KConsole,
-    offsets: list[Offset],
-    *,
-    durations_s: list[float] | None = None,
-) -> None:
-    n = len(offsets)
-    stats = compute_accuracy_stats(offsets)
-    output = []
-    for i, offset in enumerate(offsets, start=1):
-        line = (
-            f"#{i}  X={offset.x:+.2f} mm  Y={offset.y:+.2f} mm  "
-            f"radial={stats.radial[i - 1]:.2f} mm"
-        )
-        if durations_s is not None and i <= len(durations_s):
-            line += f"  t={durations_s[i - 1]:.1f}s"
-        console.detail(line)
-    output.extend(
-        [
-            f"Repeatability ({n} runs):",
-            ConsoleSymbols.BR,
-            f"mean X={stats.mean.x:+.2f} Y={stats.mean.y:+.2f} mm",
-            ConsoleSymbols.BR,
-            f"σ X={stats.std_x:.3f} Y={stats.std_y:.3f} mm",
-            ConsoleSymbols.BR,
-            ConsoleSymbols.BR,
-            f"Max scatter: {stats.max_radial:.3f} mm",
-            ConsoleSymbols.BR,
-            f"Max pairwise {stats.max_pair:.3f} mm",
-            ConsoleSymbols.BR,
-        ]
-    )
-
-    if durations_s:
-        mean_t = sum(durations_s) / len(durations_s)
-        output.extend(
-            [
-                ConsoleSymbols.BR,
-                f"Seek time ({len(durations_s)} runs): ",
-                ConsoleSymbols.BR,
-                f"mean {mean_t:.1f}s ",
-                ConsoleSymbols.BR,
-                f"(min {min(durations_s):.1f}s, max {max(durations_s):.1f}s)",
-            ]
-        )
-    console.info("".join(output))
-    logger.info(
-        f"eddy_seek: accuracy report n={n} mean=({stats.mean.x:.4f}, {stats.mean.y:.4f}) "
-        f"stdev=({stats.std_x:.4f}, {stats.std_y:.4f}) "
-        f"max_radial={stats.max_radial:.4f} max_pair={stats.max_pair:.4f}"
-        + (
-            f" seek_time_mean={sum(durations_s) / len(durations_s):.2f}s"
-            if durations_s
-            else ""
-        )
-    )

@@ -13,8 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..accuracy_stats import AccuracyStats, compute_accuracy_stats
 from ..common import Offset
-from ..session import AccuracyStats, compute_accuracy_stats
 from ._plotly import (
     THEME_COLORS,
     apply_axes_theme,

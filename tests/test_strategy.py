@@ -11,6 +11,7 @@ import math
 import pytest
 from pytest import raises
 
+from _eddy_seek.accuracy_stats import _sample_stdev
 from _eddy_seek.common import Offset
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.optimizer import (
@@ -20,7 +21,7 @@ from _eddy_seek.optimizer import (
     weighted_centroid,
 )
 from _eddy_seek.plotting.recorder import SessionRecorder
-from _eddy_seek.session import SeekSession, _sample_stdev
+from _eddy_seek.session import SeekSession
 from _eddy_seek.strategy import strategy_for
 from _eddy_seek.strategy.base import (
     DivergenceError,
