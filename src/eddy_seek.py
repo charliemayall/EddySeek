@@ -23,6 +23,7 @@ from ._eddy_seek.common import Offset, Position
 from ._eddy_seek.config import SeekConfig, load_seek_config
 from ._eddy_seek.kconsole import KConsole
 from ._eddy_seek.movement.guard import clear_gcode_offset_xy
+from ._eddy_seek.movement.handler import MIN_CAPTURE_SAMPLES
 from ._eddy_seek.session import SeekHost, SeekSession
 from ._eddy_seek.strategy import strategy_for
 from ._eddy_seek.tool_align import align_all_tools, align_tool_number
@@ -228,7 +229,7 @@ class EddySeek(SeekHost):
         self._capture_count = 0
         self._capturing = True
 
-    def get_capture_mean(self, min_samples: int = 5) -> float | None:
+    def get_capture_mean(self, min_samples: int = MIN_CAPTURE_SAMPLES) -> float | None:
         buf = list(self._capture_buf)
         self._capturing = False
         if len(buf) < min_samples:
@@ -332,20 +333,26 @@ class EddySeek(SeekHost):
         console.entry("Seeking nozzle centre…")
         write_at = datetime.now()
         run_id = uuid.uuid4().hex[:8]
+        strategy = strategy_for(self.seek_config.strategy_from_gcmd(gcmd))
         SeekSession(
             self,
             run_id=run_id,
             run_label="start",
             artifact_label="start",
             artifact_write_at=write_at,
-        ).run(gcmd, strategy_for(self.seek_config.strategy))
+        ).run(gcmd, strategy)
 
     def cmd_EDDY_SEEK_TOOL(self, gcmd: GCodeCommand) -> None:
         tool_number = gcmd.get_int("TOOL", -1, minval=0)
         if tool_number == -1:
             raise gcmd.error("TOOL=<number> is required for EDDY_SEEK_TOOL")
         repeats = gcmd.get_int("REPEATS", 2, minval=2, maxval=50)
-        logger.info(f"eddy_seek: EDDY_SEEK_TOOL tool={tool_number} repeats={repeats}")
+        load_tool = gcmd.get_int("LOAD", 0, minval=0, maxval=1) == 1
+        strategy = self.seek_config.strategy_from_gcmd(gcmd)
+        logger.info(
+            f"eddy_seek: EDDY_SEEK_TOOL tool={tool_number} repeats={repeats} "
+            f"load={load_tool} strategy={strategy}"
+        )
         console = self.refresh_console(gcmd)
         console.entry(f"Aligning tool {tool_number}…")
         write_at = datetime.now()
@@ -358,10 +365,12 @@ class EddySeek(SeekHost):
                 tool_number,
                 self._tool0_center,
                 console=console,
+                load_tool=load_tool,
                 run_id=run_id,
                 run_label="tool",
                 artifact_write_at=write_at,
                 repeats=repeats,
+                strategy=strategy,
             )
             if error is not None:
                 console.error(f"Tool {tool_number} alignment failed: {error}")

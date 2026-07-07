@@ -96,16 +96,18 @@ def align_tool(
     artifact_label: str = "",
     artifact_write_at: datetime | None = None,
     announce_plot: bool = False,
+    strategy: str | None = None,
 ) -> SeekSessionResult:
     """Run XY seek at the current toolhead position."""
-    strategy = strategy_for(host.seek_config.strategy)
+    strategy_name = strategy if strategy is not None else host.seek_config.strategy
+    strategy_impl = strategy_for(strategy_name)
     return SeekSession(
         host,
         run_id=run_id,
         run_label=run_label,
         artifact_label=artifact_label,
         artifact_write_at=artifact_write_at,
-    ).run(gcmd, strategy, boundaries=False, announce_plot=announce_plot)
+    ).run(gcmd, strategy_impl, boundaries=False, announce_plot=announce_plot)
 
 
 def _seek_tool_repeated(
@@ -118,6 +120,7 @@ def _seek_tool_repeated(
     run_id: str | None,
     run_label: str,
     artifact_write_at: datetime | None,
+    strategy: str | None = None,
 ) -> tuple[Offset, SeekSessionResult | None] | None:
     """Run ``repeats`` seeks at the current XY; return mean offset or None on failure."""
     if repeats >= 2 and (run_id is None or artifact_write_at is None):
@@ -137,6 +140,7 @@ def _seek_tool_repeated(
             artifact_label=label,
             artifact_write_at=artifact_write_at,
             announce_plot=repeats >= 2,
+            strategy=strategy,
         )
 
     repeated = run_repeated_seeks(
@@ -156,6 +160,8 @@ def _seek_tool_repeated(
             durations_s=list(repeated.durations_s),
         )
         if host.seek_config.save_plots:
+            assert run_id is not None
+            assert artifact_write_at is not None
             plot_path = write_repeat_scatter_plot(
                 host,
                 records=repeated.records,
@@ -184,6 +190,7 @@ def align_tool_number(
     artifact_write_at: datetime | None = None,
     batch: bool = False,
     repeats: int = 1,
+    strategy: str | None = None,
 ) -> tuple[Tool | None, Position | None, str | None]:
     """
     Align one tool and return its updated Tool record.
@@ -218,7 +225,7 @@ def align_tool_number(
         logger.info("eddy_seek: aligning tool 0 (reference)")
         clear_gcode_offset_xy(host.printer)  # caller may have an offset applied
         start = move_to_seek_start_pos(host, tools)
-        seek_result = _seek_tool_repeated(host, gcmd, **seek_kw)
+        seek_result = _seek_tool_repeated(host, gcmd, strategy=strategy, **seek_kw)
         if seek_result is None:
             return None, None, "tool 0 alignment failed"
 
@@ -240,7 +247,12 @@ def align_tool_number(
             f"eddy_seek: align_tool_number tool {tool_number} skipped "
             "(no tool 0 centre)"
         )
-        return None, None, "tool 0 must be aligned before other tools"
+        return (
+            None,
+            None,
+            "tool 0 must be aligned before other tools "
+            "(Klipper restart clears the reference; run EDDY_SEEK_TOOL TOOL=0 first)",
+        )
 
     if load_tool:
         macro = tools.format_load_macro(tool_number)
@@ -250,7 +262,7 @@ def align_tool_number(
     toolhead = host.printer.lookup_object("toolhead")
     move_to_xy(toolhead, tool0_center, host.seek_config.jog_speed, wait=True)
 
-    seek_result = _seek_tool_repeated(host, gcmd, **seek_kw)
+    seek_result = _seek_tool_repeated(host, gcmd, strategy=strategy, **seek_kw)
     if seek_result is None:
         return None, tool0_center, f"tool {tool_number} alignment failed"
 

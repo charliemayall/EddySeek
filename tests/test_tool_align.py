@@ -228,6 +228,49 @@ def test_align_tool_number_load_macro_only_when_requested():
         assert tools.load_calls == [1]
 
 
+def test_align_tool_number_requires_tool0_after_restart():
+    tools = _LoadMacroTools()
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+
+    _, _, error = align_tool_number(
+        host,  # type: ignore[arg-type]
+        tools,  # type: ignore[arg-type]
+        FakeGcmd(),
+        1,
+        None,
+        console=_console(),
+    )
+
+    assert error is not None
+    assert "Klipper restart clears the reference" in error
+    assert "EDDY_SEEK_TOOL TOOL=0" in error
+
+
+def test_align_tool_number_passes_strategy_override():
+    tools = _LoadMacroTools()
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    center = Position(10.0, 20.0)
+    ok = ok_seek_result()
+    seen: list[str] = []
+
+    def capture_strategy(*_args, strategy=None, **_kwargs):
+        seen.append(strategy or "")
+        return ok
+
+    with patch("_eddy_seek.tool_align.align_tool", side_effect=capture_strategy):
+        align_tool_number(
+            host,  # type: ignore[arg-type]
+            tools,  # type: ignore[arg-type]
+            FakeGcmd(),
+            1,
+            center,
+            console=_console(),
+            strategy="centroid",
+        )
+
+    assert seen == ["centroid"]
+
+
 def test_align_all_tools_milestone_console_messages():
     tools = _LoadMacroTools()
     host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
