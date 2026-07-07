@@ -29,6 +29,15 @@ def _load_install():
 install = _load_install()
 
 
+@pytest.fixture
+def config_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    config_dir = tmp_path / "printer_data" / "config"
+    monkeypatch.setattr(install, "PRINTER_CONFIG_DIR", config_dir)
+    monkeypatch.setattr(install, "EDDY_SEEK_CFG", config_dir / "eddy_seek.cfg")
+    monkeypatch.setattr(install, "EXAMPLE_CFG", ROOT / "example.cfg")
+    return config_dir
+
+
 class _FakeVersionInfo:
     def __init__(self, major: int, minor: int) -> None:
         self.major = major
@@ -62,3 +71,59 @@ def test_warn_for_python_version_warns_on_old_python(
     assert "Minimum version --> 3.10" in out
     assert "Your version --> 3.9" in out
     assert "EddySeek may not work as expected" in out
+
+
+def test_offer_example_config_skips_when_not_tty(
+    monkeypatch: pytest.MonkeyPatch, config_paths: Path
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    install.offer_example_config()
+    assert not install.EDDY_SEEK_CFG.exists()
+
+
+def test_offer_example_config_skips_existing_file(
+    monkeypatch: pytest.MonkeyPatch,
+    config_paths: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    config_paths.mkdir(parents=True)
+    install.EDDY_SEEK_CFG.write_text("[eddy_seek]\n")
+    install.offer_example_config()
+    assert install.EDDY_SEEK_CFG.read_text() == "[eddy_seek]\n"
+    assert "config already exists" in capsys.readouterr().out
+
+
+def test_offer_example_config_copies_on_yes(
+    monkeypatch: pytest.MonkeyPatch,
+    config_paths: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+    config_paths.mkdir(parents=True)
+    install.offer_example_config()
+    assert install.EDDY_SEEK_CFG.is_file()
+    out = capsys.readouterr().out
+    assert "Copied example config" in out
+    assert "[include eddy_seek.cfg]" in out
+
+
+def test_offer_example_config_skips_on_no(
+    monkeypatch: pytest.MonkeyPatch, config_paths: Path
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+    install.offer_example_config()
+    assert not install.EDDY_SEEK_CFG.exists()
+
+
+def test_offer_example_config_skips_on_directory_not_found(
+    monkeypatch: pytest.MonkeyPatch, config_paths: Path
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+    assert not config_paths.exists()
+    install.offer_example_config()
+    assert not config_paths.exists()
+    assert not install.EDDY_SEEK_CFG.exists()

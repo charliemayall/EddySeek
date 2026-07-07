@@ -19,6 +19,9 @@ from pathlib import Path
 
 EDDY_SEEK_DIR = Path(__file__).resolve().parent
 DEFAULT_DEST = Path.home() / "klipper" / "klippy" / "extras"
+PRINTER_CONFIG_DIR = Path.home() / "printer_data" / "config"
+EDDY_SEEK_CFG = PRINTER_CONFIG_DIR / "eddy_seek.cfg"
+EXAMPLE_CFG = EDDY_SEEK_DIR / "example.cfg"
 
 _RESET = "\x1b[0m"
 
@@ -36,6 +39,34 @@ def _c(text, color: COLORS):
 
 def cprint(text, color: COLORS):
     print(_c(text, color))
+
+
+def offer_example_config() -> None:
+    if not sys.stdin.isatty():
+        return
+    if not PRINTER_CONFIG_DIR.exists():
+        return
+    if EDDY_SEEK_CFG.exists():
+        print(f"{_c('-- ', COLORS.GRAY)}config already exists: {EDDY_SEEK_CFG}")
+        return
+    if not EXAMPLE_CFG.is_file():
+        print(f"{_c('-- ', COLORS.GRAY)}missing {EXAMPLE_CFG}, skipping config copy")
+        return
+    ans = input(f"Copy example.cfg to {EDDY_SEEK_CFG}? (y/n): ")
+    if ans.lower() != "y":
+        return
+    PRINTER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(EXAMPLE_CFG, EDDY_SEEK_CFG)
+    cprint(f"Copied example config to {EDDY_SEEK_CFG}", COLORS.GREEN)
+    print(
+        f"""\n{_c("Config next step:", COLORS.GREEN)}
+    Add this line to your printer.cfg:
+
+        [include {EDDY_SEEK_CFG.name}]
+
+    Then edit {EDDY_SEEK_CFG} for your machine (I2C, sensor_x/y, tool settings).
+    """
+    )
 
 
 def restart_klipper() -> None:
@@ -126,12 +157,13 @@ def main() -> None:
     print(f"{_c('-- ', COLORS.GRAY)}{dest / '_eddy_seek/'}")
     print(
         f"""\n{_c("Next steps:", COLORS.GREEN)}\n
-    1. Add [eddy_seek] to printer.cfg (set sensor_x/sensor_y for your coil)
+    1. Configure EddySeek in printer.cfg (see example.cfg or eddy_seek.cfg)
     2. Restart Klipper: sudo systemctl restart klipper
 
     After git pull, re-run ./install.sh then restart Klipper.
     """
     )
+    offer_example_config()
     restart_klipper()
 
 
