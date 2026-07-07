@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _LDC1612_BULK_HZ = 400.0  # batch bulk client nominal rate
+MIN_CAPTURE_SAMPLES = 3
 
 
 def manual_move_xy(toolhead: ToolHead, position: Position, speed_mm_s: float) -> None:
@@ -219,7 +220,7 @@ class MotionHandler(_SessionMotionBase):
         toolhead.dwell(self._config.dwell_time)
         toolhead.wait_moves()
 
-        mean = self._host.get_capture_mean(min_samples=3)
+        mean = self._host.get_capture_mean(min_samples=MIN_CAPTURE_SAMPLES)
         if mean is None:
             logger.info(
                 f"eddy_seek: measure_at ({offset.x:.4f}, {offset.y:.4f}) failed "
@@ -389,7 +390,13 @@ class MotionHandler(_SessionMotionBase):
             mcu = self._printer.lookup_object("mcu")
             est = mcu.estimated_print_time(systime)  # pyright: ignore[reportAttributeAccessIssue]
             return est > end_time + 1.0
-        except Exception:
+        except (KeyError, AttributeError):
+            return False
+        except Exception as exc:
+            config_error = getattr(self._printer, "config_error", None)
+            if config_error is not None and isinstance(exc, config_error):
+                return False
+            logger.exception("eddy_seek: sensor outage check failed")
             return False
 
     @overload

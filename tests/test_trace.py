@@ -13,6 +13,7 @@ from pathlib import Path
 
 from _eddy_seek.common import Offset
 from _eddy_seek.config import SeekConfig
+from _eddy_seek.movement.handler import MIN_CAPTURE_SAMPLES
 from _eddy_seek.plotting.primitives import (
     CentroidPassRecord,
     PassMove,
@@ -111,7 +112,7 @@ def test_seek_session_collects_probes_when_enabled():
         def peek_capture_samples(self) -> list[float]:
             return list(self._buf)
 
-        def get_capture_mean(self, min_samples: int = 5) -> float:
+        def get_capture_mean(self, min_samples: int = MIN_CAPTURE_SAMPLES) -> float:
             return sum(self._buf) / len(self._buf)
 
     recorder = SessionRecorder(trace=True, plots=False)
