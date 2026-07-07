@@ -153,145 +153,155 @@ def test_plateau_estimate_uses_anchor():
     assert strategy._plateau.estimate(Offset.zero()) == Offset(1.0, 2.0)
 
 
-def test_finish_circle_pass_accept_sets_last_ok():
-    from _eddy_seek.strategy.circle_harmonic import (
-        CircleHarmonicStrategy,
-        _outcome_accept,
-    )
-
-    strategy = CircleHarmonicStrategy()
-    ctx = _plateau_ctx()
-    result = Offset(0.1, 0.05)
-    outcome = _outcome_accept(
-        result,
-        Offset.zero(),
-        2.0,
-        2.0,
-        [],
-        [],
-        _harmonic_fit_stub(),
-        freeze=False,
-    )
-    ret = strategy._finish_circle_pass(ctx, 2, Offset.zero(), outcome)
-    assert strategy._plateau.anchor == result
+def _check_finish_accept_sets_last_ok(strategy, ret):
+    assert strategy._plateau.anchor == Offset(0.1, 0.05)
     assert strategy._plateau.tier == 0
-    assert ret == result
+    assert ret == Offset(0.1, 0.05)
 
 
-def test_finish_circle_pass_reject_bumps_tier():
-    from _eddy_seek.strategy.circle_harmonic import (
-        CircleHarmonicStrategy,
-        _outcome_reject,
-    )
-
-    strategy = CircleHarmonicStrategy()
-    ctx = _plateau_ctx()
-    outcome = _outcome_reject(
-        Offset.zero(),
-        Offset.zero(),
-        2.0,
-        2.0,
-        [],
-        [],
-        fit=None,
-        reason="fit failed",
-    )
-    strategy._finish_circle_pass(ctx, 2, Offset.zero(), outcome)
+def _check_finish_reject_bumps_tier(strategy, _ret):
     assert strategy._plateau.tier == 1
     assert strategy._plateau.last_rejected
 
 
-def test_finish_circle_pass_reject_at_min_freezes():
-    from _eddy_seek.strategy.circle_harmonic import (
-        CircleHarmonicStrategy,
-        _outcome_reject,
-    )
-
-    strategy = CircleHarmonicStrategy()
-    strategy._plateau.anchor = Offset(0.1, 0.2)
-    ctx = _plateau_ctx()
-    outcome = _outcome_reject(
-        Offset.zero(),
-        Offset.zero(),
-        0.5,
-        0.5,
-        [],
-        [],
-        fit=None,
-        reason="bad model",
-    )
-    strategy._finish_circle_pass(ctx, 3, Offset.zero(), outcome)
+def _check_finish_reject_at_min_freezes(strategy, _ret):
     assert strategy._plateau.frozen == Offset(0.1, 0.2)
 
 
-def test_finish_circle_pass_reject_at_tier_floor_freezes():
-    from _eddy_seek.strategy.circle_harmonic import (
-        CircleHarmonicStrategy,
-        _outcome_reject,
-    )
-
-    strategy = CircleHarmonicStrategy()
-    strategy._plateau.anchor = Offset(0.1, 0.2)
-    ctx = _plateau_ctx()
-    trace_r = 0.5 + 2e-9
-    outcome = _outcome_reject(
-        Offset.zero(),
-        Offset.zero(),
-        trace_r,
-        0.5,
-        [],
-        [],
-        fit=None,
-        reason="bad model",
-    )
-    strategy._finish_circle_pass(ctx, 3, Offset.zero(), outcome)
+def _check_finish_reject_at_tier_floor_freezes(strategy, _ret):
     assert strategy._plateau.frozen == Offset(0.1, 0.2)
     assert strategy._plateau.tier == 0
 
 
-def test_finish_circle_pass_reject_returns_last_ok():
+def _check_finish_reject_returns_last_ok(_strategy, ret):
+    assert ret == Offset(0.5, 0.3)
+
+
+def _check_finish_accept_no_freeze(strategy, _ret):
+    assert strategy._plateau.frozen is None
+
+
+def _prepare_finish_anchor(anchor: Offset):
+    def prepare(strategy):
+        strategy._plateau.anchor = anchor
+
+    return prepare
+
+
+@pytest.mark.parametrize(
+    "prepare,pass_num,make_outcome,check",
+    [
+        pytest.param(
+            lambda _s: None,
+            2,
+            lambda accept, reject, stub: accept(
+                Offset(0.1, 0.05),
+                Offset.zero(),
+                2.0,
+                2.0,
+                [],
+                [],
+                stub(),
+                freeze=False,
+            ),
+            _check_finish_accept_sets_last_ok,
+            id="accept_sets_last_ok",
+        ),
+        pytest.param(
+            lambda _s: None,
+            2,
+            lambda accept, reject, stub: reject(
+                Offset.zero(),
+                Offset.zero(),
+                2.0,
+                2.0,
+                [],
+                [],
+                fit=None,
+                reason="fit failed",
+            ),
+            _check_finish_reject_bumps_tier,
+            id="reject_bumps_tier",
+        ),
+        pytest.param(
+            _prepare_finish_anchor(Offset(0.1, 0.2)),
+            3,
+            lambda accept, reject, stub: reject(
+                Offset.zero(),
+                Offset.zero(),
+                0.5,
+                0.5,
+                [],
+                [],
+                fit=None,
+                reason="bad model",
+            ),
+            _check_finish_reject_at_min_freezes,
+            id="reject_at_min_freezes",
+        ),
+        pytest.param(
+            _prepare_finish_anchor(Offset(0.1, 0.2)),
+            3,
+            lambda accept, reject, stub: reject(
+                Offset.zero(),
+                Offset.zero(),
+                0.5 + 2e-9,
+                0.5,
+                [],
+                [],
+                fit=None,
+                reason="bad model",
+            ),
+            _check_finish_reject_at_tier_floor_freezes,
+            id="reject_at_tier_floor_freezes",
+        ),
+        pytest.param(
+            _prepare_finish_anchor(Offset(0.5, 0.3)),
+            2,
+            lambda accept, reject, stub: reject(
+                Offset.zero(),
+                Offset.zero(),
+                2.0,
+                2.0,
+                [],
+                [],
+                fit=None,
+                reason="fit failed",
+            ),
+            _check_finish_reject_returns_last_ok,
+            id="reject_returns_last_ok",
+        ),
+        pytest.param(
+            lambda _s: None,
+            2,
+            lambda accept, reject, stub: accept(
+                Offset(0.01, 0.01),
+                Offset.zero(),
+                2.0,
+                2.0,
+                [],
+                [],
+                stub(),
+                freeze=False,
+            ),
+            _check_finish_accept_no_freeze,
+            id="accept_does_not_freeze_at_large_radius",
+        ),
+    ],
+)
+def test_finish_circle_pass(prepare, pass_num, make_outcome, check):
     from _eddy_seek.strategy.circle_harmonic import (
         CircleHarmonicStrategy,
+        _outcome_accept,
         _outcome_reject,
     )
 
     strategy = CircleHarmonicStrategy()
-    strategy._plateau.anchor = Offset(0.5, 0.3)
+    prepare(strategy)
     ctx = _plateau_ctx()
-    outcome = _outcome_reject(
-        Offset.zero(),
-        Offset.zero(),
-        2.0,
-        2.0,
-        [],
-        [],
-        fit=None,
-        reason="fit failed",
-    )
-    ret = strategy._finish_circle_pass(ctx, 2, Offset.zero(), outcome)
-    assert ret == Offset(0.5, 0.3)
-
-
-def test_finish_circle_pass_accept_does_not_freeze_at_large_radius():
-    from _eddy_seek.strategy.circle_harmonic import (
-        CircleHarmonicStrategy,
-        _outcome_accept,
-    )
-
-    strategy = CircleHarmonicStrategy()
-    ctx = _plateau_ctx()
-    outcome = _outcome_accept(
-        Offset(0.01, 0.01),
-        Offset.zero(),
-        2.0,
-        2.0,
-        [],
-        [],
-        _harmonic_fit_stub(),
-        freeze=False,
-    )
-    strategy._finish_circle_pass(ctx, 2, Offset.zero(), outcome)
-    assert strategy._plateau.frozen is None
+    outcome = make_outcome(_outcome_accept, _outcome_reject, _harmonic_fit_stub)
+    ret = strategy._finish_circle_pass(ctx, pass_num, Offset.zero(), outcome)
+    check(strategy, ret)
 
 
 def test_fit_first_harmonic_recovers_known_offset():

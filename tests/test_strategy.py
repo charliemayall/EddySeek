@@ -8,6 +8,7 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 
 import math
 
+import pytest
 from pytest import raises
 
 from _eddy_seek.common import Offset
@@ -122,18 +123,15 @@ def test_axis_weighted_centroid_decouples_axes():
     assert abs(result_y) < 0.01
 
 
-def test_check_pass_divergence_too_few_positions():
-    _check_pass_divergence(
-        "test",
-        [Offset.zero(), Offset(1.0, 0.0)],
-        tolerance=0.1,
-        pass_num=1,
-    )
-
-
-def test_check_pass_divergence_shrinking_corrections_ok():
-    positions = [Offset.zero(), Offset(2.0, 0.0), Offset(3.0, 0.0)]
-    _check_pass_divergence("test", positions, tolerance=0.1, pass_num=2)
+@pytest.mark.parametrize(
+    "positions,pass_num",
+    [
+        ([Offset.zero(), Offset(1.0, 0.0)], 1),
+        ([Offset.zero(), Offset(2.0, 0.0), Offset(3.0, 0.0)], 2),
+    ],
+)
+def test_check_pass_divergence_ok(positions, pass_num):
+    _check_pass_divergence("test", positions, tolerance=0.1, pass_num=pass_num)
 
 
 def test_check_pass_divergence_raises_when_corrections_grow():

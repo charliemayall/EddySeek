@@ -8,6 +8,7 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fakes import fake_motion_printer
 from pytest import raises
 
@@ -308,7 +309,37 @@ def test_sweep_axis_coarse_uses_coarse_cross_passes():
     assert plan_legs.call_args.args[4] == [0.0]
 
 
-def test_sweep_axis_coarse_multi_cross_wires_connectors():
+@pytest.mark.parametrize(
+    "phase,pass_num,fake_legs,fake_between",
+    [
+        pytest.param(
+            Phase.COARSE,
+            1,
+            [
+                (Offset(0.0, 0.0), Offset(1.0, 0.0)),
+                (Offset(1.0, 0.0), Offset(0.0, 0.0)),
+            ],
+            [[(Offset(1.0, 0.0), Offset(1.0, 0.15))], None],
+            id="coarse_multi_cross",
+        ),
+        pytest.param(
+            Phase.FINE,
+            3,
+            [
+                (Offset(-3.0, 0.0), Offset(3.0, 0.0)),
+                (Offset(3.0, 0.0), Offset(-3.0, 0.0)),
+            ],
+            [
+                [
+                    (Offset(3.0, 0.0), Offset(2.7, 0.15)),
+                    (Offset(2.7, 0.15), Offset(3.0, 0.0)),
+                ]
+            ],
+            id="fine_uturn",
+        ),
+    ],
+)
+def test_sweep_axis_wires_connectors(phase, pass_num, fake_legs, fake_between):
     settings = SweepSettings.from_config(
         SeekConfig(min_sweep_samples=3, coarse_cross_passes=3),
     )
@@ -316,11 +347,6 @@ def test_sweep_axis_coarse_multi_cross_wires_connectors():
     capture.run.return_value = [
         MotionSample(Offset(i * 0.01, 0.0), 100.0, 0.0) for i in range(3)
     ]
-    fake_legs = [
-        (Offset(0.0, 0.0), Offset(1.0, 0.0)),
-        (Offset(1.0, 0.0), Offset(0.0, 0.0)),
-    ]
-    fake_between = [[(Offset(1.0, 0.0), Offset(1.0, 0.15))], None]
 
     with (
         patch(
@@ -340,49 +366,8 @@ def test_sweep_axis_coarse_multi_cross_wires_connectors():
             hi=1.0,
             cross_center=0.0,
             speed_mm_min=600.0,
-            phase=Phase.COARSE,
-            pass_num=1,
-        )
-
-    plan_connectors.assert_called_once()
-    assert capture.run.call_args.kwargs["between_leg_moves"] == fake_between
-
-
-def test_sweep_axis_fine_wires_uturn_connectors():
-    settings = SweepSettings.from_config(
-        SeekConfig(min_sweep_samples=3, coarse_cross_passes=3),
-    )
-    capture = MagicMock()
-    capture.run.return_value = [
-        MotionSample(Offset(i * 0.01, 0.0), 100.0, 0.0) for i in range(3)
-    ]
-    fake_between = [
-        [(Offset(3.0, 0.0), Offset(2.7, 0.15)), (Offset(2.7, 0.15), Offset(3.0, 0.0))]
-    ]
-
-    with (
-        patch(
-            "_eddy_seek.movement.sweep.plan_axis_legs",
-            return_value=[
-                (Offset(-3.0, 0.0), Offset(3.0, 0.0)),
-                (Offset(3.0, 0.0), Offset(-3.0, 0.0)),
-            ],
-        ),
-        patch(
-            "_eddy_seek.movement.sweep.plan_axis_leg_connectors",
-            return_value=fake_between,
-        ) as plan_connectors,
-    ):
-        sweep_axis(
-            capture,
-            settings,
-            axis=Axis.X,
-            lo=-1.0,
-            hi=1.0,
-            cross_center=0.0,
-            speed_mm_min=600.0,
-            phase=Phase.FINE,
-            pass_num=3,
+            phase=phase,
+            pass_num=pass_num,
         )
 
     plan_connectors.assert_called_once()

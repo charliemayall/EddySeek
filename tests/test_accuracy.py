@@ -9,6 +9,7 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -49,6 +50,83 @@ def test_mock_does_not_inflate_reference_relative_spread():
     assert ref_stats.max_pair == pytest.approx(0.0)
     assert ref_stats.mean.x == pytest.approx(true_center.x)
     assert ref_stats.mean.y == pytest.approx(true_center.y)
+
+
+def test_accuracy_plot_writes_html(requires_plotly, plot_tmp):
+    tmp_path, _, write_at = plot_tmp
+    records = (
+        AccuracyRepeatRecord(
+            1, Offset(0.01, 0.02), session_plot_path="/tmp/repeat1.html"
+        ),
+        AccuracyRepeatRecord(2, Offset(-0.02, 0.01)),
+        AccuracyRepeatRecord(3, Offset(0.0, -0.01)),
+    )
+    path = write_figure(
+        tmp_path,
+        write_accuracy_plot(repeats=list(records)),
+        write_at=write_at,
+        suffix="accuracy",
+        run_label="accuracy",
+    )
+    assert path is not None
+    assert Path(path).is_file()
+    assert path.endswith("2026-07-02_14-30-00_accuracy/accuracy.html")
+
+
+def test_accuracy_plot_needs_two_repeats(requires_plotly, tmp_path):
+    fig = write_accuracy_plot(
+        repeats=[AccuracyRepeatRecord(1, Offset(0.0, 0.0))],
+    )
+    assert fig is None
+
+
+def test_compute_accuracy_stats():
+    stats = compute_accuracy_stats(
+        [
+            Offset(0.0, 0.0),
+            Offset(0.1, 0.0),
+            Offset(0.0, 0.1),
+        ]
+    )
+    assert stats.mean.x == pytest.approx(1 / 30)
+    assert stats.mean.y == pytest.approx(1 / 30)
+    assert stats.max_pair == pytest.approx((0.1**2 + 0.1**2) ** 0.5)
+    assert len(stats.radial) == 3
+
+
+def test_accuracy_plot_draws_spread_box(requires_plotly):
+    fig = write_accuracy_plot(
+        repeats=[
+            AccuracyRepeatRecord(1, Offset(0.0, 0.0)),
+            AccuracyRepeatRecord(2, Offset(0.1, 0.05)),
+            AccuracyRepeatRecord(3, Offset(-0.02, -0.03)),
+        ]
+    )
+    assert fig is not None
+    assert len(fig.layout.shapes) == 1
+    shape = fig.layout.shapes[0]
+    assert shape.x0 == pytest.approx(-0.02)
+    assert shape.x1 == pytest.approx(0.1)
+    assert shape.y0 == pytest.approx(-0.03)
+    assert shape.y1 == pytest.approx(0.05)
+
+    texts = [a.text for a in fig.layout.annotations]
+    assert "ΔX = 0.1200 mm" in texts
+    assert "ΔY = 0.0800 mm" in texts
+
+
+def test_write_figure_creates_results_dir(requires_plotly, tmp_path):
+    results_dir = tmp_path / "eddy_seek_results"
+    fig = write_accuracy_plot(
+        repeats=[
+            AccuracyRepeatRecord(1, Offset(0.0, 0.0)),
+            AccuracyRepeatRecord(2, Offset(0.1, 0.0)),
+        ],
+    )
+    assert fig is not None
+    write_figure(results_dir, fig)
+    assert results_dir.is_dir()
+    assert any(results_dir.iterdir())
 
 
 def test_run_accuracy_test_uses_repeated_seeks():

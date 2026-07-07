@@ -6,6 +6,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 This file may be distributed under the terms of the GNU GPLv3 license.
 """
 
+import pytest
 from fakes import FakeGcode, FakePrinter
 
 from _eddy_seek.movement.guard import (
@@ -94,58 +95,50 @@ def test_known_kinematic_limits_does_not_touch_gcode_offset():
     assert gcode.scripts == []
 
 
-def test_known_kinematic_limits_caps_scv_and_restores_toolhead_limits():
+@pytest.mark.parametrize(
+    "initial_scv,expected_inside,expected_outside",
+    [
+        (15.0, MAX_SCV, 15.0),
+        (5.0, 5.0, 5.0),
+    ],
+    ids=["caps_scv", "leaves_scv_unchanged"],
+)
+def test_known_kinematic_limits_scv(initial_scv, expected_inside, expected_outside):
     _FakeToolhead.calc_calls = 0
     printer = _known_state_printer()
     toolhead = printer.lookup_object("toolhead")
-    toolhead.square_corner_velocity = 15.0
+    toolhead.square_corner_velocity = initial_scv
     toolhead.min_cruise_ratio = 0.5
 
     with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
-        assert toolhead.square_corner_velocity == MAX_SCV
+        assert toolhead.square_corner_velocity == expected_inside
         assert toolhead.min_cruise_ratio == 0.5
-        assert _FakeToolhead.calc_calls == 1
+        if initial_scv > MAX_SCV:
+            assert _FakeToolhead.calc_calls == 1
 
-    assert toolhead.square_corner_velocity == 15.0
+    assert toolhead.square_corner_velocity == expected_outside
     assert toolhead.min_cruise_ratio == 0.5
-    assert _FakeToolhead.calc_calls == 2
+    if initial_scv > MAX_SCV:
+        assert _FakeToolhead.calc_calls == 2
 
 
-def test_known_kinematic_limits_leaves_scv_unchanged_when_below_cap():
-    _FakeToolhead.calc_calls = 0
+@pytest.mark.parametrize(
+    "initial_accel,expected_inside,expected_outside",
+    [
+        (5000.0, MAX_ACCEL, 5000.0),
+        (1500.0, 1500.0, 1500.0),
+    ],
+    ids=["caps_accel", "leaves_accel_unchanged"],
+)
+def test_known_kinematic_limits_accel(initial_accel, expected_inside, expected_outside):
     printer = _known_state_printer()
     toolhead = printer.lookup_object("toolhead")
-    toolhead.square_corner_velocity = 5.0
-    toolhead.min_cruise_ratio = 0.5
+    toolhead.max_accel = initial_accel
 
     with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
-        assert toolhead.square_corner_velocity == 5.0
-        assert toolhead.min_cruise_ratio == 0.5
+        assert toolhead.max_accel == expected_inside
 
-    assert toolhead.square_corner_velocity == 5.0
-    assert toolhead.min_cruise_ratio == 0.5
-
-
-def test_known_kinematic_limits_caps_accel_and_restores():
-    printer = _known_state_printer()
-    toolhead = printer.lookup_object("toolhead")
-    toolhead.max_accel = 5000.0
-
-    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
-        assert toolhead.max_accel == MAX_ACCEL
-
-    assert toolhead.max_accel == 5000.0
-
-
-def test_known_kinematic_limits_leaves_accel_unchanged_when_below_cap():
-    printer = _known_state_printer()
-    toolhead = printer.lookup_object("toolhead")
-    toolhead.max_accel = 1500.0
-
-    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
-        assert toolhead.max_accel == 1500.0
-
-    assert toolhead.max_accel == 1500.0
+    assert toolhead.max_accel == expected_outside
 
 
 class _LegacyFakeToolhead:

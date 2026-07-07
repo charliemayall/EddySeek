@@ -6,6 +6,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 This file may be distributed under the terms of the GNU GPLv3 license.
 """
 
+from contextlib import ExitStack
 from datetime import datetime
 from unittest.mock import patch
 
@@ -41,11 +42,6 @@ class _FakeTools:
 
     def get_tool(self, tool_number: int) -> Tool:
         return self.tools[tool_number]
-
-
-def test_position_plus_offset():
-    center = Position(10.0, 20.0) + Offset(1.5, -0.5)
-    assert center == Position(11.5, 19.5)
 
 
 def test_apply_tool_offset_sets_gcode_offset():
@@ -422,15 +418,43 @@ def test_align_tool0_warns_for_reported_centre_vs_sensor_position():
     assert any("WARNING" in line and "X=+0.44 Y=-0.96 mm" in line for line in gcmd.raw)
 
 
-def test_align_tool_number_averages_repeats():
-    tools = _SensorTools(Position(150.0, 150.0))
+@pytest.mark.parametrize(
+    "tool_number,tools,center,offsets,expect_center,expect_tool_offset,check_stats",
+    [
+        pytest.param(
+            0,
+            lambda: _SensorTools(Position(150.0, 150.0)),
+            None,
+            [Offset(0.0, 0.0), Offset(0.2, 0.0), Offset(0.4, 0.0)],
+            Position(150.2, 150.0),
+            None,
+            True,
+            id="tool0",
+        ),
+        pytest.param(
+            1,
+            _LoadMacroTools,
+            Position(10.0, 20.0),
+            [Offset(1.0, 0.0), Offset(1.2, 0.0), Offset(1.4, 0.0)],
+            None,
+            Offset(1.2, 0.0),
+            False,
+            id="tool1",
+        ),
+    ],
+)
+def test_align_tool_number_averages_repeats(
+    tool_number,
+    tools,
+    center,
+    offsets,
+    expect_center,
+    expect_tool_offset,
+    check_stats,
+):
+    tools_obj = tools() if callable(tools) else tools
     host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
     gcmd = FakeGcmd()
-    offsets = [
-        Offset(0.0, 0.0),
-        Offset(0.2, 0.0),
-        Offset(0.4, 0.0),
-    ]
     seek_results = [ok_seek_result(offset=offset) for offset in offsets]
     stats_called = False
 
@@ -438,39 +462,48 @@ def test_align_tool_number_averages_repeats():
         nonlocal stats_called
         stats_called = True
         assert len(recorded) == 3
-        assert recorded[0].x == pytest.approx(0.0)
-        assert recorded[2].x == pytest.approx(0.4)
+        assert recorded[0].x == pytest.approx(offsets[0].x)
+        assert recorded[2].x == pytest.approx(offsets[2].x)
 
-    with (
-        patch(
-            "_eddy_seek.tool_align.move_to_seek_start_pos",
-            return_value=Position(150.0, 150.0),
-        ),
-        patch(
-            "_eddy_seek.tool_align.align_tool",
-            side_effect=seek_results,
-        ),
-        patch(
-            "_eddy_seek.tool_align.report_accuracy_stats",
-            side_effect=capture_stats,
-        ),
-    ):
-        tool, center, error = align_tool_number(
+    with ExitStack() as stack:
+        if tool_number == 0:
+            stack.enter_context(
+                patch(
+                    "_eddy_seek.tool_align.move_to_seek_start_pos",
+                    return_value=Position(150.0, 150.0),
+                )
+            )
+        if check_stats:
+            stack.enter_context(
+                patch(
+                    "_eddy_seek.tool_align.report_accuracy_stats",
+                    side_effect=capture_stats,
+                )
+            )
+        stack.enter_context(
+            patch("_eddy_seek.tool_align.align_tool", side_effect=seek_results)
+        )
+        tool, got_center, error = align_tool_number(
             host,  # type: ignore[arg-type]
-            tools,  # type: ignore[arg-type]
+            tools_obj,  # type: ignore[arg-type]
             gcmd,
-            0,
-            None,
-            console=_console(gcmd),
+            tool_number,
+            center,
+            console=_console(gcmd if tool_number == 0 else None),
             run_id="abc",
             artifact_write_at=datetime.now(),
             repeats=3,
         )
 
     assert error is None
-    assert center == Position(150.2, 150.0)
     assert tool is not None
-    assert stats_called
+    if expect_center is not None:
+        assert got_center == expect_center
+    if expect_tool_offset is not None:
+        assert tool.offset.x == pytest.approx(expect_tool_offset.x)
+        assert tool.offset.y == pytest.approx(expect_tool_offset.y)
+    if check_stats:
+        assert stats_called
 
 
 def test_align_tool_number_fails_on_repeat_failure():
@@ -504,32 +537,6 @@ def test_align_tool_number_fails_on_repeat_failure():
     assert tool is None
     assert center is None
     assert error == "tool 0 alignment failed"
-
-
-def test_align_tool_number_tool_n_averages_repeats():
-    tools = _LoadMacroTools()
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
-    center = Position(10.0, 20.0)
-    offsets = [Offset(1.0, 0.0), Offset(1.2, 0.0), Offset(1.4, 0.0)]
-    seek_results = [ok_seek_result(offset=offset) for offset in offsets]
-
-    with patch("_eddy_seek.tool_align.align_tool", side_effect=seek_results):
-        tool, _, error = align_tool_number(
-            host,  # type: ignore[arg-type]
-            tools,  # type: ignore[arg-type]
-            FakeGcmd(),
-            1,
-            center,
-            console=_console(),
-            run_id="abc",
-            artifact_write_at=datetime.now(),
-            repeats=3,
-        )
-
-    assert error is None
-    assert tool is not None
-    assert tool.offset.x == pytest.approx(1.2)
-    assert tool.offset.y == pytest.approx(0.0)
 
 
 def test_align_tool0_no_sensor_warning_when_offset_within_threshold():

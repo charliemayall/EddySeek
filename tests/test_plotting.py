@@ -10,7 +10,6 @@ import math
 import os
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Literal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,10 +25,8 @@ from _eddy_seek.plotting import (
     write_figure,
 )
 from _eddy_seek.plotting._plotly import THEME_COLORS, write_html
-from _eddy_seek.plotting.accuracy import write_accuracy_plot
 from _eddy_seek.plotting.debug_scan import render_debug_scan_figure
 from _eddy_seek.plotting.primitives import (
-    AccuracyRepeatRecord,
     BinnedProfile,
     Bounds,
     CircleBootstrapRecord,
@@ -67,99 +64,6 @@ def test_plot_filename():
         )
         == "2026-07-02_14-30-00_tools/tools_t0_centroid.html"
     )
-
-
-def _write_strategy_plot(
-    tmp_path,
-    strategy_name: str,
-    records,
-    *,
-    search_for: Literal["min", "max"] = "max",
-):
-    fig = render_session_plot(strategy_name, records, search_for=search_for)
-    assert fig is not None
-    return write_figure(tmp_path, fig, write_at=PLOT_WRITE_AT)
-
-
-def test_accuracy_plot_writes_html(requires_plotly, plot_tmp):
-    tmp_path, _, write_at = plot_tmp
-    records = (
-        AccuracyRepeatRecord(
-            1, Offset(0.01, 0.02), session_plot_path="/tmp/repeat1.html"
-        ),
-        AccuracyRepeatRecord(2, Offset(-0.02, 0.01)),
-        AccuracyRepeatRecord(3, Offset(0.0, -0.01)),
-    )
-    path = write_figure(
-        tmp_path,
-        write_accuracy_plot(repeats=list(records)),
-        write_at=write_at,
-        suffix="accuracy",
-        run_label="accuracy",
-    )
-    assert path is not None
-    assert Path(path).is_file()
-    assert path.endswith("2026-07-02_14-30-00_accuracy/accuracy.html")
-
-
-def test_accuracy_plot_needs_two_repeats(requires_plotly, tmp_path):
-    fig = write_accuracy_plot(
-        repeats=[AccuracyRepeatRecord(1, Offset(0.0, 0.0))],
-    )
-    assert fig is None
-
-
-def test_compute_accuracy_stats():
-    from _eddy_seek.session import compute_accuracy_stats
-
-    stats = compute_accuracy_stats(
-        [
-            Offset(0.0, 0.0),
-            Offset(0.1, 0.0),
-            Offset(0.0, 0.1),
-        ]
-    )
-    assert stats.mean.x == pytest.approx(1 / 30)
-    assert stats.mean.y == pytest.approx(1 / 30)
-    assert stats.max_pair == pytest.approx((0.1**2 + 0.1**2) ** 0.5)
-    assert len(stats.radial) == 3
-
-
-def test_accuracy_plot_draws_spread_box(requires_plotly):
-    from _eddy_seek.plotting.accuracy import write_accuracy_plot
-
-    fig = write_accuracy_plot(
-        repeats=[
-            AccuracyRepeatRecord(1, Offset(0.0, 0.0)),
-            AccuracyRepeatRecord(2, Offset(0.1, 0.05)),
-            AccuracyRepeatRecord(3, Offset(-0.02, -0.03)),
-        ]
-    )
-    assert fig is not None
-    assert len(fig.layout.shapes) == 1
-    shape = fig.layout.shapes[0]
-    assert shape.x0 == pytest.approx(-0.02)
-    assert shape.x1 == pytest.approx(0.1)
-    assert shape.y0 == pytest.approx(-0.03)
-    assert shape.y1 == pytest.approx(0.05)
-
-    texts = [a.text for a in fig.layout.annotations]
-    assert "ΔX = 0.1200 mm" in texts
-    assert "ΔY = 0.0800 mm" in texts
-
-
-def test_write_figure_creates_results_dir(requires_plotly, tmp_path):
-    results_dir = tmp_path / "eddy_seek_results"
-    fig = write_accuracy_plot(
-        repeats=[
-            AccuracyRepeatRecord(1, Offset(0.0, 0.0)),
-            AccuracyRepeatRecord(2, Offset(0.1, 0.0)),
-        ],
-    )
-    assert fig is not None
-    write_figure(results_dir, fig)
-    assert results_dir.is_dir()
-    assert any(results_dir.iterdir())
 
 
 def test_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
