@@ -15,13 +15,12 @@ from unittest.mock import patch
 import pytest
 from fakes import PLOT_HTML_SUFFIX, PLOT_RUN_DIR, PLOT_WRITE_AT
 
-from _eddy_seek.common import Offset, Phase
+from _eddy_seek.common import Offset, Phase, session_artifact_filename
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.harmonic import HarmonicFit
 from _eddy_seek.movement.handler import MotionSample
 from _eddy_seek.optimizer import bin_frequencies
 from _eddy_seek.plotting import (
-    generate_plot_filename,
     render_session_plot,
     write_figure,
 )
@@ -45,25 +44,27 @@ from _eddy_seek.strategy.sweep_centroid import _record_sweep_centroid_pass
 
 def test_plot_filename():
     when = PLOT_WRITE_AT
-    assert generate_plot_filename(when) == f"{PLOT_RUN_DIR}/session.html"
+    assert session_artifact_filename(when, ext="html") == f"{PLOT_RUN_DIR}/session.html"
     assert (
-        generate_plot_filename(
-            when, suffix="accuracy", run_label="accuracy", run_id="abcd1234"
+        session_artifact_filename(
+            when, suffix="accuracy", run_label="accuracy", ext="html"
         )
-        == "2026-07-02_14-30-00_accuracy_abcd1234/accuracy.html"
+        == "2026-07-02_14-30-00_accuracy/accuracy.html"
     )
     assert (
-        generate_plot_filename(when, suffix="start_sweep_centroid", run_label="start")
+        session_artifact_filename(
+            when, suffix="start_sweep_centroid", run_label="start", ext="html"
+        )
         == "2026-07-02_14-30-00_start/start_sweep_centroid.html"
     )
     assert (
-        generate_plot_filename(
+        session_artifact_filename(
             when,
             suffix="tools_t0_centroid",
             run_label="tools",
-            run_id="batch999",
+            ext="html",
         )
-        == "2026-07-02_14-30-00_tools_batch999/tools_t0_centroid.html"
+        == "2026-07-02_14-30-00_tools/tools_t0_centroid.html"
     )
 
 
@@ -88,11 +89,10 @@ def test_accuracy_plot_writes_html(requires_plotly, plot_tmp):
         write_at=write_at,
         suffix="accuracy",
         run_label="accuracy",
-        run_id="abcd1234",
     )
     assert path is not None
     assert Path(path).is_file()
-    assert path.endswith("2026-07-02_14-30-00_accuracy_abcd1234/accuracy.html")
+    assert path.endswith("2026-07-02_14-30-00_accuracy/accuracy.html")
 
 
 def test_accuracy_plot_needs_two_repeats(requires_plotly, tmp_path):
@@ -607,6 +607,6 @@ def test_centroid_on_session_end_returns_plot_path(requires_plotly, tmp_path):
     )
     path = strategy.on_session_end(ctx)  # type: ignore[arg-type]
     assert path is not None
-    assert path.endswith("2026-07-02_14-30-00_tools_batch123/tools_t0_centroid.html")
+    assert path.endswith("2026-07-02_14-30-00_tools/tools_t0_centroid.html")
     assert Path(path).is_file()
     assert recorder.pass_count() == 1

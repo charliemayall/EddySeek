@@ -92,13 +92,12 @@ def test_write_seek_trace_labeled_filename(tmp_path):
         host,
         result,
         [],
-        run_id="batch123",
         run_label="tools",
         suffix="tools_t0_centroid",
         write_at=write_at,
     )
     assert path is not None
-    assert path.endswith("2026-07-02_14-30-00_tools_batch123/tools_t0_centroid.json")
+    assert path.endswith("2026-07-02_14-30-00_tools/tools_t0_centroid.json")
 
 
 def test_seek_session_collects_probes_when_enabled():

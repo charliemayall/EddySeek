@@ -74,8 +74,7 @@ def test_grid_step_derived_from_max_jog():
 def test_session_artifact_run_dir_sortable():
     when = datetime(2026, 7, 2, 14, 30, 45)
     assert (
-        session_artifact_run_dir(when, run_label="tools", run_id="batch123")
-        == "2026-07-02_14-30-45_tools_batch123"
+        session_artifact_run_dir(when, run_label="tools") == "2026-07-02_14-30-45_tools"
     )
     assert (
         session_artifact_run_dir(when, run_label="start") == "2026-07-02_14-30-45_start"

@@ -191,7 +191,6 @@ class SeekSession:
                 self._host,
                 result,
                 self.recorder.to_probe_dicts(),
-                run_id=self.run_id,
                 run_label=self.run_label,
                 suffix=self.artifact_suffix(strategy.name),
                 write_at=self.artifact_write_at,
@@ -329,7 +328,6 @@ def _write_seek_trace(
     result: SeekSessionResult,
     probes: list[dict[str, Any]],
     *,
-    run_id: str | None = None,
     run_label: str = "run",
     suffix: str = "",
     write_at: datetime | None = None,
@@ -340,7 +338,6 @@ def _write_seek_trace(
         write_at or datetime.now(),
         suffix=suffix,
         run_label=run_label,
-        run_id=run_id,
         ext="json",
     )
     path = str(out)

@@ -181,7 +181,6 @@ def test_parse_accuracy_html_round_trip(requires_plotly, plot_tmp):
         write_at=write_at,
         suffix="accuracy",
         run_label="accuracy",
-        run_id="abcd1234",
     )
     assert path is not None
     parsed = parse_accuracy_html(path)
@@ -250,17 +249,15 @@ def test_accuracy_compare_cli(requires_plotly, plot_tmp, tmp_path):
         results_dir,
         write_accuracy_plot(repeats=list(records_a)),
         write_at=write_at,
-        suffix="accuracy",
+        suffix="accuracy_sweep",
         run_label="accuracy",
-        run_id="aaaa1111",
     )
     path_b = write_figure(
         results_dir,
         write_accuracy_plot(repeats=list(records_b)),
         write_at=write_at,
-        suffix="accuracy",
+        suffix="accuracy_circle",
         run_label="accuracy",
-        run_id="bbbb2222",
     )
     assert path_a is not None and path_b is not None
     out = tmp_path / "compare.html"

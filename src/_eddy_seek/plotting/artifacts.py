@@ -24,22 +24,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def generate_plot_filename(
-    when: datetime | None = None,
-    *,
-    suffix: str = "",
-    run_label: str = "run",
-    run_id: str | None = None,
-) -> str:
-    return session_artifact_filename(
-        when,
-        suffix=suffix,
-        run_label=run_label,
-        run_id=run_id,
-        ext="html",
-    )
-
-
 def write_figure(
     results_dir: Path,
     fig: Any,
@@ -47,15 +31,14 @@ def write_figure(
     write_at: datetime | None = None,
     suffix: str = "",
     run_label: str = "run",
-    run_id: str | None = None,
 ) -> str | None:
     if not plotly_available() or fig is None:
         return None
-    out_path = results_dir / generate_plot_filename(
+    out_path = results_dir / session_artifact_filename(
         write_at,
         suffix=suffix,
         run_label=run_label,
-        run_id=run_id,
+        ext="html",
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if not write_html(str(out_path), fig):
@@ -83,5 +66,4 @@ def finalize_strategy_plot(ctx: SeekSession, strategy_name: str) -> str | None:
         write_at=ctx.artifact_write_at,
         suffix=ctx.artifact_suffix(strategy_name),
         run_label=ctx.run_label,
-        run_id=ctx.run_id,
     )

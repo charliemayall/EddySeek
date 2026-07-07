@@ -53,7 +53,6 @@ def write_repeat_scatter_plot(
         write_at=write_at,
         suffix=suffix,
         run_label=run_label,
-        run_id=run_id,
     )
 
 
