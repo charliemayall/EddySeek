@@ -179,17 +179,12 @@ def refresh_profiles(
     strategy._y_profile = profiles.y_profile
 
 
-def compute_circle_pass(
-    strategy: CircleHarmonicStrategy,
-    ctx: SeekSession,
-    pass_num: int,
-    best: Offset,
-    mode: CircleHarmonicMode,
+def _circle_trace_geometry(
     plateau: PlateauState,
-) -> CirclePassOutcome:
-    cfg = ctx.config
-    bootstrap = strategy._bootstrap if strategy._bootstrap is not None else best
-
+    best: Offset,
+    cfg,
+    pass_num: int,
+) -> CirclePassOutcome | tuple[Offset, float, list]:
     radius = circle_radius_for_tier(
         plateau.tier,
         radius_start=cfg.circle_radius_start,
@@ -209,24 +204,23 @@ def compute_circle_pass(
     legs = circle_arc_legs(trace_center, trace_radius, cfg.circle_arc_resolution)
     if not legs:
         return outcome_hold(best, trace_center, trace_radius)
+    return trace_center, trace_radius, legs
 
-    circumference = 2 * math.pi * trace_radius
-    segment_span = circumference / len(legs)
-    logger.info(
-        f"eddy_seek: circle_harmonic pass {pass_num} "
-        f"arc_segments={len(legs)} speed={cfg.circle_speed:.4f} mm/s"
-    )
 
-    if mode.refresh_sweeps:
-        strategy._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
-
-    lead_in = circle_lead_in_legs(legs, cfg.circle_lead_in)
-    if lead_in:
-        logger.info(
-            f"eddy_seek: circle_harmonic pass {pass_num} "
-            f"lead_in={len(lead_in)}/{len(legs)} segments"
-        )
-
+def _collect_circle_harmonic(
+    ctx: SeekSession,
+    pass_num: int,
+    best: Offset,
+    trace_center: Offset,
+    trace_radius: float,
+    legs: list,
+    lead_in: list | None,
+    segment_span: float,
+) -> (
+    CirclePassOutcome
+    | tuple[list[MotionSample], list[tuple[float, float]], HarmonicFit]
+):
+    cfg = ctx.config
     capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
     leg_batches = capture.run(
         legs,
@@ -234,7 +228,7 @@ def compute_circle_pass(
         flat=False,
         min_samples=MIN_SAMPLES_PER_SPAN,
         span_mm=segment_span,
-        lead_in_legs=lead_in or None,
+        lead_in_legs=lead_in,
     )
     for i, batch in enumerate(leg_batches):
         if len(batch) < MIN_SAMPLES_PER_SPAN:
@@ -312,7 +306,23 @@ def compute_circle_pass(
             fit=fit,
             reason=", ".join(reject_reasons),
         )
+    return samples, binned, fit
 
+
+def _harmonic_correction_outcome(
+    strategy: CircleHarmonicStrategy,
+    ctx: SeekSession,
+    pass_num: int,
+    best: Offset,
+    bootstrap: Offset,
+    mode: CircleHarmonicMode,
+    trace_center: Offset,
+    trace_radius: float,
+    samples: list[MotionSample],
+    binned: list[tuple[float, float]],
+    fit: HarmonicFit,
+) -> CirclePassOutcome:
+    cfg = ctx.config
     f_prime = radial_slope(
         strategy._x_profile, strategy._y_profile, trace_radius, center=trace_center
     )
@@ -325,8 +335,7 @@ def compute_circle_pass(
         max_jog_x=cfg.max_jog_x,
         max_jog_y=cfg.max_jog_y,
     )
-    unclamped = trace_center + step
-    result = unclamped.clamp(cfg.max_jog_x, cfg.max_jog_y)
+    result = (trace_center + step).clamp(cfg.max_jog_x, cfg.max_jog_y)
 
     divergence = result.distance_to(bootstrap)
     anchor_floor = (
@@ -370,4 +379,65 @@ def compute_circle_pass(
         binned,
         fit,
         freeze=freeze,
+    )
+
+
+def compute_circle_pass(
+    strategy: CircleHarmonicStrategy,
+    ctx: SeekSession,
+    pass_num: int,
+    best: Offset,
+    mode: CircleHarmonicMode,
+    plateau: PlateauState,
+) -> CirclePassOutcome:
+    cfg = ctx.config
+    bootstrap = strategy._bootstrap if strategy._bootstrap is not None else best
+
+    geometry = _circle_trace_geometry(plateau, best, cfg, pass_num)
+    if isinstance(geometry, CirclePassOutcome):
+        return geometry
+    trace_center, trace_radius, legs = geometry
+
+    circumference = 2 * math.pi * trace_radius
+    segment_span = circumference / len(legs)
+    logger.info(
+        f"eddy_seek: circle_harmonic pass {pass_num} "
+        f"arc_segments={len(legs)} speed={cfg.circle_speed:.4f} mm/s"
+    )
+
+    if mode.refresh_sweeps:
+        strategy._refresh_profiles(ctx, pass_num, trace_center, trace_radius)
+
+    lead_in = circle_lead_in_legs(legs, cfg.circle_lead_in)
+    if lead_in:
+        logger.info(
+            f"eddy_seek: circle_harmonic pass {pass_num} "
+            f"lead_in={len(lead_in)}/{len(legs)} segments"
+        )
+
+    collected = _collect_circle_harmonic(
+        ctx,
+        pass_num,
+        best,
+        trace_center,
+        trace_radius,
+        legs,
+        lead_in or None,
+        segment_span,
+    )
+    if isinstance(collected, CirclePassOutcome):
+        return collected
+    samples, binned, fit = collected
+    return _harmonic_correction_outcome(
+        strategy,
+        ctx,
+        pass_num,
+        best,
+        bootstrap,
+        mode,
+        trace_center,
+        trace_radius,
+        samples,
+        binned,
+        fit,
     )

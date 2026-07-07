@@ -239,7 +239,7 @@ def single_xy_layout(
     final: str,
 ) -> dict[str, Any]:
     """Responsive square XY layout; session stats live in layout.meta for HTML export."""
-    layout = apply_theme(
+    return apply_theme(
         {
             "autosize": True,
             "margin": {"l": 44, "r": 68, "t": 8, "b": 52, "pad": 0},
@@ -252,7 +252,6 @@ def single_xy_layout(
             },
         }
     )
-    return layout
 
 
 def multi_panel_layout(

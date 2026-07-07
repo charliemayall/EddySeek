@@ -312,7 +312,7 @@ def test_bin_samples_by_angle_debiases_corners():
 
 def test_harmonic_step_v2_uses_gain_when_f_prime_small():
     fit = HarmonicFit(c0=0.0, a=1.0, b=0.0, amplitude=1.0, noise=0.1, n=36)
-    kwargs = dict(step_gain=0.2, radius=1.0, max_jog_x=5.0, max_jog_y=5.0)
+    kwargs = {"step_gain": 0.2, "radius": 1.0, "max_jog_x": 5.0, "max_jog_y": 5.0}
     # On a peak field (search_for="max") f' < 0, so the correction follows +(a, b).
     step = harmonic_step_v2(fit, 1e-6, search_for="max", **kwargs)
     assert step.x == pytest.approx(0.2, abs=0.01)

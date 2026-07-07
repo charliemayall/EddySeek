@@ -19,7 +19,7 @@ from _eddy_seek.repeated_seek import run_repeated_seeks
 
 
 def _console() -> KConsole:
-    return KConsole(FakeGcmd())
+    return KConsole(FakeGcmd(), SeekConfig())
 
 
 class _FakeHost:

@@ -101,7 +101,7 @@ def test_apply_tool_offset_rejects_uncalibrated():
 
 
 def _console(gcmd: FakeGcmd | None = None) -> KConsole:
-    return KConsole(gcmd or FakeGcmd())
+    return KConsole(gcmd or FakeGcmd(), SeekConfig())
 
 
 class _SensorTools:

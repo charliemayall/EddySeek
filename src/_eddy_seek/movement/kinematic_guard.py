@@ -125,4 +125,4 @@ class KnownKinematicLimits:
             input_shaper.enable_shaping()  # pyright: ignore[reportAttributeAccessIssue]
             logger.info("EDDY_SEEK: enabled input shaping")
 
-        return None
+        return
