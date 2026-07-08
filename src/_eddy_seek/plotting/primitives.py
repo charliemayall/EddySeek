@@ -16,7 +16,6 @@ from enum import Enum
 from typing import Any, ClassVar, TypeAlias
 
 from ..common import Axis, Offset
-from ..harmonic import HarmonicFit
 from ..movement.handler import MotionSample
 
 PASS_COLORS = (
@@ -225,56 +224,6 @@ class CentroidPassRecord(_Record):
 
 
 @dataclass(frozen=True, slots=True)
-class CircleBootstrapRecord(_Record):
-    _KIND = "circle_bootstrap_pass"
-
-    pass_num: int
-    move: PassMove
-    samples: XYCloud
-    bounds: Bounds
-
-    def to_trace_dict(self) -> dict[str, Any]:
-        return {
-            "type": self._KIND,
-            "pass_num": self.pass_num,
-            "result": _json_value(asdict(self.move.result)),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class CircleHarmonicPassRecord(_Record):
-    _KIND = "circle_pass"
-
-    pass_num: int
-    trace_center: Offset
-    radius: float
-    move: PassMove
-    samples: XYCloud
-    binned: BinnedProfile
-    fit: HarmonicFit | None
-    rejected: bool
-    reject_reasons: str = ""
-
-    def to_trace_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {
-            "type": self._KIND,
-            "pass_num": self.pass_num,
-            "radius": self.radius,
-            "result": _json_value(asdict(self.move.result)),
-            "rejected": self.rejected,
-        }
-        if self.reject_reasons:
-            out["reject_reasons"] = self.reject_reasons
-        if self.fit is not None:
-            out["harmonic"] = {
-                "a": self.fit.a,
-                "b": self.fit.b,
-                "amp": self.fit.amplitude,
-            }
-        return out
-
-
-@dataclass(frozen=True, slots=True)
 class AccuracyRepeatRecord(_Record):
     _KIND = "accuracy_repeat"
 
@@ -291,8 +240,6 @@ SessionRecord: TypeAlias = (
     | SweepGridTraceRecord
     | SweepCentroidPassRecord
     | CentroidPassRecord
-    | CircleBootstrapRecord
-    | CircleHarmonicPassRecord
     | AccuracyRepeatRecord
 )
 

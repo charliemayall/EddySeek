@@ -55,19 +55,16 @@ class SeekConfig:
         default="max",
         metadata={"gcode": "SEARCH_FOR", "enum": ("min", "max")},
     )
-    strategy: Literal["centroid", "sweep_centroid", "debug_scan", "circle_harmonic"] = (
-        field(
-            default="sweep_centroid",
-            metadata={
-                "gcode": "STRATEGY",
-                "enum": (
-                    "centroid",
-                    "sweep_centroid",
-                    "debug_scan",
-                    "circle_harmonic",
-                ),
-            },
-        )
+    strategy: Literal["centroid", "sweep_centroid", "debug_scan"] = field(
+        default="sweep_centroid",
+        metadata={
+            "gcode": "STRATEGY",
+            "enum": (
+                "centroid",
+                "sweep_centroid",
+                "debug_scan",
+            ),
+        },
     )
     max_passes: int = field(default=6, metadata={"gcode": "MAX_PASSES", "min": 1})
     save_session_trace: bool = field(
@@ -102,37 +99,8 @@ class SeekConfig:
     coarse_cross_passes: int = field(
         default=3, metadata={"gcode": "COARSE_CROSS_PASSES", "min": 1}
     )
-    circle_radius_start: float = field(
-        default=0.8, metadata={"gcode": "CIRCLE_RADIUS_START", "positive": True}
-    )
-    circle_radius_min: float = field(
-        default=0.4, metadata={"gcode": "CIRCLE_RADIUS_MIN", "positive": True}
-    )
     circle_arc_resolution: float = field(
         default=0.1, metadata={"gcode": "CIRCLE_ARC_RESOLUTION", "positive": True}
-    )
-    circle_speed: float = field(
-        default=10 * 60.0,
-        metadata={"gcode": "CIRCLE_SPEED", "positive": True, "speed": True},
-    )
-    circle_lead_in: float = field(
-        default=0.25,
-        metadata={"gcode": "CIRCLE_LEAD_IN"},
-    )
-    noise_k: float = field(default=1.0, metadata={"gcode": "NOISE_K", "positive": True})
-    harmonic_step_gain: float = field(
-        default=0.15, metadata={"gcode": "HARMONIC_STEP_GAIN", "positive": True}
-    )
-    harmonic_min_quality: float = field(
-        default=0.5, metadata={"gcode": "HARMONIC_MIN_QUALITY", "positive": True}
-    )
-    circle_refresh_sweeps: bool = field(
-        default=False,
-        metadata={"gcode": "CIRCLE_REFRESH_SWEEPS", "bool": True},
-    )
-    circle_skip_bootstrap: bool = field(
-        default=True,
-        metadata={"gcode": "CIRCLE_SKIP_BOOTSTRAP", "bool": True},
     )
     debug: bool = field(default=False, metadata={"bool": True})
 
@@ -329,14 +297,6 @@ def _parse_bool(raw: Any, label: str) -> bool:
 def _validate(cfg: SeekConfig) -> None:
     for spec in fields(SeekConfig):
         _validate_field_value(spec.name, getattr(cfg, spec.name))
-
-    if cfg.circle_radius_min > cfg.circle_radius_start:
-        raise ValueError(
-            "circle_radius_min must be <= circle_radius_start "
-            f"(got {cfg.circle_radius_min} > {cfg.circle_radius_start})"
-        )
-    if not 0.0 <= cfg.circle_lead_in < 1.0:
-        raise ValueError(f"circle_lead_in must be in [0, 1) (got {cfg.circle_lead_in})")
 
 
 def load_seek_config(config: ConfigWrapper) -> SeekConfig:
