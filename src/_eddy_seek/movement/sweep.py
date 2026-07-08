@@ -13,16 +13,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, overload
 
 from ..common import Axis, Offset, Phase, Position, samples_in_box, search_box
 from ..optimizer import decoupled_centroid
-from ..plotting.primitives import (
-    AxisSpan,
-    Bounds,
-    SweepGridTraceRecord,
-    SweepTraceRecord,
-)
 from .handler import (
     MotionHandler,
     MotionSample,
@@ -43,6 +37,53 @@ if TYPE_CHECKING:
     from ..plotting.recorder import SessionRecorder
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class AxisSpan:
+    axis: Axis
+    lo: float
+    hi: float
+
+
+@dataclass(frozen=True, slots=True)
+class SweepTraceRecord:
+    _KIND: ClassVar[str] = "sweep"
+
+    pass_num: int
+    phase: str
+    span: AxisSpan
+    cross_offsets: tuple[float, ...]
+    cross_center: float
+    profile: tuple[tuple[float, float], ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        from ..plotting.primitives import _record_to_dict
+
+        return _record_to_dict(self)
+
+    def to_trace_dict(self) -> dict[str, Any]:
+        return self.to_dict()
+
+
+@dataclass(frozen=True, slots=True)
+class SweepGridTraceRecord:
+    _KIND: ClassVar[str] = "sweep_grid"
+
+    center: Offset
+    box: tuple[float, float, float, float]
+    step_size: float
+    rows: int
+    legs: int
+    sample_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        from ..plotting.primitives import _record_to_dict
+
+        return _record_to_dict(self)
+
+    def to_trace_dict(self) -> dict[str, Any]:
+        return self.to_dict()
 
 
 @dataclass(frozen=True, slots=True)
@@ -364,7 +405,7 @@ def sweep_grid(
         recorder.record(
             SweepGridTraceRecord(
                 center=center,
-                bounds=Bounds.from_box(box),
+                box=box,
                 step_size=step_size,
                 rows=rows,
                 legs=len(legs),
