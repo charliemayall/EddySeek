@@ -127,3 +127,79 @@ def test_offer_example_config_skips_on_directory_not_found(
     install.offer_example_config()
     assert not config_paths.exists()
     assert not install.EDDY_SEEK_CFG.exists()
+
+
+@pytest.fixture
+def klippy_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    env = tmp_path / "klippy-env"
+    bin_dir = env / "bin"
+    bin_dir.mkdir(parents=True)
+    pip = bin_dir / "pip3"
+    python = bin_dir / "python3"
+    pip.write_text("#!/bin/sh\necho pip $@\n")
+    python.write_text("#!/bin/sh\necho python $@\n")
+    pip.chmod(0o755)
+    python.chmod(0o755)
+    monkeypatch.setattr(install, "KLIPPY_ENV", env)
+    monkeypatch.setattr(install, "KLIPPY_PIP", pip)
+    monkeypatch.setattr(install, "KLIPPY_PYTHON", python)
+    return env, pip, python
+
+
+def test_offer_plotly_install_skips_when_not_tty(
+    monkeypatch: pytest.MonkeyPatch, klippy_env
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    install.offer_plotly_install()
+
+
+def test_offer_plotly_install_skips_when_klippy_env_missing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(install, "KLIPPY_PIP", Path("/nonexistent/pip3"))
+    install.offer_plotly_install()
+    assert "klippy-env not found" in capsys.readouterr().out
+
+
+def test_offer_plotly_install_skips_when_already_installed(
+    monkeypatch: pytest.MonkeyPatch,
+    klippy_env,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(install, "plotly_installed_in_klippy_env", lambda: True)
+    install.offer_plotly_install()
+    assert "plotly already installed" in capsys.readouterr().out
+
+
+def test_offer_plotly_install_runs_pip_on_yes(
+    monkeypatch: pytest.MonkeyPatch, klippy_env
+) -> None:
+    _env, pip, _python = klippy_env
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(install, "plotly_installed_in_klippy_env", lambda: False)
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, *, check):
+        calls.append(cmd)
+        assert check is True
+
+    monkeypatch.setattr(install.subprocess, "run", fake_run)
+    install.offer_plotly_install()
+    assert calls == [[str(pip), "install", "plotly"]]
+
+
+def test_offer_plotly_install_skips_on_no(
+    monkeypatch: pytest.MonkeyPatch, klippy_env
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(install, "plotly_installed_in_klippy_env", lambda: False)
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+
+    def fail_run(*_args, **_kwargs):
+        raise AssertionError("subprocess.run should not be called")
+
+    monkeypatch.setattr(install.subprocess, "run", fail_run)
+    install.offer_plotly_install()

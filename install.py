@@ -22,6 +22,9 @@ DEFAULT_DEST = Path.home() / "klipper" / "klippy" / "extras"
 PRINTER_CONFIG_DIR = Path.home() / "printer_data" / "config"
 EDDY_SEEK_CFG = PRINTER_CONFIG_DIR / "eddy_seek.cfg"
 EXAMPLE_CFG = EDDY_SEEK_DIR / "example.cfg"
+KLIPPY_ENV = Path.home() / "klippy-env"
+KLIPPY_PIP = KLIPPY_ENV / "bin" / "pip3"
+KLIPPY_PYTHON = KLIPPY_ENV / "bin" / "python3"
 
 _RESET = "\x1b[0m"
 
@@ -67,6 +70,33 @@ def offer_example_config() -> None:
     Then edit {EDDY_SEEK_CFG} for your machine (I2C, sensor_x/y, tool settings).
     """
     )
+
+
+def plotly_installed_in_klippy_env() -> bool:
+    if not KLIPPY_PYTHON.is_file():
+        return False
+    result = subprocess.run(
+        [str(KLIPPY_PYTHON), "-c", "import plotly"],
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def offer_plotly_install() -> None:
+    if not sys.stdin.isatty():
+        return
+    if not KLIPPY_PIP.is_file():
+        print(f"{_c('-- ', COLORS.GRAY)}klippy-env not found, skipping plotly install")
+        return
+    if plotly_installed_in_klippy_env():
+        print(f"{_c('-- ', COLORS.GRAY)}plotly already installed in klippy-env")
+        return
+    ans = input("Install plotly for HTML debug plots? (y/n): ")
+    if ans.lower() != "y":
+        return
+    subprocess.run([str(KLIPPY_PIP), "install", "plotly"], check=True)
+    cprint("Installed plotly in klippy-env", COLORS.GREEN)
 
 
 def restart_klipper() -> None:
@@ -164,6 +194,7 @@ def main() -> None:
     """
     )
     offer_example_config()
+    offer_plotly_install()
     restart_klipper()
 
 
