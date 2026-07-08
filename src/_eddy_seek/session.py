@@ -28,6 +28,7 @@ from .movement.gcode_state import GCodeState
 from .movement.guard import KnownKinematicLimits, clear_gcode_offset_xy
 from .movement.handler import MIN_CAPTURE_SAMPLES, MotionHandler
 from .plot_announce import announce_seek_plot
+from .plotting.artifacts import finalize_strategy_plot
 from .plotting.primitives import PlotArtifactRecord, ProbeRecord
 from .plotting.recorder import SessionRecorder
 
@@ -307,7 +308,7 @@ class SeekSession:
         show_plot_saved: bool,
     ) -> str | None:
         cfg = self.config
-        session_plot_path = strategy.on_session_end(self)
+        session_plot_path = finalize_strategy_plot(self, strategy.name)
         if session_plot_path is not None:
             self.recorder.record(
                 PlotArtifactRecord(

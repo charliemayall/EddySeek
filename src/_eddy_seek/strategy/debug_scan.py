@@ -17,7 +17,6 @@ from ..kconsole import KConsole
 from ..movement.handler import MotionSample
 from ..movement.leg_planner import MotionCapture, SweepSettings, sweep_grid
 from ..optimizer import bin_frequencies, peak_bin_center
-from ..plotting.artifacts import finalize_strategy_plot
 from ..plotting.primitives import (
     Bounds,
     HeatmapRecord,
@@ -53,9 +52,6 @@ class DebugScanStrategy(SeekStrategy):
         moved = (new - best).abs_components()
         console.info(self._pass_message(pass_num, new, moved, ctx))
         return new, 1
-
-    def on_session_end(self, ctx: SeekSession) -> str | None:
-        return finalize_strategy_plot(ctx, self.name)
 
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         cfg = ctx.config

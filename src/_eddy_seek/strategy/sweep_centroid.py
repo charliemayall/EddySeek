@@ -21,7 +21,6 @@ from ..movement.leg_planner import (
     SweepSettings,
     axis_sweep_centroid,
 )
-from ..plotting.artifacts import finalize_strategy_plot
 from ..plotting.primitives import (
     Bounds,
     PassMove,
@@ -47,9 +46,6 @@ class SweepCentroidStrategy(SeekStrategy):
             f"coarse_phases={cfg.coarse_phases} "
             f"cross_passes={cfg.coarse_cross_passes}/1"
         )
-
-    def on_session_end(self, ctx: SeekSession) -> str | None:
-        return finalize_strategy_plot(ctx, self.name)
 
     def _phase_for_pass(self, pass_num: int, cfg: SeekConfig) -> Phase:
         return Phase.COARSE if pass_num <= cfg.coarse_phases else Phase.FINE

@@ -13,7 +13,6 @@ import logging
 from ..common import Offset
 from ..kconsole import KConsole
 from ..optimizer import weighted_centroid
-from ..plotting.artifacts import finalize_strategy_plot
 from ..plotting.primitives import (
     CentroidPassRecord,
     PassMove,
@@ -35,9 +34,6 @@ class CentroidStrategy(SeekStrategy):
         logger.info(
             f"eddy_seek: centroid grid_step=({cfg.grid_step_x:.4f}, {cfg.grid_step_y:.4f}) mm"
         )
-
-    def on_session_end(self, ctx: SeekSession) -> str | None:
-        return finalize_strategy_plot(ctx, self.name)
 
     def _step(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         cfg = ctx.config

@@ -133,9 +133,6 @@ class SeekStrategy(ABC):
     @abstractmethod
     def announce_start(self, ctx: SeekSession, console: KConsole) -> None: ...
 
-    def on_session_end(self, ctx: SeekSession) -> str | None:
-        return None
-
     def search(self, ctx: SeekSession, console: KConsole) -> tuple[Offset, int]:
         cfg = ctx.config
         best = Offset.zero()
