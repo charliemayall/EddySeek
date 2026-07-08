@@ -56,7 +56,7 @@ class SweepSettings:
     sweep_cross_offset: float
     min_sweep_samples: int
     search_for: Literal["min", "max"]
-    circle_arc_resolution: float
+    sweep_arc_resolution: float
 
     @classmethod
     def from_config(
@@ -194,7 +194,7 @@ def sweep_axis(
             axis,
             overscan=settings.sweep_overscan,
             cross_offset=settings.sweep_cross_offset,
-            resolution=settings.circle_arc_resolution,
+            resolution=settings.sweep_arc_resolution,
         )
     samples = capture.run(
         legs,

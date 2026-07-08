@@ -99,8 +99,8 @@ class SeekConfig:
     coarse_cross_passes: int = field(
         default=3, metadata={"gcode": "COARSE_CROSS_PASSES", "min": 1}
     )
-    circle_arc_resolution: float = field(
-        default=0.1, metadata={"gcode": "CIRCLE_ARC_RESOLUTION", "positive": True}
+    sweep_arc_resolution: float = field(
+        default=0.1, metadata={"gcode": "SWEEP_ARC_RESOLUTION", "positive": True}
     )
     debug: bool = field(default=False, metadata={"bool": True})
 
