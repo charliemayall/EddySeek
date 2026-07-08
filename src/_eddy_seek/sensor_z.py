@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from _eddy_seek.kconsole import ConsoleSymbols
+
 if TYPE_CHECKING:
     from klippy.toolhead import ToolHead
 
@@ -34,4 +36,6 @@ def assert_sensor_z(toolhead: ToolHead, sensor_z: float | None, gcmd) -> None:
         f"Sensor Z guard: machine Z {actual_z:.3f} mm is outside "
         f"[{lo:.3f}, {hi:.3f}] mm (sensor_z {expected:.3f}, +{_SENSOR_Z_TOLERANCE_ABOVE:.2f}/"
         f"-{_SENSOR_Z_TOLERANCE_BELOW:.2f} mm)"
+        f"{ConsoleSymbols.BR}"
+        f"You must be at Z within the range above to run commands"
     )
