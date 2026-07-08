@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, overload
 
 from ..common import Axis, Offset, Phase, Position, samples_in_box, search_box
@@ -103,10 +103,18 @@ class SweepSettings:
     def from_config(
         cls, cfg: SeekConfig, *, coarse_cross_passes: int | None = None
     ) -> SweepSettings:
-        values = {f.name: getattr(cfg, f.name) for f in fields(cls)}
-        if coarse_cross_passes is not None:
-            values["coarse_cross_passes"] = coarse_cross_passes
-        return cls(**values)
+        return cls(
+            max_jog_x=cfg.max_jog_x,
+            max_jog_y=cfg.max_jog_y,
+            sweep_overscan=cfg.sweep_overscan,
+            coarse_cross_passes=coarse_cross_passes
+            if coarse_cross_passes is not None
+            else cfg.coarse_cross_passes,
+            sweep_cross_offset=cfg.sweep_cross_offset,
+            min_sweep_samples=cfg.min_sweep_samples,
+            search_for=cfg.search_for,
+            sweep_arc_resolution=cfg.sweep_arc_resolution,
+        )
 
 
 @dataclass(frozen=True, slots=True)
