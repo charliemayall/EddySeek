@@ -1,0 +1,72 @@
+"""
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
+
+Plot artifact I/O - filenames and HTML export.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from ..common import session_artifact_filename, yield_to_reactor
+from ._plotly import plotly_available, write_html
+
+if TYPE_CHECKING:
+    from ..session import SeekSession
+
+logger = logging.getLogger(__name__)
+
+
+def write_figure(
+    results_dir: Path,
+    fig: Any,
+    *,
+    write_at: datetime | None = None,
+    suffix: str = "",
+    run_label: str = "run",
+) -> str | None:
+    if not plotly_available() or fig is None:
+        return None
+    out_path = results_dir / session_artifact_filename(
+        write_at,
+        suffix=suffix,
+        run_label=run_label,
+        ext="html",
+    )
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if not write_html(str(out_path), fig):
+        logger.warning(f"eddy_seek: failed to write plot to {out_path}")
+        return None
+    logger.info(f"eddy_seek: debug plot saved to {out_path}")
+    return str(out_path)
+
+
+def finalize_strategy_plot(ctx: SeekSession, strategy_name: str) -> str | None:
+    from .registry import render_session_plot
+
+    if not ctx.config.save_plots:
+        return None
+    reactor = ctx._printer.get_reactor()
+    yield_to_reactor(reactor)
+    fig = render_session_plot(
+        strategy_name,
+        ctx.recorder.records(),
+        search_for=ctx.config.search_for,
+    )
+    yield_to_reactor(reactor)
+    if fig is None:
+        return None
+    return write_figure(
+        Path(ctx.config.result_folder),
+        fig,
+        write_at=ctx.artifact_write_at,
+        suffix=ctx.artifact_suffix(strategy_name),
+        run_label=ctx.run_label,
+    )

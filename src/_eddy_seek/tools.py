@@ -1,25 +1,24 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 
 Tool config, loading, and offset persistence via Klipper configfile autosave.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import dataclasses
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .common import Position
+from .common import Offset, Position
 
 if TYPE_CHECKING:
     from klippy.extras.configfile import ConfigWrapper, PrinterConfig
-    from klippy.klippy import Printer
 
 
 logger = logging.getLogger(__name__)
@@ -32,20 +31,20 @@ def _prefix_and_num_to_section(prefix: str, tool_number: int) -> str:
 @dataclass
 class Tool:
     tool_number: int
-    offset: Position
-    manual_offset: Position
+    offset: Offset
+    manual_offset: Offset
     is_calibrated: bool
 
     @property
-    def effective_offset(self) -> Position:
+    def effective_offset(self) -> Offset:
         return self.offset + self.manual_offset
 
     @staticmethod
     def create_default(tool_number: int) -> Tool:
         return Tool(
             tool_number=tool_number,
-            offset=Position.zero(),
-            manual_offset=Position.zero(),
+            offset=Offset.zero(),
+            manual_offset=Offset.zero(),
             is_calibrated=False,
         )
 
@@ -65,20 +64,16 @@ class Tool:
         section = config.getsection(section_name)
         return Tool(
             tool_number=tool_number,
-            offset=Position(
+            offset=Offset(
                 x=section.getfloat("offset_x", 0.0),
                 y=section.getfloat("offset_y", 0.0),
             ),
-            manual_offset=Position(
+            manual_offset=Offset(
                 x=section.getfloat("manual_adjust_x", 0.0),
                 y=section.getfloat("manual_adjust_y", 0.0),
             ),
             is_calibrated=section.getboolean("is_calibrated", False),
         )
-
-    def set_offset(self, offset: Position | None = None) -> None:
-        if offset is not None:
-            self.offset = offset
 
     def save(self, config: PrinterConfig, prefix: str) -> None:
         """Write this tool's fields into a config section."""
@@ -95,10 +90,10 @@ class Tool:
     def to_dict(self) -> dict[str, float | int | bool]:
         return dataclasses.asdict(self)
 
-    def mark_calibrated(self, offset: Position | None = None) -> Tool:
+    def mark_calibrated(self, offset: Offset | None = None) -> Tool:
         """Return a copy marked calibrated with the given seek offset."""
         if offset is None:
-            offset = Position.zero()
+            offset = Offset.zero()
         return Tool(
             tool_number=self.tool_number,
             offset=offset,
@@ -111,23 +106,24 @@ class ToolAlignConfig:
     def __init__(self, config: ConfigWrapper) -> None:
         self._printer = config.get_printer()
         self.tool_count = config.getint("tool_count", 1, minval=1)
-        self.tool_prefix = config.get("tool_prefix", "T")
+        self.tool_prefix = config.get("tool_prefix", "es_T")
         self.load_tool_macro = config.get("load_tool_macro_prefix", "T")
         self.sensor_x = config.getfloat("sensor_x")
         self.sensor_y = config.getfloat("sensor_y")
-        main_config = self._configfile().read_main_config()
+        sensor_z_raw = config.get("sensor_z", None)
+        self.sensor_z = (
+            config.getfloat("sensor_z") if sensor_z_raw is not None else None
+        )
+        main_config = self._configfile.read_main_config()
         self.tools = [
             self._load_tool_or_default(main_config, tool_number)
             for tool_number in range(self.tool_count)
         ]
-        logger.debug(
-            "eddy_seek: tools config tool_count=%d sensor=(%.4f, %.4f) "
-            "prefix=%r load_macro=%r",
-            self.tool_count,
-            self.sensor_x,
-            self.sensor_y,
-            self.tool_prefix,
-            self.load_tool_macro,
+        sensor_z_text = f"{self.sensor_z:.4f}" if self.sensor_z is not None else "unset"
+        logger.info(
+            f"eddy_seek: tools config tool_count={self.tool_count} "
+            f"sensor=({self.sensor_x:.4f}, {self.sensor_y:.4f}, {sensor_z_text}) "
+            f"prefix={self.tool_prefix!r} load_macro={self.load_tool_macro!r}"
         )
 
     def sensor_position(self) -> Position:
@@ -149,9 +145,28 @@ class ToolAlignConfig:
 
     def run_load_macro(self, tool_number: int) -> None:
         macro = self.format_load_macro(tool_number)
-        logger.debug("eddy_seek: running load macro %r", macro)
+        logger.info(f"eddy_seek: running load macro {macro!r}")
         gcode = self._printer.lookup_object("gcode")
         gcode.run_script_from_command(macro)
+
+    def apply_tool_offset(self, tool_number: int) -> Tool:
+        """Apply a calibrated tool's stored XY offset via ``SET_GCODE_OFFSET``."""
+        try:
+            tool = self.get_tool(tool_number)
+        except IndexError as exc:
+            raise ValueError(str(exc)) from exc
+        if not tool.is_calibrated:
+            raise ValueError(
+                f"Tool {tool_number} is not calibrated, and you are trying to apply an offset."
+            )
+        eff = tool.effective_offset
+        logger.info(
+            f"eddy_seek: applying tool {tool_number} effective offset "
+            f"({eff.x:.6f}, {eff.y:.6f})"
+        )
+        gcode = self._printer.lookup_object("gcode")
+        gcode.run_script_from_command(f"SET_GCODE_OFFSET {eff.to_gcode()}")
+        return tool
 
     def update_tool(self, tool: Tool) -> None:
         self.tools[tool.tool_number] = tool
@@ -161,45 +176,22 @@ class ToolAlignConfig:
             self.save_tool(tool)
 
     def save_tool(self, tool: Tool) -> None:
-        logger.debug(
-            "eddy_seek: staging tool %d offset=(%.6f, %.6f) calibrated=%s",
-            tool.tool_number,
-            tool.offset.x,
-            tool.offset.y,
-            tool.is_calibrated,
+        logger.info(
+            f"eddy_seek: staging tool {tool.tool_number} "
+            f"offset=({tool.offset.x:.6f}, {tool.offset.y:.6f}) "
+            f"calibrated={tool.is_calibrated}"
         )
-        configfile = self._configfile()
+        configfile = self._configfile
         configfile.remove_section(self.section_name(tool.tool_number))
         tool.save(configfile, self.tool_prefix)
 
-    def _configfile(self):
+    @property
+    def _configfile(self) -> PrinterConfig:
         return self._printer.lookup_object("configfile")
 
-    def _load_tool_or_default(self, main_config, tool_number: int) -> Tool:
+    def _load_tool_or_default(
+        self, main_config: ConfigWrapper, tool_number: int
+    ) -> Tool:
         if not main_config.has_section(self.section_name(tool_number)):
             return Tool.create_default(tool_number)
         return Tool.load(main_config, self.tool_prefix, tool_number)
-
-
-def apply_tool_offset(
-    tools: ToolAlignConfig,
-    printer: Printer,
-    tool_number: int,
-) -> Tool:
-    """Apply a calibrated tool's stored XY offset via ``SET_GCODE_OFFSET``."""
-    try:
-        tool = tools.get_tool(tool_number)
-    except IndexError as exc:
-        raise ValueError(str(exc)) from exc
-    if not tool.is_calibrated:
-        raise ValueError(f"tool {tool_number} is not calibrated")
-    eff = tool.effective_offset
-    logger.debug(
-        "eddy_seek: applying tool %d effective offset (%.6f, %.6f)",
-        tool_number,
-        eff.x,
-        eff.y,
-    )
-    gcode = printer.lookup_object("gcode")
-    gcode.run_script_from_command(f"SET_GCODE_OFFSET X={eff.x:.6f} Y={eff.y:.6f}")
-    return tool

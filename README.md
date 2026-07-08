@@ -42,7 +42,7 @@ is_system_service: False
 post_update_script: install.sh
 ```
 
-Add `[eddy_seek]` to `printer.cfg` (I2C settings plus `sensor_x` / `sensor_y` — see the [User Guide](docs/USER_GUIDE.md)), `FIRMWARE_RESTART`, then:
+Add `[eddy_seek]` to `printer.cfg` (I2C settings plus `sensor_x` / `sensor_y` - see the [User Guide](docs/USER_GUIDE.md)). Speed settings (`jog_speed`, `sweep_coarse_speed`, `sweep_fine_speed`) are in **mm/s**. Then `FIRMWARE_RESTART`, and:
 
 ```gcode
 EDDY_SEEK_QUERY
@@ -50,6 +50,8 @@ EDDY_SEEK_START
 ```
 
 For toolchanger workflows, see the full guide. Per-tool sections (`T0`, `T1`, …) support optional `manual_adjust_x` / `manual_adjust_y` tweaks (mm) added on top of measured offsets when applying alignment.
+
+> **Height above sensor:** Park the nozzle at probe height before starting alignment (EddySeek does not move Z). In testing, **2-3 mm** above the sensor has worked well.
 
 ## Documentation
 
@@ -70,7 +72,7 @@ uv run ruff check .
 uv run pytest
 ```
 
-> For an overview of the states and processes covered by this codebase, see [Calibration Process](docs/CALIBRATION_PROCESS.md).
+> For workflow diagrams and the internal seek loop, see [Calibration Process](docs/CALIBRATION_PROCESS.md).
 
 ## License
 

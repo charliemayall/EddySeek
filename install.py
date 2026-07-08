@@ -14,16 +14,22 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 from enum import Enum
+from pathlib import Path
 
 EDDY_SEEK_DIR = Path(__file__).resolve().parent
 DEFAULT_DEST = Path.home() / "klipper" / "klippy" / "extras"
+PRINTER_CONFIG_DIR = Path.home() / "printer_data" / "config"
+EDDY_SEEK_CFG = PRINTER_CONFIG_DIR / "eddy_seek.cfg"
+EXAMPLE_CFG = EDDY_SEEK_DIR / "example.cfg"
+KLIPPY_ENV = Path.home() / "klippy-env"
+KLIPPY_PIP = KLIPPY_ENV / "bin" / "pip3"
+KLIPPY_PYTHON = KLIPPY_ENV / "bin" / "python3"
 
 _RESET = "\x1b[0m"
 
 
-class COLORS(Enum):
+class COLORS(str, Enum):
     RED = "\x1b[31;20m"
     GREEN = "\x1b[32;20m"
     GRAY = "\x1b[90;20m"
@@ -38,6 +44,61 @@ def cprint(text, color: COLORS):
     print(_c(text, color))
 
 
+def offer_example_config() -> None:
+    if not sys.stdin.isatty():
+        return
+    if not PRINTER_CONFIG_DIR.exists():
+        return
+    if EDDY_SEEK_CFG.exists():
+        print(f"{_c('-- ', COLORS.GRAY)}config already exists: {EDDY_SEEK_CFG}")
+        return
+    if not EXAMPLE_CFG.is_file():
+        print(f"{_c('-- ', COLORS.GRAY)}missing {EXAMPLE_CFG}, skipping config copy")
+        return
+    ans = input(f"Copy example.cfg to {EDDY_SEEK_CFG}? (y/n): ")
+    if ans.lower() != "y":
+        return
+    PRINTER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(EXAMPLE_CFG, EDDY_SEEK_CFG)
+    cprint(f"Copied example config to {EDDY_SEEK_CFG}", COLORS.GREEN)
+    print(
+        f"""\n{_c("Config next step:", COLORS.GREEN)}
+    Add this line to your printer.cfg:
+
+        [include {EDDY_SEEK_CFG.name}]
+
+    Then edit {EDDY_SEEK_CFG} for your machine (I2C, sensor_x/y, tool settings).
+    """
+    )
+
+
+def plotly_installed_in_klippy_env() -> bool:
+    if not KLIPPY_PYTHON.is_file():
+        return False
+    result = subprocess.run(
+        [str(KLIPPY_PYTHON), "-c", "import plotly"],
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def offer_plotly_install() -> None:
+    if not sys.stdin.isatty():
+        return
+    if not KLIPPY_PIP.is_file():
+        print(f"{_c('-- ', COLORS.GRAY)}klippy-env not found, skipping plotly install")
+        return
+    if plotly_installed_in_klippy_env():
+        print(f"{_c('-- ', COLORS.GRAY)}plotly already installed in klippy-env")
+        return
+    ans = input("Install plotly for HTML debug plots? (y/n): ")
+    if ans.lower() != "y":
+        return
+    subprocess.run([str(KLIPPY_PIP), "install", "plotly"], check=True)
+    cprint("Installed plotly in klippy-env", COLORS.GREEN)
+
+
 def restart_klipper() -> None:
     if not sys.stdin.isatty():
         return
@@ -48,7 +109,12 @@ def restart_klipper() -> None:
 
 
 def purge_pycache(*roots: Path) -> int:
-    """Remove stale bytecode caches under ``roots`` (returns dirs removed)."""
+    """
+    Remove stale bytecode caches under ``roots`` (returns dirs removed).
+
+    Likely not necessary using git install route, but __pycache__ dirs
+    caused issues when direct deploying via `make deploy` route.
+    """
     removed = 0
     seen: set[Path] = set()
     for root in roots:
@@ -66,7 +132,22 @@ def purge_pycache(*roots: Path) -> int:
     return removed
 
 
+def warn_for_python_version():
+    MIN = (3, 10)
+    if sys.version_info < MIN:
+        print(
+            _c(
+                f"Error: Python version is not supported\n"
+                f"Minimum version --> {MIN[0]}.{MIN[1]}\n"
+                f"Your version --> {sys.version_info.major}.{sys.version_info.minor}\n"
+                f"EddySeek may not work as expected",
+                COLORS.RED,
+            )
+        )
+
+
 def main() -> None:
+    warn_for_python_version()
     dest = (
         Path(sys.argv[1]).expanduser().resolve()
         if len(sys.argv) > 1  # handle custom destination arg
@@ -99,19 +180,21 @@ def main() -> None:
 
     caches = purge_pycache(src_dir, dest)
     if caches:
-        print(f"{_c('-- ', COLORS.GRAY)}cleared {caches} __pycache__ dir(s)")
+        print(f"{_c('-- ', COLORS.GRAY)}cleaned up caches")
 
     cprint("\u2728 EddySeek: installed \u2728".center(60), COLORS.GREEN)
     print(f"{_c('-- ', COLORS.GRAY)}{dest / 'eddy_seek.py'}")
     print(f"{_c('-- ', COLORS.GRAY)}{dest / '_eddy_seek/'}")
     print(
         f"""\n{_c("Next steps:", COLORS.GREEN)}\n
-    1. Add [eddy_seek] to printer.cfg (set sensor_x/sensor_y for your coil)
+    1. Configure EddySeek in printer.cfg (see example.cfg or eddy_seek.cfg)
     2. Restart Klipper: sudo systemctl restart klipper
 
     After git pull, re-run ./install.sh then restart Klipper.
     """
     )
+    offer_example_config()
+    offer_plotly_install()
     restart_klipper()
 
 

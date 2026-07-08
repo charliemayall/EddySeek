@@ -1,21 +1,57 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 """
 
-from _eddy_seek.motion_guard import MotionGuard, clear_gcode_offset_xy
+import pytest
+from fakes import FakeGcode, FakePrinter
+
+from _eddy_seek.movement.guard import (
+    MAX_ACCEL,
+    MAX_SCV,
+    KnownKinematicLimits,
+    clear_gcode_offset_xy,
+)
 
 
 class _FakeToolhead:
+    max_velocity = 200.0
+    max_accel = 3000.0
     square_corner_velocity = 5.0
     min_cruise_ratio = 0.5
     calc_calls = 0
 
     def _calc_junction_deviation(self) -> None:
         _FakeToolhead.calc_calls += 1
+
+    def get_max_velocity(self) -> tuple[float, float]:
+        return self.max_velocity, self.max_accel
+
+    def set_max_velocities(
+        self,
+        max_velocity: float | None,
+        max_accel: float | None,
+        square_corner_velocity: float | None,
+        min_cruise_ratio: float | None,
+    ) -> tuple[float, float, float, float]:
+        if max_velocity is not None:
+            self.max_velocity = max_velocity
+        if max_accel is not None:
+            self.max_accel = max_accel
+        if square_corner_velocity is not None:
+            self.square_corner_velocity = square_corner_velocity
+        if min_cruise_ratio is not None:
+            self.min_cruise_ratio = min_cruise_ratio
+        self._calc_junction_deviation()
+        return (
+            self.max_velocity,
+            self.max_accel,
+            self.square_corner_velocity,
+            self.min_cruise_ratio,
+        )
 
 
 class _FakeInputShaper:
@@ -29,104 +65,118 @@ class _FakeInputShaper:
         _FakeInputShaper.enable_calls += 1
 
 
-class _FakeGcmd:
-    messages: list[str] = []
-
-    def respond_info(self, msg: str) -> None:
-        _FakeGcmd.messages.append(msg)
-
-
-class _FakeGcode:
-    scripts: list[str] = []
-
-    def run_script_from_command(self, script: str) -> None:
-        _FakeGcode.scripts.append(script)
-
-
 class _FakeGcodeMove:
-    homing_position = [1.5, -0.5, 0.0, 0.0]
+    def __init__(self) -> None:
+        self.homing_position = [1.5, -0.5, 0.0, 0.0]
 
 
-class _FakePrinter:
-    toolhead = _FakeToolhead()
-    input_shaper = _FakeInputShaper()
-
-    def lookup_object(self, name: str, default=None):
-        if name == "toolhead":
-            return self.toolhead
-        if name == "input_shaper":
-            return self.input_shaper
-        if name == "gcode":
-            return _FakeGcode()
-        if name == "gcode_move":
-            return _FakeGcodeMove()
-        return default
+def _known_state_printer() -> FakePrinter:
+    return FakePrinter(
+        toolhead=_FakeToolhead(),
+        input_shaper=_FakeInputShaper(),
+        gcode=FakeGcode(),
+        gcode_move=_FakeGcodeMove(),
+    )
 
 
 def test_clear_gcode_offset_xy_zeros_xy():
-    _FakeGcode.scripts = []
-    printer = _FakePrinter()
-    clear_gcode_offset_xy(printer)  # type: ignore[arg-type]
-    assert _FakeGcode.scripts == ["SET_GCODE_OFFSET X=0.000000 Y=0.000000"]
+    printer = FakePrinter(gcode=FakeGcode())
+    clear_gcode_offset_xy(printer)
+    assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=0.0 Y=0.0"]
 
 
-def test_seek_motion_guard_restores_gcode_offset():
-    _FakeGcmd.messages = []
-    _FakeGcode.scripts = []
-    _FakeGcodeMove.homing_position = [1.5, -0.5, 0.0, 0.0]
-    gcmd = _FakeGcmd()
+def test_known_kinematic_limits_does_not_touch_gcode_offset():
+    gcode = FakeGcode()
+    printer = FakePrinter(gcode=gcode, toolhead=_FakeToolhead())
 
-    with MotionGuard(_FakePrinter(), gcmd):
-        assert _FakeGcode.scripts == ["SET_GCODE_OFFSET X=0.000000 Y=0.000000"]
+    with KnownKinematicLimits(printer):
+        pass
 
-    assert _FakeGcode.scripts[-1] == "SET_GCODE_OFFSET X=1.500000 Y=-0.500000"
-    assert _FakeGcmd.messages == [
-        "EDDY_SEEK: cleared gcode offset",
-        "EDDY_SEEK: restored motion settings",
-    ]
+    assert gcode.scripts == []
 
 
-def test_seek_motion_guard_caps_scv_and_restores_toolhead_limits():
+@pytest.mark.parametrize(
+    "initial_scv,expected_inside,expected_outside",
+    [
+        (15.0, MAX_SCV, 15.0),
+        (5.0, 5.0, 5.0),
+    ],
+    ids=["caps_scv", "leaves_scv_unchanged"],
+)
+def test_known_kinematic_limits_scv(initial_scv, expected_inside, expected_outside):
     _FakeToolhead.calc_calls = 0
-    _FakeGcmd.messages = []
-    _FakeGcode.scripts = []
-    printer = _FakePrinter()
-    toolhead = printer.toolhead
-    toolhead.square_corner_velocity = 15.0
+    printer = _known_state_printer()
+    toolhead = printer.lookup_object("toolhead")
+    toolhead.square_corner_velocity = initial_scv
     toolhead.min_cruise_ratio = 0.5
-    gcmd = _FakeGcmd()
 
-    with MotionGuard(printer, gcmd):
-        assert toolhead.square_corner_velocity == 9.0
-        assert toolhead.min_cruise_ratio == 0.0
-        assert _FakeToolhead.calc_calls == 1
+    with KnownKinematicLimits(printer):
+        assert toolhead.square_corner_velocity == expected_inside
+        assert toolhead.min_cruise_ratio == 0.5
+        if initial_scv > MAX_SCV:
+            assert _FakeToolhead.calc_calls == 1
+
+    assert toolhead.square_corner_velocity == expected_outside
+    assert toolhead.min_cruise_ratio == 0.5
+    if initial_scv > MAX_SCV:
+        assert _FakeToolhead.calc_calls == 2
+
+
+@pytest.mark.parametrize(
+    "initial_accel,expected_inside,expected_outside",
+    [
+        (5000.0, MAX_ACCEL, 5000.0),
+        (1500.0, 1500.0, 1500.0),
+    ],
+    ids=["caps_accel", "leaves_accel_unchanged"],
+)
+def test_known_kinematic_limits_accel(initial_accel, expected_inside, expected_outside):
+    printer = _known_state_printer()
+    toolhead = printer.lookup_object("toolhead")
+    toolhead.max_accel = initial_accel
+
+    with KnownKinematicLimits(printer):
+        assert toolhead.max_accel == expected_inside
+
+    assert toolhead.max_accel == expected_outside
+
+
+class _LegacyFakeToolhead:
+    """Pre-Aug-2025 Klipper toolhead (no set_max_velocities)."""
+
+    max_velocity = 200.0
+    max_accel = 3000.0
+    square_corner_velocity = 5.0
+    min_cruise_ratio = 0.5
+    calc_calls = 0
+
+    def _calc_junction_deviation(self) -> None:
+        _LegacyFakeToolhead.calc_calls += 1
+
+
+def test_known_kinematic_limits_legacy_toolhead_caps_and_restores():
+    _LegacyFakeToolhead.calc_calls = 0
+    printer = FakePrinter(toolhead=_LegacyFakeToolhead())
+    toolhead = printer.lookup_object("toolhead")
+    toolhead.square_corner_velocity = 15.0
+    toolhead.max_accel = 5000.0
+
+    with KnownKinematicLimits(printer):
+        assert toolhead.square_corner_velocity == MAX_SCV
+        assert toolhead.max_accel == MAX_ACCEL
+        assert _LegacyFakeToolhead.calc_calls == 1
 
     assert toolhead.square_corner_velocity == 15.0
-    assert toolhead.min_cruise_ratio == 0.5
-    assert _FakeToolhead.calc_calls == 2
+    assert toolhead.max_accel == 5000.0
+    assert _LegacyFakeToolhead.calc_calls == 2
 
 
-def test_seek_motion_guard_leaves_scv_unchanged_when_below_cap():
-    _FakeToolhead.calc_calls = 0
-    printer = _FakePrinter()
-    toolhead = printer.toolhead
-    toolhead.square_corner_velocity = 5.0
-    toolhead.min_cruise_ratio = 0.5
-
-    with MotionGuard(printer, None):
-        assert toolhead.square_corner_velocity == 5.0
-        assert toolhead.min_cruise_ratio == 0.0
-
-    assert toolhead.square_corner_velocity == 5.0
-    assert toolhead.min_cruise_ratio == 0.5
-
-
-def test_seek_motion_guard_disables_and_enables_input_shaper():
+def test_known_kinematic_limits_disables_and_enables_input_shaper():
     _FakeInputShaper.disable_calls = 0
     _FakeInputShaper.enable_calls = 0
-    printer = _FakePrinter()
+    printer = _known_state_printer()
 
-    with MotionGuard(printer, None):
+    with KnownKinematicLimits(printer):
         assert _FakeInputShaper.disable_calls == 1
         assert _FakeInputShaper.enable_calls == 0
 

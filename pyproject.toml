@@ -1,6 +1,6 @@
 [project]
 name = "EddySeek"
-version = "0.1.1"
+version = "0.1.2"
 description = "Klipper extra for toolchanger nozzle alignment via LDC1612 eddy current sensor"
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -19,15 +19,29 @@ build-backend = "uv_build"
 module-root = "src"
 module-name = "_eddy_seek"
 
-[tool.pyright]
-pythonVersion = "3.10"
-stubPath = "typings"
+[tool.ty.environment]
+extra-paths = ["typings", "src"]
+python-version = "3.10"
+
+[tool.ty.src]
+include = ["src", "tests"]
+
+[tool.ty.analysis]
+allowed-unresolved-imports = ["klippy.**", "kaleido"]
+
+[[tool.ty.overrides]]
+include = ["src/eddy_seek.py"]
+
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"
 
 [dependency-groups]
 dev = [
-    "pyright>=1.1.411",
+    "plotly>=6.8.0",
     "pytest>=9.1.1",
     "ruff>=0.15.20",
+    "ty>=0.0.56",
+    "vulture>=2.16",
 ]
 
 [tool.pytest.ini_options]
@@ -36,3 +50,12 @@ testpaths = ["tests"]
 
 [tool.ruff]
 exclude = ["typings"]
+
+[tool.ruff.lint]
+select = [
+"UP030", "UP031", "UP032", "F", "I", "UP",
+"RUF","PTH","B","FIX","ISC","LOG", "SIM",
+"PERF","FURB","C901","TD","RET","C4",
+"ERA001", "RUF104"
+]
+ignore = ["RUF001", "B008","B905"]

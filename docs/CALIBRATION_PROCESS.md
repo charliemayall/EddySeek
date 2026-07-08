@@ -1,14 +1,14 @@
 # EddySeek Calibration Process
 
-This document describes how EddySeek calibrates nozzle XY positions using the
-LDC1612 eddy-current sensor. It covers the user-facing workflow, the multi-tool
-sequence, and the internal XY search loop.
+EddySeek finds each nozzle's XY position relative to an LDC1612 eddy-current
+sensor: jog, sample coil frequency, repeat until the peak marks the coil centre.
+Below: toolchanger workflow, multi-tool sequence, and the internal XY search loop.
 
 For install, configuration, and G-code reference, see the [User Guide](USER_GUIDE.md).
 
 ---
 
-## Overview
+## What calibration measures
 
 Calibration finds where each nozzle sits relative to a **reference point** on the
 sensor coil. The coil frequency changes as the nozzle moves in XY; EddySeek jogs
@@ -54,7 +54,7 @@ the resulting offset is the XY difference from tool 0.
 ## Multi-tool alignment sequence
 
 `EDDY_SEEK_TOOLS` follows this logic (`EDDY_SEEK_TOOL` is the same seek steps but
-does not run load macros — load each tool before calling it):
+does not run load macros - load each tool before calling it):
 
 ```mermaid
 flowchart TD
@@ -137,26 +137,10 @@ flowchart TD
     MORE -->|no| MAX([Use best result anyway])
 ```
 
-### Ternary strategy (`strategy: ternary`)
-
-Each pass runs a 1-D ternary search on **X**, then **Y**, within the jog radius.
-Up to `max_iter` subdivisions per axis.
-
-```mermaid
-flowchart LR
-    subgraph pass["One pass"]
-        X["Ternary search X<br/>(Y fixed at best_y)"] --> Y["Ternary search Y<br/>(X fixed at new best_x)"]
-    end
-    pass --> OUT["New (best_x, best_y)"]
-```
-
-At each ternary subdivision, two probe points divide the interval; the side with
-the better frequency (per `search_for: max|min`) is kept.
-
 ### Centroid strategy (`strategy: centroid`)
 
 Each pass probes a **3×3 grid** around the current best point. Grid spacing
-halves every pass (`grid_step × 0.5^(pass−1)`). Sampled frequencies are
+halves every pass (`max_jog/2 × 0.5^(pass−1)`). Sampled frequencies are
 weighted toward the target extreme and the toolhead moves to the weighted
 centroid.
 
@@ -175,9 +159,9 @@ peak is found with a frequency-weighted 2D centroid over in-range samples.
 
 ```mermaid
 flowchart TD
-  COARSE["Pass 1 coarse: bidirectional X/Y sweeps<br/>±max_jog, staggered cross offsets"] --> FINE
-  FINE["Pass 2+ fine: narrower sweeps<br/>range × fine_shrink"] --> CENT["2D weighted centroid"]
-  CENT --> CHECK{"converged?"}
+  COARSE["Coarse pass(es): bidirectional X/Y sweeps<br/>±max_jog, staggered cross offsets"] --> FINE
+  FINE["Fine pass(es): narrower sweeps<br/>range × fine_shrink"] --> CENT["2D weighted centroid"]
+  CENT --> CHECK{"Converged?"}
   CHECK -->|no| FINE
   CHECK -->|yes| DONE([Best offset])
 ```
@@ -189,8 +173,11 @@ coordinates. `dwell_time` is not used for sweep_centroid.
 
 ## Single probe cycle (`measure_at`)
 
-Every probe point - whether from ternary or centroid - follows the same
-measurement steps:
+Grid strategies (`centroid`, and `debug_scan` where applicable) probe discrete
+points using `measure_at`. Continuous sweep strategies sample on the move and do
+not use `dwell_time` per point.
+
+Every grid probe point follows the same measurement steps:
 
 ```mermaid
 flowchart TD
@@ -212,21 +199,21 @@ the window used for that probe point.
 After alignment, staged config sections look like:
 
 ```ini
-[T0]
+[es_T0]
 offset_x: 0.000000
 offset_y: 0.000000
 is_calibrated: True
 
-[T1]
+[es_T1]
 offset_x: 1.234000
 offset_y: -0.456000
 is_calibrated: True
 ```
 
-| Tool  | `offset_x` / `offset_y` meaning                             |
-| ----- | ----------------------------------------------------------- |
-| T0    | Always `0, 0` - defines the reference centre                |
-| T1…Tn | XY shift needed so this nozzle matches tool 0 on the sensor |
+| Tool    | `offset_x` / `offset_y` meaning                             |
+| ------- | ----------------------------------------------------------- |
+| es_T0   | Always `0, 0` - defines the reference centre                |
+| es_T1…  | XY shift needed so this nozzle matches tool 0 on the sensor |
 
 `SAVE_CONFIG` persists these values. Your toolchanger macros or motion system
 apply them when switching tools.

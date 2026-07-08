@@ -1,9 +1,9 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 """
 
 import importlib
@@ -30,14 +30,23 @@ def _purge_eddy_seek_modules() -> None:
 
 @pytest.fixture
 def klippy_extras(tmp_path):
-    extras = tmp_path / "klippy" / "extras"
+    klippy_root = tmp_path / "klippy"
+    klippy_pkg = klippy_root / "klippy"
+    klippy_pkg.mkdir(parents=True)
+    (klippy_pkg / "__init__.py").write_text("")
+    (klippy_pkg / "gcode.py").write_text(
+        "class CommandError(Exception):\n    pass\n\n"
+        "class GCodeCommand:\n    error = CommandError\n"
+    )
+
+    extras = klippy_root / "extras"
     extras.mkdir(parents=True)
 
     (extras / "ldc1612.py").write_text(LDC1612_STUB)
     (extras / "eddy_seek.py").symlink_to(ROOT / "src" / "eddy_seek.py")
     (extras / "_eddy_seek").symlink_to(ROOT / "src" / "_eddy_seek")
 
-    sys.path.insert(0, str(tmp_path / "klippy"))
+    sys.path.insert(0, str(klippy_root))
     yield extras
     sys.path.pop(0)
     _purge_eddy_seek_modules()
@@ -45,9 +54,9 @@ def klippy_extras(tmp_path):
 
 def test_install_script(tmp_path):
     install_dir = tmp_path / "klippy" / "extras"
-    cache = ROOT / "src" / "_eddy_seek" / "__pycache__"
+    cache = ROOT / "src" / "_eddy_seek" / "movement" / "__pycache__"
     cache.mkdir(parents=True, exist_ok=True)
-    (cache / "motion_guard.cpython-311.pyc").write_bytes(b"stale")
+    (cache / "guard.cpython-311.pyc").write_bytes(b"stale")
 
     result = subprocess.run(
         ["./install.sh", str(install_dir)],
@@ -58,7 +67,7 @@ def test_install_script(tmp_path):
     )
 
     assert "EddySeek: installed" in result.stdout
-    assert "cleared" in result.stdout
+    assert "cleaned" in result.stdout
     assert not cache.exists()
 
     assert (install_dir / "eddy_seek.py").resolve() == (
@@ -72,7 +81,15 @@ def test_install_script(tmp_path):
     ).resolve()
 
     (install_dir / "ldc1612.py").write_text(LDC1612_STUB)
-    sys.path.insert(0, str(tmp_path / "klippy"))
+    klippy_root = tmp_path / "klippy"
+    klippy_pkg = klippy_root / "klippy"
+    klippy_pkg.mkdir(parents=True, exist_ok=True)
+    (klippy_pkg / "__init__.py").write_text("")
+    (klippy_pkg / "gcode.py").write_text(
+        "class CommandError(Exception):\n    pass\n\n"
+        "class GCodeCommand:\n    error = CommandError\n"
+    )
+    sys.path.insert(0, str(klippy_root))
     try:
         mod = importlib.import_module("extras.eddy_seek")
         assert hasattr(mod, "load_config")
@@ -92,4 +109,4 @@ def test_eddy_seek_relative_imports_after_install(klippy_extras):
     assert importlib.import_module("extras._eddy_seek.config") is not None
     assert importlib.import_module("extras._eddy_seek.tool_align") is not None
     assert importlib.import_module("extras._eddy_seek.strategy") is not None
-    assert importlib.import_module("extras._eddy_seek.strategy.sweep") is not None
+    assert importlib.import_module("extras._eddy_seek.movement.sweep") is not None

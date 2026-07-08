@@ -1,84 +1,56 @@
 """
-# EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
-#
-# Copyright (C) 2026 Charlie Mayall
-#
-# This file may be distributed under the terms of the GNU GPLv3 license.
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
 
 eddy_seek.py  -  Klipper extra for nozzle alignment via LDC1612.
-
-Uses ``extras.ldc1612.LDC1612`` for the sensor data stream.
-Uses ``_eddy_seek`` for XY search and multi-tool alignment.
-
-printer.cfg example
--------------------
-    [eddy_seek]
-    sensor_type: ldc1612
-    i2c_address: 42
-    i2c_mcu: mcu
-    i2c_bus: i2c1
-    sensor_x: 150.0
-    sensor_y: 150.0
-    tool_count: 4
-    tool_prefix: T
-    load_tool_macro_prefix: T
-    window_size: 20
-    max_jog_x: 5.0
-    max_jog_y: 5.0
-    tolerance: 0.1
-    dwell_time: 0.5
-    jog_speed: 600
-    search_for: max
-    strategy: sweep_centroid
-    grid_step_x: 2.5
-    grid_step_y: 2.5
-    max_iter: 10
-    max_passes: 6
-    save_session_trace: False
-    sweep_coarse_speed: 20
-    sweep_fine_speed: 10
-
-G-code: EDDY_SEEK_QUERY, EDDY_SEEK_RESET, EDDY_SEEK_SET, EDDY_SEEK_START,
-EDDY_SEEK_ACCURACY, EDDY_SEEK_TOOL, EDDY_SEEK_TOOLS, EDDY_SEEK_APPLY_OFFSET
 """
 
 from __future__ import annotations
 
 import logging
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import fields
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
+
+from ._eddy_seek.accuracy_test import run_accuracy_test
+from ._eddy_seek.common import Offset, Position
+from ._eddy_seek.config import SeekConfig, load_seek_config
+from ._eddy_seek.kconsole import KConsole
+from ._eddy_seek.movement.guard import clear_gcode_offset_xy
+from ._eddy_seek.movement.handler import MIN_CAPTURE_SAMPLES
+from ._eddy_seek.sensor_z import assert_sensor_z
+from ._eddy_seek.session import SeekHost, SeekSession
+from ._eddy_seek.strategy import strategy_for
+from ._eddy_seek.tool_align import align_all_tools, align_tool_number
+from ._eddy_seek.tools import ToolAlignConfig
 
 if TYPE_CHECKING:
     from klippy.extras.configfile import ConfigWrapper
     from klippy.extras.ldc1612 import LDC1612
+    from klippy.gcode import GCodeCommand
 
+_LDC1612: Any
 try:
-    from .ldc1612 import LDC1612
-    from ._eddy_seek.common import Position
-    from ._eddy_seek.config import load_seek_config
-    from ._eddy_seek.tools import ToolAlignConfig, apply_tool_offset
-    from ._eddy_seek.strategy import strategy_for
-    from ._eddy_seek.session import (
-        SeekHost,
-        SeekSession,
-        report_accuracy_stats,
-    )
-    from ._eddy_seek.tool_align import align_all_tools, align_tool_number
-except ImportError:
-    from _eddy_seek.common import Position  # type: ignore[no-redef]
-    from _eddy_seek.config import load_seek_config  # type: ignore[no-redef]
-    from _eddy_seek.tools import ToolAlignConfig, apply_tool_offset  # type: ignore[no-redef]
-    from _eddy_seek.strategy import strategy_for  # type: ignore[no-redef]
-    from _eddy_seek.session import (  # type: ignore[no-redef]
-        SeekHost,
-        SeekSession,
-        report_accuracy_stats,
-    )
-    from _eddy_seek.tool_align import (  # type: ignore[no-redef]
-        align_all_tools,
-        align_tool_number,
-    )
+    from .ldc1612 import LDC1612 as _LDC1612
+except (ModuleNotFoundError, ImportError):
+    _LDC1612 = None
 
 logger = logging.getLogger(__name__)
+
+_STATUS_SMOOTH_SAMPLES = 20
+_QUERY_RATE_DWELL = 0.4
+
+
+def _sample_rate_from_count(*, count: int, duration_s: float) -> float | None:
+    if count <= 0 or duration_s <= 0.0:
+        return None
+    return count / duration_s
 
 
 class EddySeek(SeekHost):
@@ -86,7 +58,7 @@ class EddySeek(SeekHost):
         self.printer = config.get_printer()
         self.seek_config = load_seek_config(config)
         self._tools = ToolAlignConfig(config)
-        self._window: list[float] = []
+        self._status_samples: list[float] = []
         self._capture_buf: list[float] = []
         self._capture_count: int = 0
         self._capturing: bool = False
@@ -95,8 +67,9 @@ class EddySeek(SeekHost):
         self._tool0_center: Position | None = None
         self._sensor = self._load_ldc1612(config)
         self._stream_refs = 0
-        self._stream_active = False
         self._batch_client_added = False
+        self._sample_rate_hz: float | None = None
+        self.console: KConsole | None = None
         gcode = self.printer.lookup_object("gcode")
         gcode.register_command(
             "EDDY_SEEK_QUERY",
@@ -138,43 +111,67 @@ class EddySeek(SeekHost):
             self.cmd_EDDY_SEEK_APPLY_OFFSET,
             desc="Apply saved XY offset for a tool via SET_GCODE_OFFSET",
         )
+        if self.seek_config.debug:
+            gcode.register_command(
+                "ES_DEBUG_CONSOLE",
+                self.cmd_DEBUG_CONSOLE,
+                desc="test KConsole",
+            )
 
         self.printer.add_object("eddy_seek", self)
+        self.printer.register_event_handler("klippy:disconnect", self._on_disconnect)
         logger.info(
-            "eddy_seek: initialised (sensor=%r window_size=%d)",
-            self._sensor.name,
-            self.seek_config.window_size,
+            f"eddy_seek: initialised (sensor={self._sensor.name!r}) {self.seek_config.to_dict()}"
         )
 
     def add_sensor_client(self, callback) -> None:
-        self._sensor.add_client(callback)  # type: ignore[arg-type]
+        self._sensor.add_client(callback)
 
-    def acquire_sensor_stream(self) -> None:
+    def refresh_console(self, gcmd: GCodeCommand) -> KConsole:
+        self.console = KConsole(gcmd, self.seek_config)
+        return self.console
+
+    def _stop_sensor_stream(self) -> None:
+        """Drop stream interest; batch client unregisters on the next bulk tick."""
+        if self._stream_refs == 0 and not self._batch_client_added:
+            return
+        self._stream_refs = 0
+        if self._batch_client_added:
+            self._handle_batch({"data": []})
+        logger.info(f"eddy_seek: stopped sensor stream on {self._sensor.name!r}")
+
+    def _on_disconnect(self) -> None:
+        """Release LDC1612 sampling before Klipper restart or shutdown."""
+        self._capturing = False
+        self._stop_sensor_stream()
+        del self._sensor
+        logger.info("eddy_seek: klippy disconnect")
+
+    @contextmanager
+    def acquire_sensor_stream(self) -> Iterator[None]:
         """Start LDC1612 bulk sampling while a seek session or query needs data."""
         self._stream_refs += 1
-        if self._stream_refs == 1:
-            self._stream_active = True
-            if not self._batch_client_added:
-                self._sensor.add_client(self._handle_batch)  # type: ignore[arg-type]
-                self._batch_client_added = True
-                logger.debug(
-                    "eddy_seek: started sensor stream on %r", self._sensor.name
-                )
-
-    def release_sensor_stream(self) -> None:
-        """Stop bulk sampling once no seek session or query holds a stream ref."""
-        if self._stream_refs <= 0:
-            return
-        self._stream_refs -= 1
-        if self._stream_refs == 0:
-            self._stream_active = False
-            logger.debug("eddy_seek: stopping sensor stream on %r", self._sensor.name)
+        if self._stream_refs == 1 and not self._batch_client_added:
+            self._sensor.add_client(self._handle_batch)
+            self._batch_client_added = True
+            logger.info(f"eddy_seek: started sensor stream on {self._sensor.name!r}")
+        try:
+            yield
+        finally:
+            self._stream_refs -= 1
+            if self._stream_refs == 0:
+                self._stop_sensor_stream()
 
     @property
     def capture_count(self) -> int:
         return self._capture_count
 
     def peek_capture_samples(self) -> list[float]:
+        """
+        Use this to grab a copy of the capture buffer.
+
+        Do not read from the capture buffer directly, as it may be modified by the caller.
+        """
         return list(self._capture_buf)
 
     def session_trace_config(self) -> dict[str, Any]:
@@ -190,16 +187,20 @@ class EddySeek(SeekHost):
         }
 
     @staticmethod
-    def _load_ldc1612(config: ConfigWrapper) -> LDC1612:
+    def _load_ldc1612(
+        config: ConfigWrapper,
+    ) -> LDC1612:
         sensor_type = config.get("sensor_type", "").strip().lower()
         if sensor_type != "ldc1612":
             raise config.error(
-                "eddy_seek: sensor_type must be 'ldc1612' (got %r)" % (sensor_type,)
+                f"eddy_seek: sensor_type must be 'ldc1612' (got {sensor_type!r})"
             )
-        return LDC1612(config)  # type: ignore[reportUnknownReturnType]
+        if _LDC1612 is None:
+            raise config.error("eddy_seek: ldc1612 module is not available")
+        return _LDC1612(config)
 
     def _handle_batch(self, msg: dict) -> bool:
-        if not self._stream_active:
+        if self._stream_refs <= 0:  # No one is listening, don't process msg
             self._batch_client_added = False
             return False
         data = msg.get("data", [])
@@ -210,9 +211,9 @@ class EddySeek(SeekHost):
             self._last_freq = f
             self._total_samples += 1
 
-            self._window.append(f)
-            if len(self._window) > self.seek_config.window_size:
-                self._window.pop(0)
+            self._status_samples.append(f)
+            if len(self._status_samples) > _STATUS_SMOOTH_SAMPLES:
+                self._status_samples.pop(0)
 
             if self._capturing:
                 self._capture_buf.append(f)
@@ -220,109 +221,147 @@ class EddySeek(SeekHost):
         return True
 
     def reset_capture(self) -> None:
-        logger.debug(
-            "eddy_seek: capture started (discarded %d samples)", self._capture_count
+        logger.info(
+            f"eddy_seek: capture started (discarded {self._capture_count} samples)"
         )
         self._capture_buf = []
         self._capture_count = 0
         self._capturing = True
 
-    def get_capture_mean(self, min_samples: int = 5) -> float | None:
+    def get_capture_mean(self, min_samples: int = MIN_CAPTURE_SAMPLES) -> float | None:
         buf = list(self._capture_buf)
         self._capturing = False
         if len(buf) < min_samples:
-            logger.debug(
-                "eddy_seek: capture too few samples (%d < %d)",
-                len(buf),
-                min_samples,
+            logger.info(
+                f"eddy_seek: capture too few samples ({len(buf)} < {min_samples})"
             )
             return None
         mean = sum(buf) / len(buf)
-        logger.debug(
-            "eddy_seek: capture mean=%.2f Hz from %d samples",
-            mean,
-            len(buf),
-        )
+        logger.info(f"eddy_seek: capture mean={mean:.2f} Hz from {len(buf)} samples")
         return mean
 
-    def get_status(self, eventtime: float) -> dict:
-        # Used by klipper, do not remove parameter eventtime
-        window_mean = sum(self._window) / len(self._window) if self._window else 0.0
+    def get_status(self, eventtime: float | None = None) -> dict:
+        """called by klipper, do not remove parameters"""
+        smooth_mean = (
+            sum(self._status_samples) / len(self._status_samples)
+            if self._status_samples
+            else 0.0
+        )
         capture_mean = (
             sum(self._capture_buf) / len(self._capture_buf)
             if self._capture_buf
             else 0.0
         )
         tools = {
-            self._tools.section_name(tool.tool_number): {
-                "offset_x": round(tool.offset.x, 4),
-                "offset_y": round(tool.offset.y, 4),
-                "manual_adjust_x": round(tool.manual_offset.x, 4),
-                "manual_adjust_y": round(tool.manual_offset.y, 4),
-                "effective_offset_x": round(tool.effective_offset.x, 4),
-                "effective_offset_y": round(tool.effective_offset.y, 4),
-                "is_calibrated": tool.is_calibrated,
-            }
+            self._tools.section_name(tool.tool_number): tool.to_dict()
             for tool in self._tools.tools
         }
         return {
             "last_freq": round(self._last_freq, 2),
-            "window_mean": round(window_mean, 2),
+            "smooth_mean": round(smooth_mean, 2),
             "capture_mean": round(capture_mean, 2),
             "capture_count": self._capture_count,
             "total_samples": self._total_samples,
+            "sample_rate_hz": (
+                round(self._sample_rate_hz, 1)
+                if self._sample_rate_hz is not None
+                else None
+            ),
             "tools": tools,
         }
 
-    def cmd_EDDY_SEEK_QUERY(self, gcmd) -> None:
-        self.acquire_sensor_stream()
-        try:
+    def cmd_EDDY_SEEK_QUERY(self, gcmd: GCodeCommand) -> None:
+        console = self.refresh_console(gcmd)
+        with self.acquire_sensor_stream():
             toolhead = self.printer.lookup_object("toolhead")
-            toolhead.dwell(0.2)
+            before = self._total_samples
+            self.reset_capture()
+            toolhead.dwell(_QUERY_RATE_DWELL)
             toolhead.wait_moves()
-            status = self.get_status(0)
-            gcmd.respond_info(
-                "EDDY_SEEK: last={last_freq:.1f} Hz  "
-                "window_mean={window_mean:.1f} Hz  "
-                "capture_mean={capture_mean:.1f} Hz  "
-                "capture_count={capture_count}  "
-                "total={total_samples}".format(**status)
+            gained = self._total_samples - before
+            measured = _sample_rate_from_count(
+                count=gained, duration_s=_QUERY_RATE_DWELL
             )
-        finally:
-            self.release_sensor_stream()
+            self._sample_rate_hz = round(measured, 1) if measured is not None else None
+            self._capturing = False
+            status = self.get_status(0)
+            rate = status["sample_rate_hz"]
+            rate_text = f"{rate:.0f} Hz" if rate is not None else "n/a"
+            if gained:
+                console.info(
+                    f"Sensor {status['smooth_mean']:.1f} Hz "
+                    f"(capture: {status['capture_mean']:.1f} Hz, "
+                    f"{status['capture_count']} samples, sample_rate: {rate_text})"
+                )
+            else:
+                raise gcmd.error(
+                    "No samples gained during query, check sensor connection"
+                )
 
-    def cmd_EDDY_SEEK_RESET(self, gcmd) -> None:
+    def cmd_EDDY_SEEK_RESET(self, gcmd: GCodeCommand) -> None:
+        console = self.refresh_console(gcmd)
         prev_count = self._capture_count
         self.reset_capture()
-        logger.info(
-            "eddy_seek: capture buffer reset (discarded %d samples)",
-            prev_count,
-        )
-        gcmd.respond_info("EDDY_SEEK: capture buffer reset")
+        console.info(f"Capture buffer reset (discarded {prev_count} samples)")
 
-    def cmd_EDDY_SEEK_SET(self, gcmd) -> None:
+    def cmd_EDDY_SEEK_SET(self, gcmd: GCodeCommand) -> None:
+        console = self.refresh_console(gcmd)
         changes = self.seek_config.apply_runtime_set(gcmd)
         if not changes:
-            logger.debug("eddy_seek: EDDY_SEEK_SET query (no changes)")
-            gcmd.respond_info("EDDY_SEEK_SET: " + self.seek_config.format_seek_config())
-            gcmd.respond_info(
-                "EDDY_SEEK_SET: pass STRATEGY=ternary|centroid|sweep_centroid, TOLERANCE=…, etc. to override config values "
-                "(overrides values until restart)"
+            logger.info("eddy_seek: EDDY_SEEK_SET query (no changes)")
+            console.info(self.seek_config.format_seek_config())
+            strategies = "|".join(
+                sorted(
+                    next(
+                        f for f in fields(SeekConfig) if f.name == "strategy"
+                    ).metadata["enum"]
+                )
+            )
+            console.info(
+                f"Pass STRATEGY={strategies}, TOLERANCE=…, etc. "
+                "to override config values (overrides values until restart)"
             )
             return
 
-        logger.debug("eddy_seek: EDDY_SEEK_SET applied: %s", ", ".join(changes))
-        gcmd.respond_info("EDDY_SEEK_SET: " + ", ".join(changes))
+        logger.info(f"eddy_seek: EDDY_SEEK_SET applied: {', '.join(changes)}")
+        console.info(f"Updated {', '.join(changes)}")
 
-    def cmd_EDDY_SEEK_START(self, gcmd) -> None:
-        logger.debug("eddy_seek: EDDY_SEEK_START")
-        SeekSession(self).run(gcmd, strategy_for(self.seek_config.strategy))
+    def cmd_EDDY_SEEK_START(self, gcmd: GCodeCommand) -> None:
+        logger.info("eddy_seek: EDDY_SEEK_START")
+        assert_sensor_z(
+            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
+        )
+        console = self.refresh_console(gcmd)
+        console.entry("Seeking nozzle centre…")
+        write_at = datetime.now()
+        run_id = uuid.uuid4().hex[:8]
+        strategy = strategy_for(self.seek_config.strategy_from_gcmd(gcmd))
+        SeekSession(
+            self,
+            run_id=run_id,
+            run_label="start",
+            artifact_label="start",
+            artifact_write_at=write_at,
+        ).run(gcmd, strategy)
 
-    def cmd_EDDY_SEEK_TOOL(self, gcmd) -> None:
-        tool_number = gcmd.get_int("TOOL", 0, minval=0)
-        logger.debug("eddy_seek: EDDY_SEEK_TOOL tool=%d", tool_number)
-        gcode = self.printer.lookup_object("gcode")
-        gcode.run_script_from_command("SAVE_GCODE_STATE NAME=EDDY_SEEK_TOOL")
+    def cmd_EDDY_SEEK_TOOL(self, gcmd: GCodeCommand) -> None:
+        tool_number = gcmd.get_int("TOOL", -1, minval=0)
+        if tool_number == -1:
+            raise gcmd.error("TOOL=<number> is required for EDDY_SEEK_TOOL")
+        assert_sensor_z(
+            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
+        )
+        repeats = gcmd.get_int("REPEATS", 3, minval=1, maxval=50)
+        load_tool = gcmd.get_int("LOAD", 0, minval=0, maxval=1) == 1
+        strategy = self.seek_config.strategy_from_gcmd(gcmd)
+        logger.info(
+            f"eddy_seek: EDDY_SEEK_TOOL tool={tool_number} repeats={repeats} "
+            f"load={load_tool} strategy={strategy}"
+        )
+        console = self.refresh_console(gcmd)
+        console.entry(f"Aligning tool {tool_number}…")
+        write_at = datetime.now()
+        run_id = uuid.uuid4().hex[:8]
         try:
             tool, tool0_center, error = align_tool_number(
                 self,
@@ -330,97 +369,86 @@ class EddySeek(SeekHost):
                 gcmd,
                 tool_number,
                 self._tool0_center,
-                label="EDDY_SEEK_TOOL",
+                console=console,
+                load_tool=load_tool,
+                run_id=run_id,
+                run_label="tool",
+                artifact_write_at=write_at,
+                repeats=repeats,
+                strategy=strategy,
             )
             if error is not None:
-                gcmd.respond_info(f"EDDY_SEEK_TOOL ERROR: {error}")
+                console.error(f"Tool {tool_number} alignment failed: {error}")
                 return
             if tool0_center is not None:
                 self._tool0_center = tool0_center
             if tool is not None:
                 self._tools.update_tool(tool)
-                self._tools.save_tool(tool)
-                gcmd.respond_info(
-                    "EDDY_SEEK_TOOL: offset staged - run SAVE_CONFIG to persist"
-                )
+                if tool_number != 0:
+                    self._tools.save_tool(tool)
         finally:
-            gcode.run_script_from_command(
-                "RESTORE_GCODE_STATE NAME=EDDY_SEEK_TOOL MOVE=1"
-            )
+            clear_gcode_offset_xy(self.printer)
 
-    def cmd_EDDY_SEEK_TOOLS(self, gcmd) -> None:
+    def cmd_EDDY_SEEK_TOOLS(self, gcmd: GCodeCommand) -> None:
+        assert_sensor_z(
+            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
+        )
+        self.refresh_console(gcmd)
         tool_count = gcmd.get_int("TOOLS", self._tools.tool_count, minval=1)
-        logger.debug("eddy_seek: EDDY_SEEK_TOOLS tools=%d", tool_count)
-        result = align_all_tools(self, self._tools, gcmd, tool_count)
+        repeats = gcmd.get_int("REPEATS", 3, minval=1, maxval=50)
+        logger.info(f"eddy_seek: EDDY_SEEK_TOOLS tools={tool_count} repeats={repeats}")
+        result = align_all_tools(self, self._tools, gcmd, tool_count, repeats=repeats)
         if result.tool0_center is not None:
             self._tool0_center = result.tool0_center
         if result.status == "ok":
             self._tools.save_tools()
-            gcmd.respond_info(
-                "EDDY_SEEK_TOOLS: offsets staged - run SAVE_CONFIG to persist"
-            )
 
-    def cmd_EDDY_SEEK_APPLY_OFFSET(self, gcmd) -> None:
+    def cmd_EDDY_SEEK_APPLY_OFFSET(self, gcmd: GCodeCommand) -> None:
         tool_number = gcmd.get_int("TOOL", 0, minval=0)
-        logger.debug("eddy_seek: EDDY_SEEK_APPLY_OFFSET tool=%d", tool_number)
+        logger.info(f"eddy_seek: EDDY_SEEK_APPLY_OFFSET tool={tool_number}")
+        console = self.refresh_console(gcmd)
         try:
-            tool = apply_tool_offset(self._tools, self.printer, tool_number)
+            tool = self._tools.apply_tool_offset(tool_number)
         except ValueError as exc:
-            raise gcmd.error(f"EDDY_SEEK_APPLY_OFFSET: {exc}") from exc
+            console.warn(str(exc))
+            return
         eff = tool.effective_offset
-        gcmd.respond_info(
-            f"EDDY_SEEK_APPLY_OFFSET: tool {tool_number} "
-            f"X={eff.x:+.4f} mm  Y={eff.y:+.4f} mm"
-        )
-
-    def cmd_EDDY_SEEK_ACCURACY(self, gcmd) -> None:
-        repeats = gcmd.get_int("REPEATS", 3, minval=2, maxval=50)
-        logger.debug("eddy_seek: EDDY_SEEK_ACCURACY repeats=%d", repeats)
-        gcmd.respond_info(
-            f"EDDY_SEEK_ACCURACY: running {repeats} seek repeat(s) "
-            f"from current position"
-        )
-
-        gcode = self.printer.lookup_object("gcode")
-        gcode.run_script_from_command("SAVE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY")
-
-        offsets: list[Position] = []
-        try:
-            for repeat in range(1, repeats + 1):
-                if repeat > 1:
-                    gcode.run_script_from_command(
-                        "RESTORE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY MOVE=1"
-                    )
-
-                gcmd.respond_info(f"EDDY_SEEK_ACCURACY: repeat {repeat}/{repeats}")
-                session = SeekSession(self)
-                result = session.run(gcmd, strategy_for(self.seek_config.strategy))
-
-                if result.status != "ok" or result.offset is None:
-                    gcmd.respond_info(
-                        f"EDDY_SEEK_ACCURACY: repeat {repeat} failed"
-                        + (f" - {result.error_message}" if result.error_message else "")
-                    )
-                    break
-
-                offsets.append(result.offset)
-                gcmd.respond_info(
-                    f"EDDY_SEEK_ACCURACY: repeat {repeat} result "
-                    f"X={result.offset.x:+.4f} mm  Y={result.offset.y:+.4f} mm"
-                )
-
-            if len(offsets) < 2:
-                gcmd.respond_info(
-                    "EDDY_SEEK_ACCURACY: need at least 2 successful repeats "
-                    "for deviation report"
-                )
-                return
-
-            report_accuracy_stats(gcmd, offsets)
-        finally:
-            gcode.run_script_from_command(
-                "RESTORE_GCODE_STATE NAME=EDDY_SEEK_ACCURACY MOVE=1"
+        if tool.manual_offset != Offset.zero():
+            console.info(
+                f"Tool {tool_number} offset applied (manual_adjust + calibrated) - {eff.to_console_str()}"
             )
+        else:
+            console.info(
+                f"Tool {tool_number} offset applied (calibrated) - {eff.to_console_str()}"
+            )
+
+    def cmd_EDDY_SEEK_ACCURACY(self, gcmd: GCodeCommand) -> None:
+        assert_sensor_z(
+            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
+        )
+        repeats = gcmd.get_int("REPEATS", 3, minval=2, maxval=50)
+        mock_enabled = bool(gcmd.get_int("MOCK", 0, minval=0, maxval=1))
+        logger.info(
+            f"eddy_seek: EDDY_SEEK_ACCURACY repeats={repeats} mock={mock_enabled}"
+        )
+        console = self.refresh_console(gcmd)
+        console.entry(f"Running {repeats} seek repeat(s) from current position")
+        run_accuracy_test(
+            self,
+            gcmd,
+            console=console,
+            repeats=repeats,
+            mock_enabled=mock_enabled,
+        )
+
+    def cmd_DEBUG_CONSOLE(self, gcmd: GCodeCommand) -> None:
+        console = self.refresh_console(gcmd)
+        console.entry("Debug console")
+        console.info("This is a test")
+        console.warn("This is a warning")
+        console.error("This is an error")
+        console.detail("This is a detail")
+        console.exit("Debug console complete")
 
 
 def load_config(config: ConfigWrapper):

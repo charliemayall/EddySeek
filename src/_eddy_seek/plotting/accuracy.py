@@ -1,0 +1,380 @@
+"""
+EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D printers running Klipper firmware.
+
+*Copyright (C) 2026 Charlie Mayall*
+
+This file may be distributed under the terms of the GNU GPLv3 license.
+
+Repeatability scatter plot for EDDY_SEEK_ACCURACY.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from ..accuracy_stats import AccuracyStats, compute_accuracy_stats
+from ..common import Offset
+from ._plotly import (
+    THEME_COLORS,
+    apply_axes_theme,
+    go,
+    header_table,
+    make_subplots,
+    marker_outline,
+    multi_panel_layout,
+    plotly_available,
+    xy_session_layout,
+)
+from .primitives import AccuracyRepeatRecord, pass_color
+
+AccuracyRun = tuple[str, list[AccuracyRepeatRecord], list[float] | None]
+
+
+def _equal_axis_range(
+    offsets: list[Offset],
+    *,
+    padding_frac: float = 0.15,
+    min_pad_mm: float = 0.005,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    xs = [offset.x for offset in offsets]
+    ys = [offset.y for offset in offsets]
+    x_lo, x_hi = min(xs), max(xs)
+    y_lo, y_hi = min(ys), max(ys)
+    pad = max(x_hi - x_lo, y_hi - y_lo, min_pad_mm) * padding_frac + min_pad_mm
+    cx = (x_lo + x_hi) / 2
+    cy = (y_lo + y_hi) / 2
+    half = max(x_hi - x_lo, y_hi - y_lo, min_pad_mm) / 2 + pad
+    return (cx - half, cx + half), (cy - half, cy + half)
+
+
+def _add_accuracy_scatter(
+    fig: Any,
+    *,
+    repeats: list[AccuracyRepeatRecord],
+    stats: AccuracyStats,
+    row: int,
+    col: int,
+    show_legend: bool,
+) -> None:
+    if go is None:
+        return
+
+    fig.add_trace(
+        go.Scatter(
+            x=[0.0],
+            y=[0.0],
+            mode="markers",
+            name="session start",
+            legendgroup="session start",
+            showlegend=show_legend,
+            marker={"size": 10, "symbol": "circle-open", "color": THEME_COLORS.muted},
+        ),
+        row=row,
+        col=col,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[stats.mean.x],
+            y=[stats.mean.y],
+            mode="markers",
+            name="mean",
+            legendgroup="mean",
+            showlegend=show_legend,
+            marker={
+                "size": 14,
+                "symbol": "star",
+                "color": THEME_COLORS.text,
+                "line": {"width": 1, "color": marker_outline()},
+            },
+        ),
+        row=row,
+        col=col,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[record.offset.x for record in repeats],
+            y=[record.offset.y for record in repeats],
+            mode="lines+markers",
+            name="repeat order",
+            line={"color": THEME_COLORS.muted, "width": 1, "dash": "dot"},
+            marker={"size": 11, "opacity": 0.0},
+            showlegend=False,
+            hoverinfo="skip",
+        ),
+        row=row,
+        col=col,
+    )
+
+    for record in repeats:
+        color = pass_color(record.repeat_num)
+        hover = (
+            f"repeat {record.repeat_num}<br>"
+            f"x={record.offset.x:+.4f} y={record.offset.y:+.4f} mm"
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[record.offset.x],
+                y=[record.offset.y],
+                mode="markers+text",
+                name=f"repeat {record.repeat_num}",
+                text=[str(record.repeat_num)],
+                textposition="top center",
+                marker={
+                    "size": 13,
+                    "color": color,
+                    "line": {"width": 1, "color": marker_outline()},
+                },
+                hovertemplate=hover + "<extra></extra>",
+                legendgroup=f"repeat {record.repeat_num}",
+                showlegend=False,
+            ),
+            row=row,
+            col=col,
+        )
+
+    x_lo, x_hi = stats.xs_range
+    y_lo, y_hi = stats.ys_range
+    fig.add_shape(
+        type="rect",
+        x0=x_lo,
+        x1=x_hi,
+        y0=y_lo,
+        y1=y_hi,
+        line={"color": THEME_COLORS.muted, "width": 1.5, "dash": "dash"},
+        fillcolor="rgba(148,163,184,0.12)",
+        row=row,
+        col=col,
+    )
+
+
+def write_accuracy_comparison_plot(*, runs: list[AccuracyRun]) -> Any | None:
+    if not plotly_available() or go is None or make_subplots is None:
+        return None
+    if len(runs) < 2:
+        return None
+    if any(len(records) < 2 for _, records, _ in runs):
+        return None
+
+    all_offsets = [record.offset for _, records, _ in runs for record in records]
+    x_range, y_range = _equal_axis_range(all_offsets)
+    x_lo, x_hi = x_range
+    y_lo, y_hi = y_range
+
+    labels = [label for label, _, _ in runs]
+    fig = make_subplots(
+        rows=1,
+        cols=len(runs),
+        shared_xaxes=False,
+        shared_yaxes=False,
+        horizontal_spacing=0.08,
+        subplot_titles=labels,
+    )
+
+    summary_rows: list[dict[str, str]] = []
+    for col, (label, records, durations_s) in enumerate(runs, start=1):
+        offsets = [record.offset for record in records]
+        stats = compute_accuracy_stats(offsets)
+        _add_accuracy_scatter(
+            fig,
+            repeats=records,
+            stats=stats,
+            row=1,
+            col=col,
+            show_legend=col == 1,
+        )
+        fig.update_xaxes(
+            range=[x_lo, x_hi],
+            scaleanchor=f"y{col if col > 1 else ''}",
+            scaleratio=1,
+            title_text="X offset from test start (mm)",
+            row=1,
+            col=col,
+        )
+        fig.update_yaxes(
+            range=[y_lo, y_hi],
+            title_text="Y offset from test start (mm)",
+            row=1,
+            col=col,
+        )
+
+        row: dict[str, str] = {
+            "strategy": label,
+            "repeats": str(len(records)),
+            "stdev": f"({stats.std_x:.4f}, {stats.std_y:.4f})",
+            "max_radial": f"{stats.max_radial:.4f}",
+            "max_pair": f"{stats.max_pair:.4f}",
+            "mean_time": "",
+        }
+        if durations_s:
+            mean_t = sum(durations_s) / len(durations_s)
+            row["mean_time"] = f"{mean_t:.1f}s"
+        summary_rows.append(row)
+
+    columns: list[tuple[str, str]] = [
+        ("strategy", "Strategy"),
+        ("repeats", "Repeats"),
+        ("stdev", "σ (X, Y) mm"),
+        ("max_radial", "Max radial mm"),
+        ("max_pair", "Max pair mm"),
+    ]
+    if any(row["mean_time"] for row in summary_rows):
+        columns.append(("mean_time", "Mean seek time"))
+
+    repeat_counts = [len(records) for _, records, _ in runs]
+    layout = multi_panel_layout(
+        rows=1,
+        cols=len(runs),
+        title=(
+            "EDDY_SEEK_ACCURACY comparison "
+            f"({', '.join(f'{label}: {count}' for label, count in zip(labels, repeat_counts))})"
+        ),
+        tables=[header_table(columns, summary_rows)],
+        final="Shared axis range for visual spread comparison.",
+    )
+    fig.update_layout(**layout)
+    apply_axes_theme(fig)
+    return fig
+
+
+def write_accuracy_plot(*, repeats: list[AccuracyRepeatRecord]) -> Any | None:
+    if not plotly_available() or go is None or len(repeats) < 2:
+        return None
+
+    offsets = [record.offset for record in repeats]
+    stats = compute_accuracy_stats(offsets)
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=[0.0],
+            y=[0.0],
+            mode="markers",
+            name="session start",
+            marker={"size": 10, "symbol": "circle-open", "color": THEME_COLORS.muted},
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[stats.mean.x],
+            y=[stats.mean.y],
+            mode="markers",
+            name="mean",
+            marker={
+                "size": 14,
+                "symbol": "star",
+                "color": THEME_COLORS.text,
+                "line": {"width": 1, "color": marker_outline()},
+            },
+        )
+    )
+
+    repeat_xs = [record.offset.x for record in repeats]
+    repeat_ys = [record.offset.y for record in repeats]
+    fig.add_trace(
+        go.Scatter(
+            x=repeat_xs,
+            y=repeat_ys,
+            mode="lines+markers",
+            name="repeat order",
+            line={"color": THEME_COLORS.muted, "width": 1, "dash": "dot"},
+            marker={"size": 11, "opacity": 0.0},
+            showlegend=False,
+            hoverinfo="skip",
+        )
+    )
+
+    for record in repeats:
+        color = pass_color(record.repeat_num)
+        hover = (
+            f"repeat {record.repeat_num}<br>"
+            f"x={record.offset.x:+.4f} y={record.offset.y:+.4f} mm"
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[record.offset.x],
+                y=[record.offset.y],
+                mode="markers+text",
+                name=f"repeat {record.repeat_num}",
+                text=[str(record.repeat_num)],
+                textposition="top center",
+                marker={
+                    "size": 13,
+                    "color": color,
+                    "line": {"width": 1, "color": marker_outline()},
+                },
+                hovertemplate=hover + "<extra></extra>",
+                legendgroup=f"repeat {record.repeat_num}",
+            )
+        )
+
+    repeat_rows: list[dict[str, str]] = []
+    for record, radial in zip(repeats, stats.radial):
+        repeat_rows.append(
+            {
+                "repeat": str(record.repeat_num),
+                "offset": f"({record.offset.x:+.4f}, {record.offset.y:+.4f})",
+                "radial": f"{radial:.4f}",
+                "plot": (
+                    Path(record.session_plot_path).name
+                    if record.session_plot_path
+                    else ""
+                ),
+            }
+        )
+
+    x_lo, x_hi = stats.xs_range
+    y_lo, y_hi = stats.ys_range
+    x_span = x_hi - x_lo
+    y_span = y_hi - y_lo
+    fig.add_shape(
+        type="rect",
+        x0=x_lo,
+        x1=x_hi,
+        y0=y_lo,
+        y1=y_hi,
+        line={"color": THEME_COLORS.muted, "width": 1.5, "dash": "dash"},
+        fillcolor="rgba(148,163,184,0.12)",
+    )
+    layout = xy_session_layout(
+        f"EDDY_SEEK_ACCURACY ({len(repeats)} repeats)",
+        columns=[
+            ("repeat", "Repeat"),
+            ("offset", "Offset (mm)"),
+            ("radial", "Radial (mm)"),
+            ("plot", "Session plot"),
+        ],
+        rows=repeat_rows,
+        final=(
+            f"Mean: ({stats.mean.x:+.4f}, {stats.mean.y:+.4f}) mm  "
+            f"stdev: ({stats.std_x:.4f}, {stats.std_y:.4f}) mm  "
+            f"max radial={stats.max_radial:.4f} mm  "
+            f"max pair={stats.max_pair:.4f} mm"
+        ),
+    )
+    layout["annotations"] = [
+        {
+            "x": (x_lo + x_hi) / 2,
+            "y": y_lo,
+            "text": f"ΔX = {x_span:.4f} mm",
+            "showarrow": False,
+            "yshift": -18,
+            "font": {"size": 9, "color": THEME_COLORS.muted},
+        },
+        {
+            "x": x_lo,
+            "y": (y_lo + y_hi) / 2,
+            "text": f"ΔY = {y_span:.4f} mm",
+            "showarrow": False,
+            "xshift": -52,
+            "textangle": -90,
+            "font": {"size": 9, "color": THEME_COLORS.muted},
+        },
+    ]
+    fig.update_layout(
+        xaxis_title="X offset from test start (mm)",
+        yaxis_title="Y offset from test start (mm)",
+        **layout,
+    )
+    apply_axes_theme(fig)
+    return fig
