@@ -59,7 +59,7 @@ class MaxPassesError(SeekExitError):
 
 
 class DivergenceError(SeekExitError):
-    """Pass corrections diverging — later step grew vs prior step."""
+    """Pass corrections diverging - later step grew vs prior step."""
 
     def __init__(
         self,

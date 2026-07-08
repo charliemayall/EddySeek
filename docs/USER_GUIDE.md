@@ -60,7 +60,7 @@ i2c_mcu: mcu
 i2c_bus: i2c1
 sensor_x: 150.0   # machine XY of coil - rough is fine
 sensor_y: 150.0
-sensor_z: 5.0     # optional — seek commands error if machine Z is outside [sensor_z, sensor_z + 0.25] mm
+sensor_z: 5.0     # optional - seek commands error if machine Z is outside [sensor_z, sensor_z + 0.25] mm
 ```
 
 Optional LDC1612 tuning keys (`frequency`, `max_sensor_hz`, `reg_drive_current`, …) can live here too.
@@ -186,7 +186,7 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 - Set `sensor_x`/`sensor_y` near the coil; tool 0 jogs there automatically.
 - The seek refines within `max_jog` - You will get a warning and suggested change if your sensor position is borderline wrong.
-- **Z is not changed** — park at `sensor_z` before running alignment commands. EddySeek errors if machine Z is outside `[sensor_z, sensor_z + 0.25]` mm.
+- **Z is not changed** - park at `sensor_z` before running alignment commands. EddySeek errors if machine Z is outside `[sensor_z, sensor_z + 0.25]` mm.
 
 **One tool:** load each tool, then `EDDY_SEEK_TOOL TOOL=n`. Run `SAVE_CONFIG` after each.
 
@@ -219,7 +219,7 @@ Continuous axis sweeps (like Klipper's bed mesh `rapid_scan` method). Coarse bid
 
 ### Centroid (`strategy: centroid`)
 
-3×3 grid around the current best point with `dwell_time` at each probe. Grid spacing is `max_jog_x/y / 2`, halving each pass. Very slow — backup strategy when sweep centroid sample rate is too low.
+3×3 grid around the current best point with `dwell_time` at each probe. Grid spacing is `max_jog_x/y / 2`, halving each pass. Very slow - backup strategy when sweep centroid sample rate is too low.
 
 ### Debug scan (`strategy: debug_scan`)
 
