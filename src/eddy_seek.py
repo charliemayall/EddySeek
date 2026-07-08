@@ -18,17 +18,17 @@ from dataclasses import fields
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from _eddy_seek.accuracy_test import run_accuracy_test
-from _eddy_seek.common import Offset, Position
-from _eddy_seek.config import SeekConfig, load_seek_config
-from _eddy_seek.kconsole import KConsole
-from _eddy_seek.movement.guard import clear_gcode_offset_xy
-from _eddy_seek.movement.handler import MIN_CAPTURE_SAMPLES
-from _eddy_seek.sensor_z import assert_sensor_z
-from _eddy_seek.session import SeekHost, SeekSession
-from _eddy_seek.strategy import strategy_for
-from _eddy_seek.tool_align import align_all_tools, align_tool_number
-from _eddy_seek.tools import ToolAlignConfig
+from ._eddy_seek.accuracy_test import run_accuracy_test
+from ._eddy_seek.common import Offset, Position
+from ._eddy_seek.config import SeekConfig, load_seek_config
+from ._eddy_seek.kconsole import KConsole
+from ._eddy_seek.movement.guard import clear_gcode_offset_xy
+from ._eddy_seek.movement.handler import MIN_CAPTURE_SAMPLES
+from ._eddy_seek.sensor_z import assert_sensor_z
+from ._eddy_seek.session import SeekHost, SeekSession
+from ._eddy_seek.strategy import strategy_for
+from ._eddy_seek.tool_align import align_all_tools, align_tool_number
+from ._eddy_seek.tools import ToolAlignConfig
 
 if TYPE_CHECKING:
     from klippy.extras.configfile import ConfigWrapper

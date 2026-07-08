@@ -15,9 +15,8 @@ from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from typing import Any, ClassVar, TypeAlias
 
-from ..common import Offset
+from ..common import Axis, Offset
 from ..movement.handler import MotionSample
-from ..movement.sweep import SweepGridTraceRecord, SweepTraceRecord
 
 PASS_COLORS = (
     "#636EFA",
@@ -91,6 +90,13 @@ class XYCloud:
 
 
 @dataclass(frozen=True, slots=True)
+class AxisSpan:
+    axis: Axis
+    lo: float
+    hi: float
+
+
+@dataclass(frozen=True, slots=True)
 class _Record:
     _KIND: ClassVar[str] = ""
 
@@ -136,6 +142,30 @@ class PlotArtifactRecord(_Record):
     strategy: str
     passes: int
     path: str
+
+
+@dataclass(frozen=True, slots=True)
+class SweepTraceRecord(_Record):
+    _KIND = "sweep"
+
+    pass_num: int
+    phase: str
+    span: AxisSpan
+    cross_offsets: tuple[float, ...]
+    cross_center: float
+    profile: tuple[tuple[float, float], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SweepGridTraceRecord(_Record):
+    _KIND = "sweep_grid"
+
+    center: Offset
+    bounds: Bounds
+    step_size: float
+    rows: int
+    legs: int
+    sample_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,7 +252,7 @@ def _json_value(value: Any) -> Any:
     return value
 
 
-def _record_to_dict(record: Any) -> dict[str, Any]:
+def _record_to_dict(record: _Record) -> dict[str, Any]:
     out = _json_value(asdict(record))
     if record._KIND:
         out["type"] = record._KIND

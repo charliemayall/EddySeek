@@ -134,12 +134,10 @@ def test_disconnect_stops_sensor_stream(eddy_seek_mod):
 
 
 def test_sample_rate_from_count(eddy_seek_mod):
-    from eddy_seek import (
-        _sample_rate_from_count,
-    )
-
-    assert _sample_rate_from_count(count=0, duration_s=0.2) is None
-    assert _sample_rate_from_count(count=80, duration_s=0.2) == pytest.approx(400.0)
+    assert eddy_seek_mod._sample_rate_from_count(count=0, duration_s=0.2) is None
+    assert eddy_seek_mod._sample_rate_from_count(
+        count=80, duration_s=0.2
+    ) == pytest.approx(400.0)
 
 
 def test_handle_batch_capture_only_when_capturing(eddy_seek_mod):

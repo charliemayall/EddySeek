@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from _eddy_seek.kconsole import ConsoleSymbols
+from .kconsole import ConsoleSymbols
 
 if TYPE_CHECKING:
     from klippy.toolhead import ToolHead
