@@ -4,6 +4,15 @@ EddySeek is a Klipper extra for **nozzle alignment on toolchanger printers** usi
 LDC1612 eddy-current sensor. It reads live coil frequency, runs XY search routines,
 and measures per-tool offsets relative to a reference nozzle.
 
+## Does it work?
+
+Using `EDDY_SEEK_ACCURACY MOCK=1 REPEATS=250`
+
+- Average duration **~7.3 s** per repeat
+- Mean difference between result and reference center - X=+0.01 Y=+0.01 mm
+- σ X=0.021 Y=0.014 mm
+- max scatter 0.047mm
+
 ---
 
 ## What you need
