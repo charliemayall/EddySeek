@@ -96,7 +96,7 @@ def _stream_host(eddy_seek_mod):
 
 def test_load_sensor_requires_ldc1612(eddy_seek_mod):
     with raises(ValueError, match="sensor_type"):
-        eddy_seek_mod.EddySeek._load_ldc1612(_FakeConfig("bogus"))  # type: ignore[arg-type]
+        eddy_seek_mod.EddySeek._load_ldc1612(_FakeConfig("bogus"))
 
 
 def test_sensor_stream_only_while_referenced(eddy_seek_mod):
@@ -133,9 +133,9 @@ def test_disconnect_stops_sensor_stream(eddy_seek_mod):
     assert not host._capturing
 
 
-def test_sample_rate_from_count():
-    from extras.eddy_seek import (
-        _sample_rate_from_count,  # pyright: ignore[reportMissingImports]
+def test_sample_rate_from_count(eddy_seek_mod):
+    from eddy_seek import (
+        _sample_rate_from_count,
     )
 
     assert _sample_rate_from_count(count=0, duration_s=0.2) is None

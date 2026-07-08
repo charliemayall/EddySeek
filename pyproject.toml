@@ -19,30 +19,28 @@ build-backend = "uv_build"
 module-root = "src"
 module-name = "_eddy_seek"
 
-[tool.pyright]
+[tool.ty.environment]
+extra-paths = ["typings", "src"]
+python-version = "3.10"
+
+[tool.ty.src]
 include = ["src", "tests"]
-stubPath = "typings"
-venvPath = "."
-venv = ".venv"
-extraPaths = ["src"]
-pythonVersion = "3.10"
-reportMissingTypeStubs = "information"
-reportMissingModuleSource = "none"
 
-[[tool.pyright.executionEnvironments]]
-root = "src"
-extraPaths = ["typings"]
+[tool.ty.analysis]
+allowed-unresolved-imports = ["klippy.**", "kaleido"]
 
-[[tool.pyright.executionEnvironments]]
-root = "tests"
-extraPaths = ["src", "typings"]
+[[tool.ty.overrides]]
+include = ["src/eddy_seek.py"]
+
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"
 
 [dependency-groups]
 dev = [
     "plotly>=6.8.0",
-    "pyright>=1.1.411",
     "pytest>=9.1.1",
     "ruff>=0.15.20",
+    "ty>=0.0.56",
     "vulture>=2.16",
 ]
 

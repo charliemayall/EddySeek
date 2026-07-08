@@ -5,10 +5,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-
-Shared Klipper test doubles for EddySeek tests.
-
-Behold, a circus of pyright hoop jumpings
+Fake it till you make it
 """
 
 from __future__ import annotations
@@ -281,4 +278,4 @@ def ok_seek_result(
         "error_message": None,
     }
     defaults.update(kwargs)
-    return SeekSessionResult(**defaults)  # pyright: ignore[reportArgumentType]
+    return SeekSessionResult(**defaults)  # ty: ignore[invalid-argument-type]

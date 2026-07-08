@@ -16,7 +16,7 @@ from _eddy_seek.kconsole import KConsole
 
 def test_console_prefix_mapping():
     gcmd = FakeGcmd()
-    console = KConsole(gcmd, SeekConfig())  # pyright: ignore[reportArgumentType]
+    console = KConsole(gcmd, SeekConfig())
 
     console.info("Pass 1: X=+0.12 Y=-0.06 mm")
     console.entry("Seeking nozzle centre (sweep_centroid)…")
@@ -33,12 +33,12 @@ def test_console_prefix_mapping():
 
 def test_console_detail_gated_on_verbose():
     gcmd = FakeGcmd()
-    quiet = KConsole(gcmd, SeekConfig(), verbose=False)  # pyright: ignore[reportArgumentType]
+    quiet = KConsole(gcmd, SeekConfig(), verbose=False)
     quiet.detail("internal config dump")
     assert gcmd.raw == []
 
     gcmd.raw.clear()
-    loud = KConsole(gcmd, SeekConfig(), verbose=True)  # pyright: ignore[reportArgumentType]
+    loud = KConsole(gcmd, SeekConfig(), verbose=True)
     loud.detail("internal config dump")
     assert gcmd.raw == ["echo: internal config dump"]
 
@@ -47,7 +47,7 @@ def test_console_for_verbose_gcode_param():
     gcmd = FakeGcmd(VERBOSE="1")
     console = KConsole(
         gcmd,
-        SeekConfig(),  # pyright: ignore[reportArgumentType]
+        SeekConfig(),
     )
     assert console.verbose is True
 
@@ -56,14 +56,14 @@ def test_console_for_verbose_from_config():
     gcmd = FakeGcmd()
     console = KConsole(
         gcmd,
-        SeekConfig(debug=True),  # pyright: ignore[reportArgumentType]
+        SeekConfig(debug=True),
     )
     assert console.verbose is True
 
 
 def test_console_plot_saved():
     gcmd = FakeGcmd()
-    console = KConsole(gcmd, SeekConfig())  # pyright: ignore[reportArgumentType]
+    console = KConsole(gcmd, SeekConfig())
     plot_path = Path("/tmp/eddy_seek_results") / PLOT_HTML_SUFFIX
     console.plot_saved(plot_path)
     assert gcmd.raw == [f"echo: 📊 Plot saved: {plot_path}"]
@@ -71,7 +71,7 @@ def test_console_plot_saved():
 
 def test_console_warn_plot_missing():
     gcmd = FakeGcmd()
-    console = KConsole(gcmd, SeekConfig())  # pyright: ignore[reportArgumentType]
+    console = KConsole(gcmd, SeekConfig())
     console.warn_plot_missing()
     assert len(gcmd.raw) == 1
     assert gcmd.raw[0].startswith("echo: ")
@@ -85,7 +85,7 @@ def test_console_stored_on_host():
             self.console: KConsole | None = None
 
         def refresh_console(self, gcmd) -> KConsole:
-            self.console = KConsole(gcmd, self.seek_config)  # pyright: ignore[reportArgumentType]
+            self.console = KConsole(gcmd, self.seek_config)
             return self.console
 
     host = _Host()

@@ -81,7 +81,7 @@ def _known_state_printer() -> FakePrinter:
 
 def test_clear_gcode_offset_xy_zeros_xy():
     printer = FakePrinter(gcode=FakeGcode())
-    clear_gcode_offset_xy(printer)  # pyright: ignore[reportArgumentType]
+    clear_gcode_offset_xy(printer)
     assert printer.gcode.scripts == ["SET_GCODE_OFFSET X=0.0 Y=0.0"]
 
 
@@ -89,7 +89,7 @@ def test_known_kinematic_limits_does_not_touch_gcode_offset():
     gcode = FakeGcode()
     printer = FakePrinter(gcode=gcode, toolhead=_FakeToolhead())
 
-    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
+    with KnownKinematicLimits(printer):
         pass
 
     assert gcode.scripts == []
@@ -110,7 +110,7 @@ def test_known_kinematic_limits_scv(initial_scv, expected_inside, expected_outsi
     toolhead.square_corner_velocity = initial_scv
     toolhead.min_cruise_ratio = 0.5
 
-    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
+    with KnownKinematicLimits(printer):
         assert toolhead.square_corner_velocity == expected_inside
         assert toolhead.min_cruise_ratio == 0.5
         if initial_scv > MAX_SCV:
@@ -135,7 +135,7 @@ def test_known_kinematic_limits_accel(initial_accel, expected_inside, expected_o
     toolhead = printer.lookup_object("toolhead")
     toolhead.max_accel = initial_accel
 
-    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
+    with KnownKinematicLimits(printer):
         assert toolhead.max_accel == expected_inside
 
     assert toolhead.max_accel == expected_outside
@@ -161,7 +161,7 @@ def test_known_kinematic_limits_legacy_toolhead_caps_and_restores():
     toolhead.square_corner_velocity = 15.0
     toolhead.max_accel = 5000.0
 
-    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
+    with KnownKinematicLimits(printer):
         assert toolhead.square_corner_velocity == MAX_SCV
         assert toolhead.max_accel == MAX_ACCEL
         assert _LegacyFakeToolhead.calc_calls == 1
@@ -176,7 +176,7 @@ def test_known_kinematic_limits_disables_and_enables_input_shaper():
     _FakeInputShaper.enable_calls = 0
     printer = _known_state_printer()
 
-    with KnownKinematicLimits(printer):  # pyright: ignore[reportArgumentType]
+    with KnownKinematicLimits(printer):
         assert _FakeInputShaper.disable_calls == 1
         assert _FakeInputShaper.enable_calls == 0
 

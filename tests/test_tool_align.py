@@ -141,10 +141,10 @@ class _FakeSeekHost:
 
 def test_move_to_seek_start_pos_moves_to_sensor_position():
     toolhead = RecordingToolhead(start=(1.0, 2.0))
-    host = _FakeSeekHost(FakePrinter(toolhead=toolhead))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=toolhead))
     start = move_to_seek_start_pos(
-        host,  # type: ignore[arg-type]
-        _SensorTools(Position(10.0, 20.0)),  # type: ignore[arg-type]
+        host,  # ty: ignore[invalid-argument-type]
+        _SensorTools(Position(10.0, 20.0)),  # ty: ignore[invalid-argument-type]
     )
     assert start == Position(10.0, 20.0)
     assert toolhead.moves == [[10.0, 20.0]]
@@ -215,14 +215,14 @@ class _LoadMacroTools:
 
 def test_align_tool_number_load_macro_only_when_requested():
     tools = _LoadMacroTools()
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
     center = Position(10.0, 20.0)
     ok = ok_seek_result()
 
     with patch("_eddy_seek.tool_align.align_tool", return_value=ok):
         align_tool_number(
-            host,  # type: ignore[arg-type]
-            tools,  # type: ignore[arg-type]
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
             FakeGcmd(),
             1,
             center,
@@ -232,8 +232,8 @@ def test_align_tool_number_load_macro_only_when_requested():
         assert tools.load_calls == []
 
         align_tool_number(
-            host,  # type: ignore[arg-type]
-            tools,  # type: ignore[arg-type]
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
             FakeGcmd(),
             1,
             center,
@@ -245,11 +245,11 @@ def test_align_tool_number_load_macro_only_when_requested():
 
 def test_align_tool_number_requires_tool0_after_restart():
     tools = _LoadMacroTools()
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
 
     _, _, error = align_tool_number(
-        host,  # type: ignore[arg-type]
-        tools,  # type: ignore[arg-type]
+        host,  # ty: ignore[invalid-argument-type]
+        tools,  # ty: ignore[invalid-argument-type]
         FakeGcmd(),
         1,
         None,
@@ -263,7 +263,7 @@ def test_align_tool_number_requires_tool0_after_restart():
 
 def test_align_tool_number_passes_strategy_override():
     tools = _LoadMacroTools()
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
     center = Position(10.0, 20.0)
     ok = ok_seek_result()
     seen: list[str] = []
@@ -274,8 +274,8 @@ def test_align_tool_number_passes_strategy_override():
 
     with patch("_eddy_seek.tool_align.align_tool", side_effect=capture_strategy):
         align_tool_number(
-            host,  # type: ignore[arg-type]
-            tools,  # type: ignore[arg-type]
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
             FakeGcmd(),
             1,
             center,
@@ -288,7 +288,7 @@ def test_align_tool_number_passes_strategy_override():
 
 def test_align_all_tools_milestone_console_messages():
     tools = _LoadMacroTools()
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
     gcmd = FakeGcmd()
     ok = ok_seek_result()
 
@@ -299,7 +299,7 @@ def test_align_all_tools_milestone_console_messages():
         ),
         patch("_eddy_seek.tool_align.align_tool", return_value=ok),
     ):
-        result = align_all_tools(host, tools, gcmd, tool_count=2)  # type: ignore[arg-type]
+        result = align_all_tools(host, tools, gcmd, tool_count=2)  # ty: ignore[invalid-argument-type]
 
     assert result.status == "ok"
     assert gcmd.raw == [
@@ -313,7 +313,7 @@ def test_align_all_tools_milestone_console_messages():
 
 def test_align_all_tools_shares_artifact_run_context():
     tools = _LoadMacroTools()
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
     gcmd = FakeGcmd()
     ok = ok_seek_result()
     captured: list[dict] = []
@@ -329,7 +329,7 @@ def test_align_all_tools_shares_artifact_run_context():
         ),
         patch("_eddy_seek.tool_align.align_tool", side_effect=capture_align_tool),
     ):
-        result = align_all_tools(host, tools, gcmd, tool_count=2)  # type: ignore[arg-type]
+        result = align_all_tools(host, tools, gcmd, tool_count=2)  # ty: ignore[invalid-argument-type]
 
     assert result.status == "ok"
     assert len(captured) == 2
@@ -342,7 +342,7 @@ def test_align_all_tools_shares_artifact_run_context():
 def test_align_all_tools_clears_gcode_offset_on_exit():
     tools = _LoadMacroTools()
     printer = FakePrinter(toolhead=RecordingToolhead())
-    host = _FakeSeekHost(printer)  # type: ignore[arg-type]
+    host = _FakeSeekHost(printer)
     gcmd = FakeGcmd()
     ok = ok_seek_result()
 
@@ -353,7 +353,7 @@ def test_align_all_tools_clears_gcode_offset_on_exit():
         ),
         patch("_eddy_seek.tool_align.align_tool", return_value=ok),
     ):
-        align_all_tools(host, tools, gcmd, tool_count=1)  # type: ignore[arg-type]
+        align_all_tools(host, tools, gcmd, tool_count=1)  # ty: ignore[invalid-argument-type]
 
     _assert_set_gcode_offset(printer.gcode.scripts[-1], x=0.0, y=0.0)
 
@@ -361,13 +361,13 @@ def test_align_all_tools_clears_gcode_offset_on_exit():
 def test_align_tool_number_clears_gcode_offset_after_load():
     tools = _LoadMacroTools()
     printer = FakePrinter(toolhead=RecordingToolhead())
-    host = _FakeSeekHost(printer)  # type: ignore[arg-type]
+    host = _FakeSeekHost(printer)
     center = Position(10.0, 20.0)
 
     with patch("_eddy_seek.tool_align.align_tool", return_value=ok_seek_result()):
         align_tool_number(
-            host,  # type: ignore[arg-type]
-            tools,  # type: ignore[arg-type]
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
             FakeGcmd(),
             1,
             center,
@@ -379,7 +379,7 @@ def test_align_tool_number_clears_gcode_offset_after_load():
 
 def test_align_tool0_warns_when_seek_offset_exceeds_sensor_threshold():
     tools = _SensorTools(Position(150.0, 150.0))
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
     gcmd = FakeGcmd()
     large_offset = Offset(1.5, 0.0)
     assert (
@@ -391,8 +391,8 @@ def test_align_tool0_warns_when_seek_offset_exceeds_sensor_threshold():
         return_value=ok_seek_result(offset=large_offset),
     ):
         tool, center, error = align_tool_number(
-            host,  # type: ignore[arg-type]
-            tools,  # type: ignore[arg-type]
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
             gcmd,
             0,
             None,
@@ -408,7 +408,7 @@ def test_align_tool0_warns_when_seek_offset_exceeds_sensor_threshold():
 def test_align_tool0_warns_for_reported_centre_vs_sensor_position():
     """Regression: ~1 mm Y miss (150,150 -> 150.44, 149.04) must warn."""
     tools = _SensorTools(Position(150.0, 150.0))
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
     gcmd = FakeGcmd()
     offset = Offset(0.4356, -0.9580)
 
@@ -417,8 +417,8 @@ def test_align_tool0_warns_for_reported_centre_vs_sensor_position():
         return_value=ok_seek_result(offset=offset),
     ):
         _, center, error = align_tool_number(
-            host,  # type: ignore[arg-type]
-            tools,  # type: ignore[arg-type]
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
             gcmd,
             0,
             None,
@@ -465,7 +465,7 @@ def test_align_tool_number_averages_repeats(
     check_stats,
 ):
     tools_obj = tools() if callable(tools) else tools
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
     gcmd = FakeGcmd()
     seek_results = [ok_seek_result(offset=offset) for offset in offsets]
     stats_called = False
@@ -497,8 +497,8 @@ def test_align_tool_number_averages_repeats(
             patch("_eddy_seek.tool_align.align_tool", side_effect=seek_results)
         )
         tool, got_center, error = align_tool_number(
-            host,  # type: ignore[arg-type]
-            tools_obj,  # type: ignore[arg-type]
+            host,  # ty: ignore[invalid-argument-type]
+            tools_obj,
             gcmd,
             tool_number,
             center,
@@ -521,7 +521,7 @@ def test_align_tool_number_averages_repeats(
 
 def test_align_tool_number_fails_on_repeat_failure():
     tools = _SensorTools(Position(150.0, 150.0))
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
     gcmd = FakeGcmd()
     results = [
         ok_seek_result(offset=Offset(0.1, 0.0)),
@@ -536,8 +536,8 @@ def test_align_tool_number_fails_on_repeat_failure():
         patch("_eddy_seek.tool_align.align_tool", side_effect=results),
     ):
         tool, center, error = align_tool_number(
-            host,  # type: ignore[arg-type]
-            tools,  # type: ignore[arg-type]
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
             gcmd,
             0,
             None,
@@ -554,7 +554,7 @@ def test_align_tool_number_fails_on_repeat_failure():
 
 def test_align_tool0_no_sensor_warning_when_offset_within_threshold():
     tools = _SensorTools(Position(150.0, 150.0))
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
     gcmd = FakeGcmd()
     small_offset = Offset(0.5, 0.3)
     assert (
@@ -566,8 +566,8 @@ def test_align_tool0_no_sensor_warning_when_offset_within_threshold():
         return_value=ok_seek_result(offset=small_offset),
     ):
         _, _, error = align_tool_number(
-            host,  # type: ignore[arg-type]
-            tools,  # type: ignore[arg-type]
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
             gcmd,
             0,
             None,

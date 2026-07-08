@@ -81,7 +81,7 @@ def test_move_to_absolute():
 def test_manual_move_xy_rejects_offset():
     _printer, toolhead = fake_motion_printer()
     with raises(TypeError, match=r"attempted to move to a relative position\."):
-        manual_move_xy(toolhead, Offset(1.0, 2.0), 50.0)  # type: ignore[arg-type]
+        manual_move_xy(toolhead, Offset(1.0, 2.0), 50.0)  # ty: ignore[invalid-argument-type]
     toolhead.manual_move.assert_not_called()
 
 

@@ -50,7 +50,7 @@ def test_write_seek_trace(tmp_path):
     ]
 
     write_at = datetime(2026, 7, 2, 14, 30)
-    path = _write_seek_trace(host, result, probes, write_at=write_at)  # pyright: ignore[reportArgumentType]
+    path = _write_seek_trace(host, result, probes, write_at=write_at)  # ty: ignore[invalid-argument-type]
 
     assert path is not None
     assert Path(path).is_file()
@@ -59,7 +59,7 @@ def test_write_seek_trace(tmp_path):
     assert payload["metadata"]["config"]["seek"]["strategy"] == "sweep_centroid"
     assert payload["metadata"]["config"]["seek"]["save_session_trace"] is True
     assert payload["probes"][0]["samples_hz"] == [12340.0, 12350.0, 12346.0]
-    assert _write_seek_trace(host, result, probes, write_at=write_at) == path  # pyright: ignore[reportArgumentType]
+    assert _write_seek_trace(host, result, probes, write_at=write_at) == path  # ty: ignore[invalid-argument-type]
 
 
 def test_write_seek_trace_labeled_filename(tmp_path):
@@ -76,7 +76,7 @@ def test_write_seek_trace_labeled_filename(tmp_path):
     )
     write_at = datetime(2026, 7, 2, 14, 30)
     path = _write_seek_trace(
-        host,  # pyright: ignore[reportArgumentType]
+        host,  # ty: ignore[invalid-argument-type]
         result,
         [],
         run_label="tools",

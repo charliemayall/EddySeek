@@ -22,8 +22,8 @@ try:
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
 except (ImportError, ModuleNotFoundError):
-    go = None  # pyright: ignore[assignment,misc]
-    make_subplots = None  # pyright: ignore[assignment,misc]
+    go = None  # ty: ignore[invalid-assignment]
+    make_subplots = None  # ty: ignore[invalid-assignment]
 
 
 COLORSCALE = "sunsetdark"

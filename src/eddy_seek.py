@@ -18,32 +18,28 @@ from dataclasses import fields
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from ._eddy_seek.accuracy_test import run_accuracy_test
-from ._eddy_seek.common import Offset, Position
-from ._eddy_seek.config import SeekConfig, load_seek_config
-from ._eddy_seek.kconsole import KConsole
-from ._eddy_seek.movement.guard import clear_gcode_offset_xy
-from ._eddy_seek.movement.handler import MIN_CAPTURE_SAMPLES
-from ._eddy_seek.sensor_z import assert_sensor_z
-from ._eddy_seek.session import SeekHost, SeekSession
-from ._eddy_seek.strategy import strategy_for
-from ._eddy_seek.tool_align import align_all_tools, align_tool_number
-from ._eddy_seek.tools import ToolAlignConfig
+from _eddy_seek.accuracy_test import run_accuracy_test
+from _eddy_seek.common import Offset, Position
+from _eddy_seek.config import SeekConfig, load_seek_config
+from _eddy_seek.kconsole import KConsole
+from _eddy_seek.movement.guard import clear_gcode_offset_xy
+from _eddy_seek.movement.handler import MIN_CAPTURE_SAMPLES
+from _eddy_seek.sensor_z import assert_sensor_z
+from _eddy_seek.session import SeekHost, SeekSession
+from _eddy_seek.strategy import strategy_for
+from _eddy_seek.tool_align import align_all_tools, align_tool_number
+from _eddy_seek.tools import ToolAlignConfig
 
 if TYPE_CHECKING:
-    from klippy.extras.configfile import (  # pyright: ignore[reportMissingModuleSource]
-        ConfigWrapper,
-    )
-    from klippy.extras.ldc1612 import (  # pyright: ignore[reportMissingModuleSource]
-        LDC1612,
-    )
-    from klippy.gcode import GCodeCommand  # pyright: ignore[reportMissingModuleSource]
+    from klippy.extras.configfile import ConfigWrapper
+    from klippy.extras.ldc1612 import LDC1612
+    from klippy.gcode import GCodeCommand
 
+_LDC1612: Any
 try:
-    from .ldc1612 import LDC1612  # pyright: ignore[reportMissingImports]
+    from .ldc1612 import LDC1612 as _LDC1612
 except (ModuleNotFoundError, ImportError):
-    # Not on host machine, use mock class
-    LDC1612 = None  # pyright: ignore[assignment,misc]
+    _LDC1612 = None
 
 logger = logging.getLogger(__name__)
 
@@ -193,13 +189,15 @@ class EddySeek(SeekHost):
     @staticmethod
     def _load_ldc1612(
         config: ConfigWrapper,
-    ) -> LDC1612:  # pyright: ignore[reportInvalidTypeForm]
+    ) -> LDC1612:
         sensor_type = config.get("sensor_type", "").strip().lower()
         if sensor_type != "ldc1612":
             raise config.error(
                 f"eddy_seek: sensor_type must be 'ldc1612' (got {sensor_type!r})"
             )
-        return LDC1612(config)  # pyright: ignore[reportOptionalCall]
+        if _LDC1612 is None:
+            raise config.error("eddy_seek: ldc1612 module is not available")
+        return _LDC1612(config)
 
     def _handle_batch(self, msg: dict) -> bool:
         if self._stream_refs <= 0:  # No one is listening, don't process msg

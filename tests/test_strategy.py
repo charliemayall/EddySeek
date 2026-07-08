@@ -57,7 +57,7 @@ class _RecordingSearchSession:
 
 def test_strategy_search_uses_positions():
     session = _RecordingSearchSession()
-    best, passes_run = CentroidStrategy().search(session, _FakeReporter())  # type: ignore[arg-type]
+    best, passes_run = CentroidStrategy().search(session, _FakeReporter())  # ty: ignore[invalid-argument-type]
 
     assert isinstance(best, Offset)
     assert passes_run >= 1
@@ -164,7 +164,7 @@ class _ScriptedStrategy(SeekStrategy):
     def name(self) -> str:
         return "scripted"
 
-    def announce_start(  # pyright: ignore[reportIncompatibleMethodOverride]
+    def announce_start(  # ty: ignore[invalid-method-override]
         self, ctx: SeekSession, console: _FakeReporter
     ) -> None:
         return None
@@ -202,7 +202,7 @@ def test_search_aborts_on_pass_divergence():
         ]
     )
     with raises(DivergenceError, match="pass corrections diverging at pass 2"):
-        strategy.search(session, _FakeReporter())  # type: ignore[arg-type]
+        strategy.search(session, _FakeReporter())  # ty: ignore[invalid-argument-type]
 
 
 def test_search_raises_when_max_passes_exhausted_without_convergence():
@@ -215,7 +215,7 @@ def test_search_raises_when_max_passes_exhausted_without_convergence():
         ]
     )
     with raises(MaxPassesError) as exc_info:
-        strategy.search(session, _FakeReporter())  # type: ignore[arg-type]
+        strategy.search(session, _FakeReporter())  # ty: ignore[invalid-argument-type]
     err = exc_info.value
     assert err.strategy == "scripted"
     assert err.max_passes == 2

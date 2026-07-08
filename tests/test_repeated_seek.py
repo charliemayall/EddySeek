@@ -50,7 +50,7 @@ def test_run_repeated_seeks_physically_returns_between_repeats():
         side_effect=capture_move,
     ):
         result = run_repeated_seeks(
-            host,  # type: ignore[arg-type]
+            host,  # ty: ignore[invalid-argument-type]
             console=console,
             repeats=3,
             gcode_state_name="_test_repeat",

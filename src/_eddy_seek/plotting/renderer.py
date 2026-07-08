@@ -26,6 +26,7 @@ from ._plotly import (
 from .primitives import (
     Bounds,
     CentroidPassRecord,
+    SessionRecord,
     SweepCentroidPassRecord,
     XYCloud,
     _Record,
@@ -115,7 +116,7 @@ def pass_group_stats(group: Sequence[Any]) -> PassGroupStats:
     raise ValueError("no pass record found in group")
 
 
-def final_result_offset(records: Sequence[_Record]) -> Offset:
+def final_result_offset(records: Sequence[SessionRecord]) -> Offset:
     best_pass = 0
     best_result = Offset.zero()
     for record in records:

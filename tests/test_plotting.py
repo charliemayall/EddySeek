@@ -72,20 +72,20 @@ def test_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
     recorder = SessionRecorder(trace=False, plots=True)
     ctx = SimpleNamespace(recorder=recorder)
     _record_centroid_pass(
-        ctx,  # pyright: ignore[reportArgumentType]
+        ctx,  # ty: ignore[invalid-argument-type]
         1,
         Offset.zero(),
         Offset(0.1, 0.0),
         Offset(0.1, 0.0),
-        probes,  # pyright: ignore[reportArgumentType]
+        probes,
     )
     _record_centroid_pass(
-        ctx,  # pyright: ignore[reportArgumentType]
+        ctx,  # ty: ignore[invalid-argument-type]
         2,
         Offset(0.1, 0.0),
         Offset(0.0, 0.0),
         Offset(0.1, 0.0),
-        probes,  # pyright: ignore[reportArgumentType]
+        probes,
     )
     path = write_figure(
         tmp_path,
@@ -104,7 +104,7 @@ def _sweep_centroid_records(
     recorder = SessionRecorder(trace=False, plots=True)
     ctx = SimpleNamespace(recorder=recorder)
     _record_sweep_centroid_pass(
-        ctx,  # pyright: ignore[reportArgumentType]
+        ctx,  # ty: ignore[invalid-argument-type]
         pass_num,
         phase,
         Offset.zero(),
@@ -126,24 +126,24 @@ def test_sweep_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
     recorder = SessionRecorder(trace=False, plots=True)
     ctx = SimpleNamespace(recorder=recorder)
     _record_sweep_centroid_pass(
-        ctx,  # pyright: ignore[reportArgumentType]
+        ctx,  # ty: ignore[invalid-argument-type]
         1,
         Phase.COARSE,
         Offset.zero(),
         Offset(0.1, 0.0),
         Offset(0.1, 0.0),
         samples,
-        (-1.0, 1.0, -1.0, 1.0),  # type: ignore[arg-type]
+        (-1.0, 1.0, -1.0, 1.0),
     )
     _record_sweep_centroid_pass(
-        ctx,  # pyright: ignore[reportArgumentType]
+        ctx,  # ty: ignore[invalid-argument-type]
         2,
         Phase.FINE,
         Offset(0.1, 0.0),
         Offset(0.0, 0.0),
         Offset(0.1, 0.0),
         samples,
-        (-0.5, 0.5, -0.5, 0.5),  # type: ignore[arg-type]
+        (-0.5, 0.5, -0.5, 0.5),
     )
     path = write_figure(
         tmp_path,
@@ -235,14 +235,14 @@ def test_save_preview_plot(requires_plotly):
         recorder = SessionRecorder(trace=False, plots=True)
         ctx = SimpleNamespace(recorder=recorder)
         _record_sweep_centroid_pass(
-            ctx,  # pyright: ignore[reportArgumentType]
+            ctx,  # ty: ignore[invalid-argument-type]
             pass_num,
             phase,
             center,
             result,
             Offset(0.12, 0.04),
             samples,
-            box,  # type: ignore[arg-type]
+            box,
         )
         passes_records.extend(recorder.records())
     fig = render_session_plot("sweep_centroid", passes_records, search_for="max")
@@ -386,12 +386,12 @@ def test_render_returns_none_without_plotly(tmp_path):
         recorder = SessionRecorder(trace=False, plots=True)
         ctx = SimpleNamespace(recorder=recorder)
         _record_centroid_pass(
-            ctx,  # pyright: ignore[reportArgumentType]
+            ctx,  # ty: ignore[invalid-argument-type]
             1,
             Offset.zero(),
             Offset.zero(),
             Offset.zero(),
-            [(Offset.zero(), 100.0)],  # type: ignore[arg-type]
+            [(Offset.zero(), 100.0)],
         )
         assert (
             render_session_plot("centroid", recorder.records(), search_for="max")
@@ -420,14 +420,14 @@ def test_centroid_finalize_strategy_plot_returns_plot_path(requires_plotly, tmp_
         },
     )()
     _record_centroid_pass(
-        ctx,  # pyright: ignore[reportArgumentType]
+        ctx,  # ty: ignore[invalid-argument-type]
         1,
         Offset.zero(),
         Offset(0.1, 0.0),
         Offset(0.1, 0.0),
-        [(Offset.zero(), 100.0)],  # type: ignore[arg-type]
+        [(Offset.zero(), 100.0)],
     )
-    path = finalize_strategy_plot(ctx, strategy.name)  # type: ignore[arg-type]
+    path = finalize_strategy_plot(ctx, strategy.name)  # ty: ignore[invalid-argument-type]
     assert path is not None
     assert path.endswith("2026-07-02_14-30-00_tools/tools_t0_centroid.html")
     assert Path(path).is_file()

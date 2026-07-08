@@ -20,6 +20,7 @@ from _eddy_seek.accuracy_test import run_accuracy_test
 from _eddy_seek.common import Offset
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.plotting.accuracy import (
+    AccuracyRun,
     write_accuracy_comparison_plot,
     write_accuracy_plot,
 )
@@ -281,7 +282,7 @@ def test_load_accuracy_run_json_file(tmp_path):
 
 
 def test_write_accuracy_comparison_plot(requires_plotly):
-    runs = [
+    runs: list[AccuracyRun] = [
         (
             "sweep_centroid",
             [

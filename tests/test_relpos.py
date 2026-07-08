@@ -26,7 +26,7 @@ def test_offset_arithmetic():
 
 def test_position_plus_position_rejected():
     try:
-        Position(1.0, 2.0) + Position(3.0, 4.0)  # type: ignore[operator]
+        Position(1.0, 2.0) + Position(3.0, 4.0)  # ty: ignore[unsupported-operator]
     except TypeError:
         pass
     else:

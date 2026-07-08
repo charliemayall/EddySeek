@@ -101,14 +101,6 @@ class _Record:
         return self.to_dict()
 
 
-def record_pass_num(record: _Record) -> int | None:
-    pass_num = getattr(record, "pass_num", None)
-    if isinstance(pass_num, int):
-        return pass_num
-    repeat = getattr(record, "repeat_num", None)
-    return repeat if isinstance(repeat, int) else None
-
-
 @dataclass(frozen=True, slots=True)
 class ProbeRecord(_Record):
     _KIND = "probe"
@@ -206,6 +198,14 @@ SessionRecord: TypeAlias = (
     | CentroidPassRecord
     | AccuracyRepeatRecord
 )
+
+
+def record_pass_num(record: SessionRecord) -> int | None:
+    pass_num = getattr(record, "pass_num", None)
+    if isinstance(pass_num, int):
+        return pass_num
+    repeat = getattr(record, "repeat_num", None)
+    return repeat if isinstance(repeat, int) else None
 
 
 def _json_value(value: Any) -> Any:

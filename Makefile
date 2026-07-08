@@ -3,19 +3,18 @@ include .env
 export
 endif
 
-.PHONY: test clean format deploy 
+.PHONY: test clean format deploy
 
 
 clean:
 	rm -rf .pytest_cache .ruff_cache
 
-# Run formatting.
 format:
-	uv run ruff format .
+	uv run ruff format
+	uv run ruff check --fix
 
-# Run tests.
-test: clean
-	uv run ruff check .
+test: 
+	uv run ty check
 	uv run pytest
 
 # Helper to deploy to a klipper host using .env vars.

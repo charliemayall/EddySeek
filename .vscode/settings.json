@@ -1,0 +1,8 @@
+{
+  "python.venvPath": "${workspaceFolder}",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.languageServer": "None",
+  "ty.importStrategy": "fromEnvironment",
+  "ty.path": ["${workspaceFolder}/.venv/bin/ty"],
+  "ty.diagnosticMode": "workspace"
+}
