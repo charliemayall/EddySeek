@@ -16,7 +16,7 @@ from ..common import Offset, Phase
 from ..config import SeekConfig
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample
-from ..movement.leg_planner import (
+from ..movement.sweep import (
     MotionCapture,
     SweepSettings,
     axis_sweep_centroid,
