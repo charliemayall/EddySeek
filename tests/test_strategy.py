@@ -78,7 +78,6 @@ def test_strategy_weights():
     assert frequency_is_better(70.0, 80.0, session.config.search_for) is False
     assert _sample_stdev([1.0, 3.0], 2.0) == math.sqrt(2.0)
 
-    assert strategy_for("circle_harmonic").name == "circle_harmonic"
     assert strategy_for("centroid").name == "centroid"
     assert strategy_for("sweep_centroid").name == "sweep_centroid"
     assert strategy_for("debug_scan").name == "debug_scan"

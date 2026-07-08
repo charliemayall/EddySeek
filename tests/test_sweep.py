@@ -23,13 +23,12 @@ from _eddy_seek.movement.handler import (
     manual_move_xy,
     move_to_xy,
 )
-from _eddy_seek.movement.leg_planner import (
+from _eddy_seek.movement.paths import iter_cross_offsets, traversal_endpoints
+from _eddy_seek.movement.sweep import (
     MotionCapture,
     SweepSettings,
     axis_sweep_centroid,
-    iter_cross_offsets,
     sweep_axis,
-    traversal_endpoints,
 )
 
 

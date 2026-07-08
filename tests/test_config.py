@@ -35,7 +35,7 @@ def test_validate_var():
     assert _runtime_value_ok("dwell_time", 0.5) is True
     assert _runtime_value_ok("jog_speed", 10.0) is True
     assert _runtime_value_ok("search_for", "max") is True
-    assert _runtime_value_ok("strategy", "circle_harmonic") is True
+    assert _runtime_value_ok("strategy", "debug_scan") is True
     assert _runtime_value_ok("max_passes", 6) is True
     assert _runtime_value_ok("save_session_trace", True) is True
     assert _runtime_value_ok("save_plots", True) is True
@@ -113,40 +113,9 @@ def test_load_seek_config_rejects_invalid_search_for():
         load_seek_config(as_config(FakeKlipperConfig(search_for="bogus")))
 
 
-def test_load_seek_config_circle_harmonic_params():
-    cfg = load_seek_config(
-        as_config(
-            FakeKlipperConfig(
-                strategy="circle_harmonic",
-                circle_radius_start="1.2",
-                circle_radius_min="0.5",
-                circle_speed="10",
-                harmonic_step_gain="0.2",
-            )
-        )
-    )
-    assert cfg.strategy == "circle_harmonic"
-    assert cfg.circle_radius_start == 1.2
-    assert cfg.circle_radius_min == 0.5
-    assert cfg.circle_speed == 600.0
-    assert cfg.harmonic_step_gain == 0.2
-
-
-def test_load_seek_config_circle_refresh_sweeps():
-    assert (
-        load_seek_config(as_config(FakeKlipperConfig())).circle_refresh_sweeps is False
-    )
-    assert (
-        load_seek_config(
-            as_config(FakeKlipperConfig(circle_refresh_sweeps="true"))
-        ).circle_refresh_sweeps
-        is True
-    )
-
-
-def test_load_seek_config_rejects_circle_radius_min_above_start():
-    with raises(ValueError, match="circle_radius_min"):
-        SeekConfig(circle_radius_start=0.5, circle_radius_min=1.0)
+def test_load_seek_config_sweep_arc_resolution():
+    cfg = load_seek_config(as_config(FakeKlipperConfig(sweep_arc_resolution="0.2")))
+    assert cfg.sweep_arc_resolution == 0.2
 
 
 def test_load_seek_config_debug():

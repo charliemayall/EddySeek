@@ -271,13 +271,11 @@ def test_parse_accuracy_html_round_trip(requires_plotly, plot_tmp):
 def test_load_accuracy_run_json_file(tmp_path):
     path = tmp_path / "run.json"
     path.write_text(
-        json.dumps(
-            {"strategy": "circle_harmonic", "offsets": [[0.0, 0.0], [0.1, 0.0]]}
-        ),
+        json.dumps({"strategy": "centroid", "offsets": [[0.0, 0.0], [0.1, 0.0]]}),
         encoding="utf-8",
     )
     strategy, records, durations = load_accuracy_run(path)
-    assert strategy == "circle_harmonic"
+    assert strategy == "centroid"
     assert len(records) == 2
     assert durations is None
 
@@ -294,7 +292,7 @@ def test_write_accuracy_comparison_plot(requires_plotly):
             [4.0, 4.2, 3.9],
         ),
         (
-            "circle_harmonic",
+            "centroid",
             [
                 AccuracyRepeatRecord(1, Offset(0.01, -0.01)),
                 AccuracyRepeatRecord(2, Offset(0.02, 0.0)),
@@ -335,7 +333,7 @@ def test_accuracy_compare_cli(requires_plotly, plot_tmp, tmp_path):
         results_dir,
         write_accuracy_plot(repeats=list(records_b)),
         write_at=write_at,
-        suffix="accuracy_circle",
+        suffix="accuracy_centroid",
         run_label="accuracy",
     )
     assert path_a is not None and path_b is not None
@@ -347,7 +345,7 @@ def test_accuracy_compare_cli(requires_plotly, plot_tmp, tmp_path):
                 path_b,
                 "--labels",
                 "sweep_centroid",
-                "circle_harmonic",
+                "centroid",
                 "-o",
                 str(out),
             ]
