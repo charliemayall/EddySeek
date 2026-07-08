@@ -173,7 +173,11 @@ coordinates. `dwell_time` is not used for sweep_centroid.
 
 ## Single probe cycle (`measure_at`)
 
-Every probe point follows the same measurement steps:
+Grid strategies (`centroid`, and `debug_scan` where applicable) probe discrete
+points using `measure_at`. Continuous sweep strategies sample on the move and do
+not use `dwell_time` per point.
+
+Every grid probe point follows the same measurement steps:
 
 ```mermaid
 flowchart TD
@@ -195,21 +199,21 @@ the window used for that probe point.
 After alignment, staged config sections look like:
 
 ```ini
-[T0]
+[es_T0]
 offset_x: 0.000000
 offset_y: 0.000000
 is_calibrated: True
 
-[T1]
+[es_T1]
 offset_x: 1.234000
 offset_y: -0.456000
 is_calibrated: True
 ```
 
-| Tool  | `offset_x` / `offset_y` meaning                             |
-| ----- | ----------------------------------------------------------- |
-| T0    | Always `0, 0` - defines the reference centre                |
-| T1…Tn | XY shift needed so this nozzle matches tool 0 on the sensor |
+| Tool    | `offset_x` / `offset_y` meaning                             |
+| ------- | ----------------------------------------------------------- |
+| es_T0   | Always `0, 0` - defines the reference centre                |
+| es_T1…  | XY shift needed so this nozzle matches tool 0 on the sensor |
 
 `SAVE_CONFIG` persists these values. Your toolchanger macros or motion system
 apply them when switching tools.

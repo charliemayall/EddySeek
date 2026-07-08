@@ -92,7 +92,7 @@ See [example.cfg](../example.cfg) for a complete example.
 | `i2c_mcu`                            | _(required)_                              | MCU name, e.g. `mcu`                                                                                                     |
 | `i2c_bus`                            | _(required)_                              | I2C bus, e.g. `i2c1`                                                                                                     |
 | `tool_count`                         | `1`                                       | Number of tools                                                                                                          |
-| `tool_prefix`                        | `es_T`                                    | Prefix for saved offset sections (`es_T1`, …)                                                                            |
+| `tool_prefix`                        | `es_T`                                    | Prefix for saved offset sections (`es_T0`, `es_T1`, …)                                                                   |
 | `load_tool_macro_prefix`             | `T`                                       | Prefix for load macros (`T0`, `T1`, …)                                                                                   |
 | `sensor_x` / `sensor_y` | _(required)_ | Machine XY of sensor coil; tool 0 jogs here before seeking |
 | `sensor_z`              | _(optional)_ | Machine Z for seek commands; errors if outside `[sensor_z, sensor_z + 0.25]` mm |
@@ -101,8 +101,8 @@ See [example.cfg](../example.cfg) for a complete example.
 | `dwell_time`                         | `0.5`                                     | Seconds at each probe point (grid strategies only)                                                                       |
 | `jog_speed`                          | `80`                                      | Feedrate for search jogs (mm/s)                                                                                          |
 | `search_for`                         | `max`                                     | `max` or `min` - which frequency extreme marks the nozzle centre, `max` for most users                                   |
-| `strategy`                           | `sweep_centroid`                          | `sweep_centroid`, `centroid`, `circle_harmonic`, or `debug_scan` (diag only)                                             |
-| `max_passes`                         | `6`                                       | Search passes before giving up; for `circle_harmonic`, held/rejected retries do not count                                |
+| `strategy`                           | `sweep_centroid`                          | `sweep_centroid`, `centroid`, or `debug_scan` (diag only)                                                                |
+| `max_passes`                         | `6`                                       | Search passes before giving up                                                                                           |
 | `save_session_trace`                 | `False`                                   | Write probe JSON to `result_folder` (debug)                                                                              |
 | `save_plots`                         | `False`                                   | Write HTML plots to `result_folder` (needs plotly)                                                                       |
 | `result_folder`                      | `~/printer_data/config/eddy_seek_results` | Output directory for debug artefacts                                                                                     |
@@ -120,23 +120,13 @@ See [example.cfg](../example.cfg) for a complete example.
 | `coarse_cross_passes` | `3`     | Staggered sweep lines per coarse pass (fine uses 1) |
 | `fine_shrink`         | `0.6`   | Fine pass range multiplier (× max_jog)              |
 | `min_sweep_samples`   | `20`    | Minimum profile points before centroid fit          |
+| `sweep_arc_resolution` | `0.1` | Max chord length per connector arc between sweeps (mm) |
 
-### `[eddy_seek]` - `strategy: circle_harmonic` options
+> **Breaking change:** `SWEEP_ARC_RESOLUTION` replaces `CIRCLE_ARC_RESOLUTION` in `printer.cfg` and `EDDY_SEEK_SET`.
 
-| Option                  | Default | Description                                                                                 |
-| ----------------------- | ------- | ------------------------------------------------------------------------------------------- |
-| `circle_radius_start`   | `0.8`   | First circle radius (mm)                                                                    |
-| `circle_radius_min`     | `0.4`   | Smallest circle radius (mm); tier step size is `(start - min) / max_passes`                 |
-| `circle_arc_resolution` | `0.1`   | Arc segment length along the circle (mm)                                                    |
-| `circle_speed`          | `10`    | Circle trace feedrate (mm/s)                                                                |
-| `noise_k`               | `1`     | SNR threshold (amplitude vs noise) for model fit                                            |
-| `harmonic_step_gain`    | `0.15`  | Fraction of fitted offset applied each pass                                                 |
-| `harmonic_min_quality`  | `0.5`   | Minimum fit quality to accept a pass                                                        |
-| `circle_refresh_sweeps` | `False` | Re-run axis sweeps each pass to calculate a more accurate displacement after fitting        |
-| `circle_skip_bootstrap` | `True`  | Skip the initial axis-sweep bootstrap and start circling right away (faster, less reliable) |
-| _(fixed)_               | `1`     | Bootstrap axis sweeps use a single stagger line (not configurable)                          |
+### `[eddy_seek]` - general notes
 
-> **max_jog** should be ≥ 2× your worst-case expected misalignment (per axis).Searches are unlikely to converge fully if the nozzle starts too far from the true centre.
+> **max_jog** should be ≥ 2× your worst-case expected misalignment (per axis). Searches are unlikely to converge fully if the nozzle starts too far from the true centre.
 
 > **Speed units:** All speed values are in mm/s in `printer.cfg` and `EDDY_SEEK_SET`.
 
@@ -147,9 +137,16 @@ See [example.cfg](../example.cfg) for a complete example.
 
 ### Per-tool offset sections
 
-After alignment, offsets are staged under `{tool_prefix}{n}` (default `es_T1`, `es_T2`, …). Tool numbers are **0-based**.
+After alignment, offsets are staged under `{tool_prefix}{n}` (default `es_T0`, `es_T1`, …). Tool numbers are **0-based**.
 
 ```ini
+[es_T0]
+offset_x: 0.000000 ; ❌
+offset_y: 0.000000 ; ❌
+manual_adjust_x: 0.000000 ; ✅ editable
+manual_adjust_y: 0.000000 ; ✅ editable
+is_calibrated: True ; ❌
+
 [es_T1]
 offset_x: 0.000000 ; ❌
 offset_y: 0.000000 ; ❌
@@ -196,7 +193,7 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 **All tools:** load tool 0, then `EDDY_SEEK_TOOLS` (runs load macros for tools 1…N). Run `SAVE_CONFIG` once at the end.
 
-`REPEATS=n` (default 1) runs each tool's seek `n` times at the same start position and saves the **mean** offset. With `n >= 2`, repeatability stats (σ, max scatter) match `EDDY_SEEK_ACCURACY`.
+`REPEATS=n` (default 3) runs each tool's seek `n` times at the same start position and saves the **mean** offset. With `n >= 2`, repeatability stats (σ, max scatter) match `EDDY_SEEK_ACCURACY`.
 
 ---
 
@@ -224,18 +221,6 @@ Continuous axis sweeps (like Klipper's bed mesh `rapid_scan` method). Coarse bid
 ### Centroid (`strategy: centroid`)
 
 3×3 grid around the current best point with `dwell_time` at each probe. Grid spacing is `max_jog_x/y / 2`, halving each pass. Very slow — backup strategy when sweep centroid sample rate is too low.
-
-### Circle harmonic (`strategy: circle_harmonic`)
-
-**_In testing_**
-
-Very fast strategy when calibrated correctly
-
-However, it is extremely unreliable, and perfect calibration requires that you can get the nozzle to the sensor_position with no error, and no one nozzle is offset from T0 by more than ~0.2mm.
-
-However, it can be **sensitive to magnitude of initial misalignment**
-
-Try it if you are curious, but expect to be tweaking settings for a long time.
 
 ### Debug scan (`strategy: debug_scan`)
 
@@ -291,7 +276,6 @@ Runs a grid over the full jog area. Useful to confirm the sensor sees a signal w
 | Method              | Example Plot                                    |
 | ------------------- | ----------------------------------------------- |
 | **Sweep centroid**  | ![Sweep centroid](./plots/sweep_centroid.png)   |
-| **Circle harmonic** | ![Circle harmonic](./plots/circle_harmonic.png) |
 | **Debug scan**      | ![Debug scan](./plots/debug_scan.png)           |
 
 ## License
