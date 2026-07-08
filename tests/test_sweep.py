@@ -30,6 +30,7 @@ from _eddy_seek.movement.sweep import (
     axis_sweep_centroid,
     sweep_axis,
 )
+from _eddy_seek.plotting.primitives import ProbeRecord
 
 
 def _make_handler(printer, origin: Position = Position.zero()) -> MotionHandler:
@@ -92,6 +93,26 @@ def test_jog_waits_for_move():
 
     toolhead.manual_move.assert_called_once()
     toolhead.wait_moves.assert_called_once()
+
+
+def test_sample_trace_cb_emits_probe_record():
+    printer, _toolhead = fake_motion_printer()
+    host = MagicMock()
+    host.get_capture_mean.return_value = 100.0
+    host.peek_capture_samples.return_value = [99.0, 100.0, 101.0]
+    host.capture_count = 3
+    probes: list[ProbeRecord] = []
+    config = MagicMock()
+    config.jog_speed = 3000.0
+    config.dwell_time = 0.5
+    handler = MotionHandler(
+        printer, host, config, Position.zero(), trace_cb=probes.append
+    )
+    assert handler.sample(Offset(1.0, 2.0)) == 100.0
+    assert len(probes) == 1
+    assert probes[0].at == Offset(1.0, 2.0)
+    assert probes[0].mean_hz == 100.0
+    assert probes[0].samples_hz == (99.0, 100.0, 101.0)
 
 
 def test_capture_leg_registers_sample_window():

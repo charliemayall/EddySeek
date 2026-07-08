@@ -237,6 +237,9 @@ class MotionHandler(_SessionMotionBase):
             f"({self._host.capture_count} samples)"
         )
         if self._trace_cb is not None:
+            from ..plotting.primitives import ProbeRecord
+
+            # fix for circular import
             self._trace_cb(
                 ProbeRecord(
                     at=offset,
