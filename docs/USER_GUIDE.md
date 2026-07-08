@@ -85,42 +85,42 @@ See [example.cfg](../example.cfg) for a complete example.
 
 ### `[eddy_seek]` - main options
 
-| Option                               | Default                                   | Description                                                                                                              |
-| ------------------------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `sensor_type`                        | _(required)_                              | `ldc1612`                                                                                                                |
-| `i2c_address`                        | `42`                                      | LDC1612 I2C address (`0x2a`)                                                                                             |
-| `i2c_mcu`                            | _(required)_                              | MCU name, e.g. `mcu`                                                                                                     |
-| `i2c_bus`                            | _(required)_                              | I2C bus, e.g. `i2c1`                                                                                                     |
-| `tool_count`                         | `1`                                       | Number of tools                                                                                                          |
-| `tool_prefix`                        | `es_T`                                    | Prefix for saved offset sections (`es_T0`, `es_T1`, …)                                                                   |
-| `load_tool_macro_prefix`             | `T`                                       | Prefix for load macros (`T0`, `T1`, …)                                                                                   |
-| `sensor_x` / `sensor_y` | _(required)_ | Machine XY of sensor coil; tool 0 jogs here before seeking |
-| `sensor_z`              | _(optional)_ | Machine Z for seek commands; errors if outside `[sensor_z, sensor_z + 0.25]` mm |
-| `max_jog_x` / `max_jog_y`            | `2.5`                                     | Max search radius from start (mm)                                                                                        |
-| `tolerance`                          | `0.05`                                    | Stop when both axes move less than this (mm)                                                                             |
-| `dwell_time`                         | `0.5`                                     | Seconds at each probe point (grid strategies only)                                                                       |
-| `jog_speed`                          | `80`                                      | Feedrate for search jogs (mm/s)                                                                                          |
-| `search_for`                         | `max`                                     | `max` or `min` - which frequency extreme marks the nozzle centre, `max` for most users                                   |
-| `strategy`                           | `sweep_centroid`                          | `sweep_centroid`, `centroid`, or `debug_scan` (diag only)                                                                |
-| `max_passes`                         | `6`                                       | Search passes before giving up                                                                                           |
-| `save_session_trace`                 | `False`                                   | Write probe JSON to `result_folder` (debug)                                                                              |
-| `save_plots`                         | `False`                                   | Write HTML plots to `result_folder` (needs plotly)                                                                       |
-| `result_folder`                      | `~/printer_data/config/eddy_seek_results` | Output directory for debug artefacts                                                                                     |
-| `debug`                              | `False`                                   | Verbose console; pass `VERBOSE=1` on any command for one-off verbosity                                                   |
+| Option                    | Default                                   | Description                                                                            |
+| ------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| `sensor_type`             | _(required)_                              | `ldc1612`                                                                              |
+| `i2c_address`             | `42`                                      | LDC1612 I2C address (`0x2a`)                                                           |
+| `i2c_mcu`                 | _(required)_                              | MCU name, e.g. `mcu`                                                                   |
+| `i2c_bus`                 | _(required)_                              | I2C bus, e.g. `i2c1`                                                                   |
+| `tool_count`              | `1`                                       | Number of tools                                                                        |
+| `tool_prefix`             | `es_T`                                    | Prefix for saved offset sections (`es_T0`, `es_T1`, …)                                 |
+| `load_tool_macro_prefix`  | `T`                                       | Prefix for load macros (`T0`, `T1`, …)                                                 |
+| `sensor_x` / `sensor_y`   | _(required)_                              | Machine XY of sensor coil; tool 0 jogs here before seeking                             |
+| `sensor_z`                | _(optional)_                              | Machine Z for seek commands; errors if outside `[sensor_z, sensor_z + 0.25]` mm        |
+| `max_jog_x` / `max_jog_y` | `2.5`                                     | Max search radius from start (mm)                                                      |
+| `tolerance`               | `0.05`                                    | Stop when both axes move less than this (mm)                                           |
+| `dwell_time`              | `0.5`                                     | Seconds at each probe point (grid strategies only)                                     |
+| `jog_speed`               | `80`                                      | Feedrate for search jogs (mm/s)                                                        |
+| `search_for`              | `max`                                     | `max` or `min` - which frequency extreme marks the nozzle centre, `max` for most users |
+| `strategy`                | `sweep_centroid`                          | `sweep_centroid`, `centroid`, or `debug_scan` (diag only)                              |
+| `max_passes`              | `6`                                       | Search passes before giving up                                                         |
+| `save_session_trace`      | `False`                                   | Write probe JSON to `result_folder` (debug)                                            |
+| `save_plots`              | `False`                                   | Write HTML plots to `result_folder` (needs plotly)                                     |
+| `result_folder`           | `~/printer_data/config/eddy_seek_results` | Output directory for debug artefacts                                                   |
+| `debug`                   | `False`                                   | Verbose console; pass `VERBOSE=1` on any command for one-off verbosity                 |
 
 ### `[eddy_seek]` - `strategy: sweep_centroid` options
 
-| Option                | Default | Description                                         |
-| --------------------- | ------- | --------------------------------------------------- |
-| `sweep_coarse_speed`  | `20`    | Coarse sweep feedrate (mm/s)                        |
-| `sweep_fine_speed`    | `10`    | Fine sweep feedrate (mm/s)                          |
-| `sweep_overscan`      | `1.0`   | Extra travel beyond jog range (mm)                  |
-| `sweep_cross_offset`  | `0.3`   | Stagger between parallel sweeps (mm)                |
-| `coarse_phases`       | `2`     | Coarse search passes before fine passes             |
-| `coarse_cross_passes` | `3`     | Staggered sweep lines per coarse pass (fine uses 1) |
-| `fine_shrink`         | `0.6`   | Fine pass range multiplier (× max_jog)              |
-| `min_sweep_samples`   | `20`    | Minimum profile points before centroid fit          |
-| `sweep_arc_resolution` | `0.1` | Max chord length per connector arc between sweeps (mm) |
+| Option                 | Default | Description                                            |
+| ---------------------- | ------- | ------------------------------------------------------ |
+| `sweep_coarse_speed`   | `20`    | Coarse sweep feedrate (mm/s)                           |
+| `sweep_fine_speed`     | `10`    | Fine sweep feedrate (mm/s)                             |
+| `sweep_overscan`       | `1.0`   | Extra travel beyond jog range (mm)                     |
+| `sweep_cross_offset`   | `0.3`   | Stagger between parallel sweeps (mm)                   |
+| `coarse_phases`        | `2`     | Coarse search passes before fine passes                |
+| `coarse_cross_passes`  | `3`     | Staggered sweep lines per coarse pass (fine uses 1)    |
+| `fine_shrink`          | `0.6`   | Fine pass range multiplier (× max_jog)                 |
+| `min_sweep_samples`    | `20`    | Minimum profile points before centroid fit             |
+| `sweep_arc_resolution` | `0.1`   | Max chord length per connector arc between sweeps (mm) |
 
 > **Breaking change:** `SWEEP_ARC_RESOLUTION` replaces `CIRCLE_ARC_RESOLUTION` in `printer.cfg` and `EDDY_SEEK_SET`.
 
@@ -133,7 +133,6 @@ See [example.cfg](../example.cfg) for a complete example.
 > **Speed overrides:** Any move where samples are taken will dynamically adjust the speed to keep the sampling density at an acceptable level.
 
 > **Travel limits:** `sensor_x ± max_jog_x` and `sensor_y ± max_jog_y` must be within machine limits.
-
 
 ### Per-tool offset sections
 
@@ -248,15 +247,15 @@ With `save_plots: True`, HTML plots land under `{result_folder}/YYYY-MM-DD_HH-MM
 
 ## Troubleshooting
 
-| Symptom                                     | Things to check                                                                         |
-| ------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `total` stays 0 on `EDDY_SEEK_QUERY`        | I2C wiring, `i2c_mcu` / `i2c_bus`, `klippy.log`                                         |
-| `no samples at offset` during seek          | Increase `dwell_time`; check coil height and sensor stream                              |
-| Search does not converge                    | `max_passes`, `max_jog_x/y`, `search_for`, try another `strategy`                       |
-| `pass corrections diverging`                | Nozzle too far from centre - fix `sensor_x/y`, `max_jog`, or Z height                   |
-| Sweep centroid: too few samples             | Lower `sweep_fine_speed`; check LDC1612 stream                                          |
-| `tool 0 must be aligned before other tools` | Klipper restart cleared the reference; run `EDDY_SEEK_TOOL TOOL=0` or `EDDY_SEEK_TOOLS` |
-| Offsets not in `printer.cfg`                | Run `SAVE_CONFIG` after alignment                                                       |
+| Symptom                                     | Things to check                                                                                                |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `total` stays 0 on `EDDY_SEEK_QUERY`        | I2C wiring, `i2c_mcu` / `i2c_bus`, `klippy.log`                                                                |
+| `no samples at offset` during seek          | Increase `dwell_time`; check coil height and sensor stream                                                     |
+| Search does not converge                    | `max_passes`, `max_jog_x/y`, `search_for`, try another `strategy`                                              |
+| `pass corrections diverging`                | Nozzle too far from centre - fix `sensor_x/y`, `max_jog`, or Z height                                          |
+| Sweep centroid: too few samples             | Lower `sweep_fine_speed`; check LDC1612 stream; Run `EDDY_SEEK_QUERY` and check your sample rate is ~360-400Hz |
+| `tool 0 must be aligned before other tools` | Klipper restart cleared the reference; run `EDDY_SEEK_TOOL TOOL=0` or `EDDY_SEEK_TOOLS`                        |
+| Offsets not in `printer.cfg`                | Run `SAVE_CONFIG` after alignment                                                                              |
 
 ### Debug scan (`strategy: debug_scan`)
 
@@ -273,10 +272,10 @@ Runs a grid over the full jog area. Useful to confirm the sensor sees a signal w
 
 ## Example plots
 
-| Method              | Example Plot                                    |
-| ------------------- | ----------------------------------------------- |
-| **Sweep centroid**  | ![Sweep centroid](./plots/sweep_centroid.png)   |
-| **Debug scan**      | ![Debug scan](./plots/debug_scan.png)           |
+| Method             | Example Plot                                  |
+| ------------------ | --------------------------------------------- |
+| **Sweep centroid** | ![Sweep centroid](./plots/sweep_centroid.png) |
+| **Debug scan**     | ![Debug scan](./plots/debug_scan.png)         |
 
 ## License
 
