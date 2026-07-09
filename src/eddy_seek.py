@@ -17,13 +17,14 @@ from dataclasses import fields
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from ._eddy_seek.accuracy_test import run_accuracy_test
+from klippy.klippy import Printer
+
+from ._eddy_seek.accuracy import run_accuracy_test
 from ._eddy_seek.common import Offset, Position
 from ._eddy_seek.config import SeekConfig, load_seek_config
 from ._eddy_seek.kconsole import KConsole
-from ._eddy_seek.movement.guard import clear_gcode_offset_xy
+from ._eddy_seek.movement.guard import block_for_sensor_z, clear_gcode_offset_xy
 from ._eddy_seek.movement.handler import MIN_CAPTURE_SAMPLES
-from ._eddy_seek.sensor_z import assert_sensor_z
 from ._eddy_seek.session import ArtifactRunContext, SeekHost, SeekSession
 from ._eddy_seek.strategy import strategy_for
 from ._eddy_seek.tool_align import align_all_tools, align_tool_number
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
     from klippy.extras.configfile import ConfigWrapper
     from klippy.extras.ldc1612 import LDC1612
     from klippy.gcode import GCodeCommand
+
+    from ._eddy_seek.tools import ToolAlignConfig
 
 _LDC1612: Any
 try:
@@ -54,9 +57,9 @@ def _sample_rate_from_count(*, count: int, duration_s: float) -> float | None:
 
 class EddySeek(SeekHost):
     def __init__(self, config: ConfigWrapper) -> None:
-        self.printer = config.get_printer()
-        self.seek_config = load_seek_config(config)
-        self._tools = ToolAlignConfig(config)
+        self.printer: Printer = config.get_printer()
+        self.seek_config: SeekConfig = load_seek_config(config)
+        self._tools: ToolAlignConfig = ToolAlignConfig(config)
         self._status_samples: list[float] = []
         self._capture_buf: list[float] = []
         self._capture_count: int = 0
@@ -64,7 +67,7 @@ class EddySeek(SeekHost):
         self._total_samples: int = 0
         self._last_freq: float = 0.0
         self._tool0_center: Position | None = None
-        self._sensor = self._load_ldc1612(config)
+        self._sensor: LDC1612 = self._load_ldc1612(config)
         self._stream_refs = 0
         self._batch_client_added = False
         self._sample_rate_hz: float | None = None
@@ -325,11 +328,9 @@ class EddySeek(SeekHost):
         logger.info(f"eddy_seek: EDDY_SEEK_SET applied: {', '.join(changes)}")
         console.info(f"Updated {', '.join(changes)}")
 
+    @block_for_sensor_z
     def cmd_EDDY_SEEK_START(self, gcmd: GCodeCommand) -> None:
         logger.info("eddy_seek: EDDY_SEEK_START")
-        assert_sensor_z(
-            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
-        )
         console = self.refresh_console(gcmd)
         console.entry("Seeking nozzle centre…")
         artifact = ArtifactRunContext(run_label="start", write_at=datetime.now())
@@ -340,13 +341,11 @@ class EddySeek(SeekHost):
             artifact_label="start",
         ).run(gcmd, strategy)
 
+    @block_for_sensor_z
     def cmd_EDDY_SEEK_TOOL(self, gcmd: GCodeCommand) -> None:
         tool_number = gcmd.get_int("TOOL", -1, minval=0)
         if tool_number == -1:
             raise gcmd.error("TOOL=<number> is required for EDDY_SEEK_TOOL")
-        assert_sensor_z(
-            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
-        )
         repeats = gcmd.get_int("REPEATS", 3, minval=1, maxval=50)
         load_tool = gcmd.get_int("LOAD", 0, minval=0, maxval=1) == 1
         strategy = self.seek_config.strategy_from_gcmd(gcmd)
@@ -382,10 +381,8 @@ class EddySeek(SeekHost):
         finally:
             clear_gcode_offset_xy(self.printer)
 
+    @block_for_sensor_z
     def cmd_EDDY_SEEK_TOOLS(self, gcmd: GCodeCommand) -> None:
-        assert_sensor_z(
-            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
-        )
         self.refresh_console(gcmd)
         tool_count = gcmd.get_int("TOOLS", self._tools.tool_count, minval=1)
         repeats = gcmd.get_int("REPEATS", 3, minval=1, maxval=50)
@@ -415,10 +412,8 @@ class EddySeek(SeekHost):
                 f"Tool {tool_number} offset applied (calibrated) - {eff.to_console_str()}"
             )
 
+    @block_for_sensor_z
     def cmd_EDDY_SEEK_ACCURACY(self, gcmd: GCodeCommand) -> None:
-        assert_sensor_z(
-            self.printer.lookup_object("toolhead"), self._tools.sensor_z, gcmd
-        )
         repeats = gcmd.get_int("REPEATS", 3, minval=2, maxval=50)
         mock_enabled = bool(gcmd.get_int("MOCK", 0, minval=0, maxval=1))
         logger.info(
