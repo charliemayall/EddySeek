@@ -13,6 +13,7 @@ from unittest.mock import patch
 import pytest
 from fakes import (
     FakeGcmd,
+    FakeGcode,
     FakeKlipperConfig,
     FakePrinter,
     RecordingToolhead,
@@ -188,6 +189,38 @@ def test_sensor_position_is_required():
         )
     )
     assert cfg.sensor_position() == Position(10.0, 20.0)
+
+
+def _tools_config(*, gcode: FakeGcode) -> ToolAlignConfig:
+    printer = FakePrinter(gcode=gcode, configfile=_Configfile())
+    return ToolAlignConfig(
+        as_config(
+            FakeKlipperConfig(
+                sensor_x=10.0,
+                sensor_y=20.0,
+                get_printer=lambda: printer,
+            )
+        )
+    )
+
+
+def test_run_load_macro_errors_when_macro_missing():
+    gcode = FakeGcode()
+    cfg = _tools_config(gcode=gcode)
+
+    with raises(FakeGcode.error, match=r"load macro 'T0' is not defined"):
+        cfg.run_load_macro(0)
+
+    assert gcode.scripts == []
+
+
+def test_run_load_macro_runs_when_macro_registered():
+    gcode = FakeGcode(commands={"T0"})
+    cfg = _tools_config(gcode=gcode)
+
+    cfg.run_load_macro(0)
+
+    assert gcode.scripts == ["T0"]
 
 
 class _LoadMacroTools:

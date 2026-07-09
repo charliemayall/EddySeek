@@ -145,8 +145,13 @@ class ToolAlignConfig:
 
     def run_load_macro(self, tool_number: int) -> None:
         macro = self.format_load_macro(tool_number)
-        logger.info(f"eddy_seek: running load macro {macro!r}")
         gcode = self._printer.lookup_object("gcode")
+        if macro not in gcode.get_status(0)["commands"]:
+            raise gcode.error(
+                f"eddy_seek: load macro {macro!r} is not defined "
+                f"(add [gcode_macro {macro}] or check load_tool_macro_prefix)"
+            )
+        logger.info(f"eddy_seek: running load macro {macro!r}")
         gcode.run_script_from_command(macro)
 
     def apply_tool_offset(self, tool_number: int) -> Tool:

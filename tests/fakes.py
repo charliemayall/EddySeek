@@ -119,14 +119,18 @@ class FakeGcmd(_GCodeCommandBase):
 class FakeGcode(_GCodeDispatchBase):
     error = _CmdError
 
-    def __init__(self) -> None:
+    def __init__(self, *, commands: set[str] | None = None) -> None:
         self.scripts: list[str] = []
+        self._commands = set(commands or ())
 
     def respond_raw(self, msg: str) -> None:
         pass
 
     def respond_info(self, msg: str, log: bool = True) -> None:
         pass
+
+    def get_status(self, eventtime: float) -> dict[str, dict[str, str]]:
+        return {"commands": {cmd: {} for cmd in self._commands}}
 
     def register_command(
         self,
@@ -135,6 +139,10 @@ class FakeGcode(_GCodeDispatchBase):
         when_not_ready: bool = False,
         desc: str | None = None,
     ) -> Callable[..., object] | None:
+        if func is not None:
+            self._commands.add(cmd)
+        else:
+            self._commands.discard(cmd)
         return func
 
     def run_script_from_command(self, script: str) -> None:
