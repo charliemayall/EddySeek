@@ -15,6 +15,13 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from ..common import Offset, StrEnum
+from ..records import (
+    CentroidPassRecord,
+    SessionRecord,
+    SweepCentroidPassRecord,
+    _Record,
+    record_pass_num,
+)
 from ._plotly import (
     apply_axes_theme,
     freq_marker,
@@ -23,16 +30,24 @@ from ._plotly import (
     marker_outline,
     single_xy_layout,
 )
-from .primitives import (
-    Bounds,
-    CentroidPassRecord,
-    SessionRecord,
-    SweepCentroidPassRecord,
-    XYCloud,
-    _Record,
-    pass_color,
-    record_pass_num,
+from .primitives import Bounds, XYCloud
+
+PASS_COLORS = (
+    "#636EFA",
+    "#EF553B",
+    "#00CC96",
+    "#AB63FA",
+    "#FFA15A",
+    "#19D3F3",
+    "#FF6692",
+    "#B6E880",
+    "#FF97FF",
+    "#FECB52",
 )
+
+
+def pass_color(pass_num: int) -> str:
+    return PASS_COLORS[(pass_num - 1) % len(PASS_COLORS)]
 
 
 class ScatterMode(StrEnum):

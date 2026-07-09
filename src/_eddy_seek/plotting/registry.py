@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from .primitives import SessionRecord
+from ..records import SessionRecord
 
 _PLOTTERS: dict[str, type[StrategyPlotter]] = {}
 

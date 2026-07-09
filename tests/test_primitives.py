@@ -9,9 +9,8 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 import json
 
 from _eddy_seek.common import Offset
-from _eddy_seek.movement.handler import MotionSample
+from _eddy_seek.movement.types import MotionSample
 from _eddy_seek.plotting.primitives import (
-    PASS_COLORS,
     AccuracyRepeatRecord,
     Bounds,
     CentroidPassRecord,
@@ -20,9 +19,9 @@ from _eddy_seek.plotting.primitives import (
     ProbeRecord,
     SweepCentroidPassRecord,
     XYCloud,
-    pass_color,
     record_pass_num,
 )
+from _eddy_seek.plotting.renderer import PASS_COLORS, pass_color
 
 
 def test_offset_console_and_gcode_formatting():

@@ -15,9 +15,9 @@ from . import debug_scan as _debug_scan  # noqa: F401 - register plotter
 from . import sweep_centroid as _sweep_centroid  # noqa: F401 - register plotter
 from ._plotly import plotly_available, write_html
 from .artifacts import finalize_strategy_plot, write_figure
-from .primitives import PASS_COLORS, pass_color
 from .recorder import SessionRecorder
 from .registry import register_plotter, render_session_plot
+from .renderer import PASS_COLORS, pass_color
 
 __all__ = [
     "PASS_COLORS",

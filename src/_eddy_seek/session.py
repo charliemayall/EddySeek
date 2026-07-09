@@ -29,8 +29,8 @@ from .movement.guard import KnownKinematicLimits, clear_gcode_offset_xy
 from .movement.handler import MIN_CAPTURE_SAMPLES, MotionHandler
 from .plot_announce import announce_seek_plot
 from .plotting.artifacts import finalize_strategy_plot
-from .plotting.primitives import PlotArtifactRecord, ProbeRecord
 from .plotting.recorder import SessionRecorder
+from .records import PlotArtifactRecord, ProbeRecord
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer

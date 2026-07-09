@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from ..common import Offset
-from .primitives import AccuracyRepeatRecord
+from ..records import AccuracyRepeatRecord
 
 _OFFSET_RE = re.compile(
     r"\(\s*([+-]?(?:\d+\.?\d*|\.\d+))\s*,\s*([+-]?(?:\d+\.?\d*|\.\d+))\s*\)"

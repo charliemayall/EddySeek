@@ -16,7 +16,7 @@ from fakes import PLOT_HTML_SUFFIX, PLOT_RUN_DIR, PLOT_WRITE_AT
 
 from _eddy_seek.common import Offset, Phase, session_artifact_filename
 from _eddy_seek.config import SeekConfig
-from _eddy_seek.movement.handler import MotionSample
+from _eddy_seek.movement.types import MotionSample
 from _eddy_seek.optimizer import bin_frequencies
 from _eddy_seek.plotting import (
     render_session_plot,
@@ -76,7 +76,6 @@ def test_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
         1,
         Offset.zero(),
         Offset(0.1, 0.0),
-        Offset(0.1, 0.0),
         probes,
     )
     _record_centroid_pass(
@@ -84,7 +83,6 @@ def test_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
         2,
         Offset(0.1, 0.0),
         Offset(0.0, 0.0),
-        Offset(0.1, 0.0),
         probes,
     )
     path = write_figure(
@@ -109,7 +107,6 @@ def _sweep_centroid_records(
         phase,
         Offset.zero(),
         Offset(0.0, 0.0),
-        Offset.zero(),
         samples,
         box,
     )
@@ -131,7 +128,6 @@ def test_sweep_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
         Phase.COARSE,
         Offset.zero(),
         Offset(0.1, 0.0),
-        Offset(0.1, 0.0),
         samples,
         (-1.0, 1.0, -1.0, 1.0),
     )
@@ -141,7 +137,6 @@ def test_sweep_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
         Phase.FINE,
         Offset(0.1, 0.0),
         Offset(0.0, 0.0),
-        Offset(0.1, 0.0),
         samples,
         (-0.5, 0.5, -0.5, 0.5),
     )
@@ -240,7 +235,6 @@ def test_save_preview_plot(requires_plotly):
             phase,
             center,
             result,
-            Offset(0.12, 0.04),
             samples,
             box,
         )
@@ -390,7 +384,6 @@ def test_render_returns_none_without_plotly(tmp_path):
             1,
             Offset.zero(),
             Offset.zero(),
-            Offset.zero(),
             [(Offset.zero(), 100.0)],
         )
         assert (
@@ -422,7 +415,6 @@ def test_centroid_finalize_strategy_plot_returns_plot_path(requires_plotly, tmp_
         ctx,  # ty: ignore[invalid-argument-type]
         1,
         Offset.zero(),
-        Offset(0.1, 0.0),
         Offset(0.1, 0.0),
         [(Offset.zero(), 100.0)],
     )

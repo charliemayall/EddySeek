@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .primitives import (
+from ..records import (
     PlotArtifactRecord,
     SessionRecord,
     record_pass_num,
