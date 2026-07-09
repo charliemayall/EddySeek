@@ -14,14 +14,27 @@ import math
 from collections.abc import Sequence
 
 from ..common import Axis, Offset
+from .types import Segment
 
 _COORD_EPS = 1e-9
 
 
-def min_leg_span_mm(legs: Sequence[tuple[Offset, Offset]]) -> float:
-    if not legs:
-        return 0.0
-    return min(math.hypot(end.x - start.x, end.y - start.y) for start, end in legs)
+def min_leg_span_mm(segments: Sequence[Segment]) -> float:
+    """Minimum span over capture segments only (speed clamp cares about captured traverses)."""
+    spans = [seg.span_mm for seg in segments if seg.capture]
+    return min(spans) if spans else 0.0
+
+
+def as_capture_segments(
+    legs: Sequence[tuple[Offset, Offset]],
+) -> list[Segment]:
+    return [Segment(start, end, capture=True) for start, end in legs]
+
+
+def as_move_segments(
+    legs: Sequence[tuple[Offset, Offset]],
+) -> list[Segment]:
+    return [Segment(start, end, capture=False) for start, end in legs]
 
 
 def effective_overscan(overscan: float) -> float:
@@ -245,6 +258,36 @@ def plan_axis_leg_connectors(
             )
         connectors.append(chords or None)
     return connectors
+
+
+def plan_axis_path(
+    axis: Axis,
+    lo: float,
+    hi: float,
+    cross_center: float,
+    cross_offsets: list[float],
+    overscan: float,
+    *,
+    cross_offset: float,
+    resolution: float,
+) -> list[Segment]:
+    """Capture legs interleaved with uncaptured connector chords."""
+    legs = plan_axis_legs(axis, lo, hi, cross_center, cross_offsets, overscan)
+    connectors = plan_axis_leg_connectors(
+        legs,
+        axis,
+        overscan=overscan,
+        cross_offset=cross_offset,
+        resolution=resolution,
+    )
+    path: list[Segment] = []
+    for index, (start, end) in enumerate(legs):
+        if index > 0 and connectors:
+            chords = connectors[index - 1]
+            if chords:
+                path.extend(as_move_segments(chords))
+        path.append(Segment(start, end, capture=True))
+    return path
 
 
 def plan_grid_legs(

@@ -17,26 +17,18 @@ from typing import TYPE_CHECKING, Literal, overload
 
 from ..common import Axis, Offset, Phase, Position, samples_in_box, search_box
 from ..optimizer import decoupled_centroid
-from ..plotting.primitives import (
-    AxisSpan,
-    Bounds,
-    SweepGridTraceRecord,
-    SweepTraceRecord,
-)
-from .handler import (
-    MotionHandler,
-    MotionSample,
-    axis_profile,
-    get_clamped_speed_for_min_samples_over_span,
-)
+from ..records import AxisSpan, Bounds, SweepGridTraceRecord, SweepTraceRecord
+from .handler import MotionHandler, get_clamped_speed_for_min_samples_over_span
 from .paths import (
+    as_capture_segments,
     iter_cross_offsets,
     min_leg_span_mm,
-    plan_axis_leg_connectors,
-    plan_axis_legs,
+    plan_axis_path,
     plan_grid_legs,
     y_lines,
 )
+from .profiles import axis_profile
+from .types import MotionSample, Segment
 
 if TYPE_CHECKING:
     from ..config import SeekConfig
@@ -87,72 +79,43 @@ class MotionCapture:
     @overload
     def run(
         self,
-        legs: Sequence[tuple[Offset, Offset]],
+        segments: Sequence[Segment],
         speed_mm_min: float,
         *,
         flat: Literal[True] = True,
         min_samples: int | None = None,
         span_mm: float | None = None,
-        lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
-        between_leg_moves: Sequence[Sequence[tuple[Offset, Offset]] | None]
-        | None = None,
     ) -> list[MotionSample]: ...
 
     @overload
     def run(
         self,
-        legs: Sequence[tuple[Offset, Offset]],
+        segments: Sequence[Segment],
         speed_mm_min: float,
         *,
         flat: Literal[False],
         min_samples: int | None = None,
         span_mm: float | None = None,
-        lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
-        between_leg_moves: Sequence[Sequence[tuple[Offset, Offset]] | None]
-        | None = None,
     ) -> list[list[MotionSample]]: ...
 
     def run(
         self,
-        legs: Sequence[tuple[Offset, Offset]],
+        segments: Sequence[Segment],
         speed_mm_min: float,
         *,
         flat: bool = True,
         min_samples: int | None = None,
         span_mm: float | None = None,
-        lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
-        between_leg_moves: Sequence[Sequence[tuple[Offset, Offset]] | None]
-        | None = None,
     ) -> list[MotionSample] | list[list[MotionSample]]:
-        """
-        Run a sequence of legs, returning motion samples.
-
-        Args:
-            legs: Sequence of leg endpoints.
-            speed_mm_min: Minimum speed in mm/min.
-            flat: If True, return a single list of samples.
-            min_samples: Minimum number of samples to collect.
-            span_mm: Span in mm.
-            lead_in_legs: Uncaptured warmup legs before ``legs`` (same session).
-            between_leg_moves: Uncaptured connector chords between captured legs.
-        Returns:
-            If ``flat`` is True --> list[MotionSample]
-
-            If ``flat`` is False --> list[list[MotionSample]]
-        """
+        """Run a flat segment path, returning motion samples."""
         if min_samples is not None:
             speed_mm_min = get_clamped_speed_for_min_samples_over_span(
                 requested_mm_min=speed_mm_min,
-                span_mm=span_mm if span_mm is not None else min_leg_span_mm(legs),
+                span_mm=span_mm if span_mm is not None else min_leg_span_mm(segments),
                 min_samples=min_samples,
             )
         self.handler.begin(self.origin)
-        self.handler.run_capture_legs(
-            legs,
-            speed_mm_min,
-            lead_in_legs=lead_in_legs or None,
-            between_leg_moves=between_leg_moves,
-        )
+        self.handler.run_path(segments, speed_mm_min)
         if self.sync_offset is not None:
             self.sync_offset(self.handler.position)
         if flat:
@@ -192,24 +155,21 @@ def sweep_axis(
         lo, hi = hi, lo
     span_mm = abs(hi - lo)
     cross_offsets = _resolve_cross(settings, phase)
-    legs = plan_axis_legs(
-        axis, lo, hi, cross_center, cross_offsets, settings.sweep_overscan
+    path = plan_axis_path(
+        axis,
+        lo,
+        hi,
+        cross_center,
+        cross_offsets,
+        settings.sweep_overscan,
+        cross_offset=settings.sweep_cross_offset,
+        resolution=settings.sweep_arc_resolution,
     )
-    between: list[list[tuple[Offset, Offset]] | None] | None = None
-    if len(legs) > 1:
-        between = plan_axis_leg_connectors(
-            legs,
-            axis,
-            overscan=settings.sweep_overscan,
-            cross_offset=settings.sweep_cross_offset,
-            resolution=settings.sweep_arc_resolution,
-        )
     samples = capture.run(
-        legs,
+        path,
         speed_mm_min,
         min_samples=settings.min_sweep_samples,
         span_mm=span_mm,
-        between_leg_moves=between,
     )
     profile = axis_profile(samples, axis, lo, hi)
 
@@ -232,11 +192,12 @@ def sweep_axis(
 
 
 @dataclass(frozen=True, slots=True)
-class AxisSweepProfiles:
+class AxisSweepResult:
     box: tuple[float, float, float, float]
     in_box: list[MotionSample]
     x_profile: list[tuple[float, float]]
     y_profile: list[tuple[float, float]]
+    centroid: Offset | None = None
 
 
 def axis_sweep_profiles(
@@ -251,7 +212,7 @@ def axis_sweep_profiles(
     pass_num: int,
     label: str = "axis sweep",
     recorder: SessionRecorder | None = None,
-) -> AxisSweepProfiles:
+) -> AxisSweepResult:
     """X/Y sweeps with box-filtered axis profiles (no centroid)."""
     lo_x, hi_x, lo_y, hi_y = search_box(
         center, half_x, half_y, settings.max_jog_x, settings.max_jog_y
@@ -286,21 +247,12 @@ def axis_sweep_profiles(
     in_box_y = samples_in_box(samples_y, box)
     in_box = [*in_box_x, *in_box_y]
     _require_min_sweep_samples(len(in_box), settings.min_sweep_samples, label=label)
-    return AxisSweepProfiles(
+    return AxisSweepResult(
         box=box,
         in_box=in_box,
-        x_profile=[(sample.offset.x, sample.freq) for sample in in_box_x],
-        y_profile=[(sample.offset.y, sample.freq) for sample in in_box_y],
+        x_profile=axis_profile(in_box_x, Axis.X),
+        y_profile=axis_profile(in_box_y, Axis.Y),
     )
-
-
-@dataclass(frozen=True, slots=True)
-class AxisSweepCentroidResult:
-    box: tuple[float, float, float, float]
-    in_box: list[MotionSample]
-    x_profile: list[tuple[float, float]]
-    y_profile: list[tuple[float, float]]
-    centroid: Offset | None
 
 
 def axis_sweep_centroid(
@@ -315,7 +267,7 @@ def axis_sweep_centroid(
     pass_num: int,
     label: str,
     recorder: SessionRecorder | None = None,
-) -> AxisSweepCentroidResult:
+) -> AxisSweepResult:
     """X/Y sweeps, box filter, and decoupled centroid from axis profiles."""
     profiles = axis_sweep_profiles(
         capture,
@@ -332,7 +284,7 @@ def axis_sweep_centroid(
     centroid = decoupled_centroid(
         profiles.x_profile, profiles.y_profile, settings.search_for
     )
-    return AxisSweepCentroidResult(
+    return AxisSweepResult(
         box=profiles.box,
         in_box=profiles.in_box,
         x_profile=profiles.x_profile,
@@ -360,8 +312,9 @@ def sweep_grid(
     )
     legs = plan_grid_legs(box, step_size, settings.sweep_overscan, axis=Axis.X)
     legs.extend(plan_grid_legs(box, step_size, settings.sweep_overscan, axis=Axis.Y))
+    path = as_capture_segments(legs)
     _, _, y_lo, y_hi = box
-    samples = capture.run(legs, speed_mm_min)
+    samples = capture.run(path, speed_mm_min)
     in_box = samples_in_box(samples, box)
     rows = len(y_lines(y_lo, y_hi, step_size))
     logger.info(

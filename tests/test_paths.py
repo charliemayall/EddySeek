@@ -12,8 +12,10 @@ from _eddy_seek.movement.paths import (
     cubic_bezier_chord_legs,
     plan_axis_leg_connectors,
     plan_axis_legs,
+    plan_axis_path,
     uturn_connector_legs,
 )
+from _eddy_seek.movement.types import Segment
 
 
 def test_cross_pass_connector_endpoints():
@@ -75,6 +77,26 @@ def test_plan_axis_leg_connectors_single_cross_uturn_only():
     )
     assert len(connectors) == 1
     assert connectors[0] is not None
+
+
+def test_plan_axis_path_interleaves_connectors():
+    path = plan_axis_path(
+        Axis.X,
+        -2.0,
+        2.0,
+        cross_center=0.0,
+        cross_offsets=[0.0, 0.3],
+        overscan=1.0,
+        cross_offset=0.3,
+        resolution=0.1,
+    )
+    capture = [seg for seg in path if seg.capture]
+    moves = [seg for seg in path if not seg.capture]
+    assert len(capture) == 4
+    assert moves
+    assert path[0].capture
+    assert path[-1].capture
+    assert all(isinstance(seg, Segment) for seg in path)
 
 
 def test_cubic_bezier_chord_legs_minimum_segments():

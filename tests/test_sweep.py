@@ -16,20 +16,25 @@ from _eddy_seek.common import Axis, Offset, Phase, Position, samples_in_box, sea
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.movement.handler import (
     MotionHandler,
-    MotionSample,
     align_measurements,
-    axis_profile,
     get_clamped_speed_for_min_samples_over_span,
     manual_move_xy,
     move_to_xy,
 )
-from _eddy_seek.movement.paths import iter_cross_offsets, traversal_endpoints
+from _eddy_seek.movement.paths import (
+    as_capture_segments,
+    as_move_segments,
+    iter_cross_offsets,
+    traversal_endpoints,
+)
+from _eddy_seek.movement.profiles import axis_profile
 from _eddy_seek.movement.sweep import (
     MotionCapture,
     SweepSettings,
     axis_sweep_centroid,
     sweep_axis,
 )
+from _eddy_seek.movement.types import MotionSample, Segment
 from _eddy_seek.plotting.primitives import ProbeRecord
 
 
@@ -115,7 +120,7 @@ def test_sample_trace_cb_emits_probe_record():
     assert probes[0].samples_hz == (99.0, 100.0, 101.0)
 
 
-def test_capture_leg_registers_sample_window():
+def test_run_path_capture_registers_sample_window():
     toolhead = MagicMock()
     toolhead.get_last_move_time.return_value = 1.0
     callbacks: list = []
@@ -124,7 +129,10 @@ def test_capture_leg_registers_sample_window():
 
     handler = _make_handler(printer)
     handler.begin(Position(10.0, 20.0))
-    handler.capture_leg(Offset(0.0, 0.0), Offset(1.0, 0.0), 2400.0)
+    handler.run_path(
+        [Segment(Offset(0.0, 0.0), Offset(1.0, 0.0), capture=True)],
+        2400.0,
+    )
 
     assert toolhead.manual_move.call_args_list == [
         (([10.0, 20.0], 40.0),),
@@ -151,13 +159,16 @@ def test_align_measurements_uses_toolhead_lookup():
     assert samples == [MotionSample(Offset(0.5, 0.0), 100.0, 1.0)]
 
 
-def test_capture_leg_requires_active_session():
+def test_run_path_requires_active_session():
     handler = _make_handler(MagicMock())
     with raises(RuntimeError, match="not active"):
-        handler.capture_leg(Offset.zero(), Offset(1.0, 0.0), 2400.0)
+        handler.run_path(
+            [Segment(Offset.zero(), Offset(1.0, 0.0), capture=True)],
+            2400.0,
+        )
 
 
-def test_run_capture_legs_between_leg_moves_skip_reposition():
+def test_run_path_connector_segments_skip_reposition():
     toolhead = MagicMock()
     toolhead.get_last_move_time.return_value = 1.0
     callbacks: list = []
@@ -166,22 +177,24 @@ def test_run_capture_legs_between_leg_moves_skip_reposition():
 
     handler = _make_handler(printer)
     handler.begin(Position.zero())
-    legs = [
-        (Offset(0.0, 0.0), Offset(3.0, 0.0)),
-        (Offset(-3.0, 0.3), Offset(3.0, 0.3)),
-    ]
-    connector = [
-        (Offset(3.0, 0.0), Offset(2.7, 0.15)),
-        (Offset(2.7, 0.15), Offset(-3.0, 0.3)),
+    segments = [
+        Segment(Offset(0.0, 0.0), Offset(3.0, 0.0), capture=True),
+        *as_move_segments(
+            [
+                (Offset(3.0, 0.0), Offset(2.7, 0.15)),
+                (Offset(2.7, 0.15), Offset(-3.0, 0.3)),
+            ]
+        ),
+        Segment(Offset(-3.0, 0.3), Offset(3.0, 0.3), capture=True),
     ]
 
-    handler.run_capture_legs(legs, 600.0, between_leg_moves=[connector])
+    handler.run_path(segments, 600.0)
 
     assert len(callbacks) == 2
     assert toolhead.manual_move.call_count == 5
 
 
-def test_run_capture_legs_without_connector_repositions():
+def test_run_path_without_connector_repositions():
     toolhead = MagicMock()
     toolhead.get_last_move_time.return_value = 1.0
     callbacks: list = []
@@ -190,12 +203,14 @@ def test_run_capture_legs_without_connector_repositions():
 
     handler = _make_handler(printer)
     handler.begin(Position.zero())
-    legs = [
-        (Offset(0.0, 0.0), Offset(3.0, 0.0)),
-        (Offset(-3.0, 0.3), Offset(3.0, 0.3)),
-    ]
+    segments = as_capture_segments(
+        [
+            (Offset(0.0, 0.0), Offset(3.0, 0.0)),
+            (Offset(-3.0, 0.3), Offset(3.0, 0.3)),
+        ]
+    )
 
-    handler.run_capture_legs(legs, 600.0)
+    handler.run_path(segments, 600.0)
 
     assert len(callbacks) == 2
     assert toolhead.manual_move.call_count == 4
@@ -249,28 +264,26 @@ def test_run_clamps_speed_for_min_samples():
     handler = MagicMock()
     handler.collect_samples.return_value = []
     capture = MotionCapture(handler, Position(0.0, 0.0))
-    legs = [(Offset(0.0, 0.0), Offset(0.2, 0.0))]
+    segments = as_capture_segments([(Offset(0.0, 0.0), Offset(0.2, 0.0))])
 
-    capture.run(legs, 3000.0, min_samples=20, span_mm=0.2)
+    capture.run(segments, 3000.0, min_samples=20, span_mm=0.2)
 
     # span=0.2 mm -> cap = 0.2 * 400 Hz * 60 / 20 = 240 mm/min
-    handler.run_capture_legs.assert_called_once_with(
-        legs, 240.0, lead_in_legs=None, between_leg_moves=None
-    )
+    handler.run_path.assert_called_once_with(segments, 240.0)
 
 
 def test_run_applies_lead_in_before_capture():
     handler = MagicMock()
     handler.collect_samples.return_value = []
     capture = MotionCapture(handler, Position(0.0, 0.0))
-    legs = [(Offset(0.0, 0.0), Offset(0.2, 0.0))]
-    lead_in = [(Offset(-0.2, 0.0), Offset(0.0, 0.0))]
+    segments = [
+        *as_move_segments([(Offset(-0.2, 0.0), Offset(0.0, 0.0))]),
+        Segment(Offset(0.0, 0.0), Offset(0.2, 0.0), capture=True),
+    ]
 
-    capture.run(legs, 600.0, lead_in_legs=lead_in)
+    capture.run(segments, 600.0)
 
-    handler.run_capture_legs.assert_called_once_with(
-        legs, 600.0, lead_in_legs=lead_in, between_leg_moves=None
-    )
+    handler.run_path.assert_called_once_with(segments, 600.0)
 
 
 def test_sweep_axis_passes_speed_clamp_params():
@@ -311,9 +324,9 @@ def test_sweep_axis_coarse_uses_coarse_cross_passes():
     ]
 
     with patch(
-        "_eddy_seek.movement.sweep.plan_axis_legs",
+        "_eddy_seek.movement.sweep.plan_axis_path",
         return_value=[],
-    ) as plan_legs:
+    ) as plan_path:
         sweep_axis(
             capture,
             settings,
@@ -326,40 +339,36 @@ def test_sweep_axis_coarse_uses_coarse_cross_passes():
             pass_num=1,
         )
 
-    assert plan_legs.call_args.args[4] == [0.0]
+    assert plan_path.call_args.args[4] == [0.0]
 
 
 @pytest.mark.parametrize(
-    "phase,pass_num,fake_legs,fake_between",
+    "phase,pass_num,fake_path",
     [
         pytest.param(
             Phase.COARSE,
             1,
             [
-                (Offset(0.0, 0.0), Offset(1.0, 0.0)),
-                (Offset(1.0, 0.0), Offset(0.0, 0.0)),
+                Segment(Offset(0.0, 0.0), Offset(1.0, 0.0), capture=True),
+                Segment(Offset(1.0, 0.0), Offset(1.0, 0.15), capture=False),
+                Segment(Offset(1.0, 0.0), Offset(0.0, 0.0), capture=True),
             ],
-            [[(Offset(1.0, 0.0), Offset(1.0, 0.15))], None],
             id="coarse_multi_cross",
         ),
         pytest.param(
             Phase.FINE,
             3,
             [
-                (Offset(-3.0, 0.0), Offset(3.0, 0.0)),
-                (Offset(3.0, 0.0), Offset(-3.0, 0.0)),
-            ],
-            [
-                [
-                    (Offset(3.0, 0.0), Offset(2.7, 0.15)),
-                    (Offset(2.7, 0.15), Offset(3.0, 0.0)),
-                ]
+                Segment(Offset(-3.0, 0.0), Offset(3.0, 0.0), capture=True),
+                Segment(Offset(3.0, 0.0), Offset(2.7, 0.15), capture=False),
+                Segment(Offset(2.7, 0.15), Offset(3.0, 0.0), capture=False),
+                Segment(Offset(3.0, 0.0), Offset(-3.0, 0.0), capture=True),
             ],
             id="fine_uturn",
         ),
     ],
 )
-def test_sweep_axis_wires_connectors(phase, pass_num, fake_legs, fake_between):
+def test_sweep_axis_wires_path(phase, pass_num, fake_path):
     settings = SweepSettings.from_config(
         SeekConfig(min_sweep_samples=3, coarse_cross_passes=3),
     )
@@ -368,16 +377,10 @@ def test_sweep_axis_wires_connectors(phase, pass_num, fake_legs, fake_between):
         MotionSample(Offset(i * 0.01, 0.0), 100.0, 0.0) for i in range(3)
     ]
 
-    with (
-        patch(
-            "_eddy_seek.movement.sweep.plan_axis_legs",
-            return_value=fake_legs,
-        ),
-        patch(
-            "_eddy_seek.movement.sweep.plan_axis_leg_connectors",
-            return_value=fake_between,
-        ) as plan_connectors,
-    ):
+    with patch(
+        "_eddy_seek.movement.sweep.plan_axis_path",
+        return_value=fake_path,
+    ) as plan_path:
         sweep_axis(
             capture,
             settings,
@@ -390,8 +393,8 @@ def test_sweep_axis_wires_connectors(phase, pass_num, fake_legs, fake_between):
             pass_num=pass_num,
         )
 
-    plan_connectors.assert_called_once()
-    assert capture.run.call_args.kwargs["between_leg_moves"] == fake_between
+    plan_path.assert_called_once()
+    assert capture.run.call_args.args[0] == fake_path
 
 
 def test_sweep_axis_fine_phase_uses_single_cross_pass():
@@ -404,9 +407,9 @@ def test_sweep_axis_fine_phase_uses_single_cross_pass():
     ]
 
     with patch(
-        "_eddy_seek.movement.sweep.plan_axis_legs",
+        "_eddy_seek.movement.sweep.plan_axis_path",
         return_value=[],
-    ) as plan_legs:
+    ) as plan_path:
         sweep_axis(
             capture,
             settings,
@@ -419,7 +422,7 @@ def test_sweep_axis_fine_phase_uses_single_cross_pass():
             pass_num=3,
         )
 
-    assert plan_legs.call_args.args[4] == [0.0]
+    assert plan_path.call_args.args[4] == [0.0]
 
 
 def test_axis_sweep_centroid_builds_profiles_and_centroid():

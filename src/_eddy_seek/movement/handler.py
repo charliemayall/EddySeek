@@ -12,18 +12,18 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, overload
 
-from ..common import Axis, Offset, Position
+from ..common import Offset, Position
+from ..records import ProbeRecord
 from .kinematic_guard import MAX_SCV
+from .types import MotionSample, Segment
 
 if TYPE_CHECKING:
     from klippy.klippy import Printer
     from klippy.toolhead import ToolHead
 
     from ..config import SeekConfig
-    from ..plotting.primitives import ProbeRecord
     from ..session import SeekHost
 
 
@@ -76,15 +76,6 @@ def get_clamped_speed_for_min_samples_over_span(
             f"(span={span_mm:.3f} mm, min_samples={min_samples}, bulk_rate_hz={_LDC1612_BULK_HZ:.0f} Hz)"
         )
     return result_speed_mm_min
-
-
-@dataclass(frozen=True, slots=True)
-class MotionSample:
-    """One sensor reading correlated to session-relative XY."""
-
-    offset: Offset
-    freq: float
-    print_time: float
 
 
 class _SessionMotionBase:
@@ -152,31 +143,12 @@ def align_measurements(
     ]
 
 
-def axis_profile(
-    samples: list[MotionSample],
-    axis: Axis,
-    lo: float | None = None,
-    hi: float | None = None,
-) -> list[tuple[float, float]]:
-    """Project samples onto one axis, optionally clipping to ``[lo, hi]``."""
-    if axis is Axis.X:
-        points = [(s.offset.x, s.freq) for s in samples]
-    else:
-        points = [(s.offset.y, s.freq) for s in samples]
-    if lo is not None and hi is not None:
-        if lo > hi:
-            lo, hi = hi, lo
-        points = [(coord, freq) for coord, freq in points if lo <= coord <= hi]
-    return points
-
-
 class MotionHandler(_SessionMotionBase):
     """
 
     Handle motion <---> sensor capture for continuous and discrete motion.
 
     Discrete dwell probes and continuous LDC1612 sweep capture.
-
     """
 
     def __init__(
@@ -237,9 +209,6 @@ class MotionHandler(_SessionMotionBase):
             f"({self._host.capture_count} samples)"
         )
         if self._trace_cb is not None:
-            from ..plotting.primitives import ProbeRecord
-
-            # fix for circular import
             self._trace_cb(
                 ProbeRecord(
                     at=offset,
@@ -267,67 +236,26 @@ class MotionHandler(_SessionMotionBase):
         self._active = False
         self._th = None
 
-    def move_leg(self, line_start: Offset, line_end: Offset, speed: float) -> None:
-        """Traverse a leg without sensor capture (circle lead-in)."""
+    def run_path(self, segments: Sequence[Segment], speed: float) -> None:
+        """Walk a flat path; each segment's ``capture`` flag selects sensor windows."""
         if not self._active:
             raise RuntimeError("eddy_seek: continuous motion not active")
-        if self._last_move_end is None or line_start != self._last_move_end:
-            self._manual_move(line_start, speed)
-            self._last_move_end = line_start
-        self._manual_move(line_end, speed)
-        self._commit(line_end)
-        self._last_move_end = line_end
-
-    def capture_leg(self, line_start: Offset, line_end: Offset, speed: float) -> None:
-        if not self._active:
-            raise RuntimeError("eddy_seek: continuous motion not active")
-        if self._last_move_end is None or line_start != self._last_move_end:
-            self._manual_move(line_start, speed)
-            self._last_move_end = line_start
-
-        capture_start_t = self.th.get_last_move_time()
-        self._manual_move(line_end, speed)
-        self._commit(line_end)
-        self._register_capture_window(
-            capture_start_t
-        )  # make cb for move end (start,end)->(...)
-        self._last_move_end = line_end
-
-    def run_capture_legs(
-        self,
-        legs: Sequence[tuple[Offset, Offset]],
-        speed: float,
-        *,
-        lead_in_legs: Sequence[tuple[Offset, Offset]] | None = None,
-        between_leg_moves: (
-            Sequence[Sequence[tuple[Offset, Offset]] | None] | None
-        ) = None,
-    ) -> None:
-        """Run captured sweep legs, optionally with connector legs between them
-
-        ``lead_in_legs`` are uncaptured chords before the first captured leg
-        (e.g. circle warmup).
-
-        ``between_leg_moves`` Uncaptured moves,  length ``len(legs) - 1``
-                              between_leg_moves[i] is a sequence of chord legs that cumulatively move between legs[i] and legs[i+1]
-                              or None when no connector is needed
-
-        """
-        for line_start, line_end in lead_in_legs or ():
-            self.move_leg(line_start, line_end, speed)
-        if between_leg_moves is not None and len(between_leg_moves) != len(legs) - 1:
-            raise ValueError(
-                "eddy_seek: between_leg_moves must have length len(legs) - 1"
-            )
-        for index, (line_start, line_end) in enumerate(legs):
-            if between_leg_moves and index > 0:
-                connector = between_leg_moves[index - 1]
-                if connector:
-                    for seg_start, seg_end in connector:
-                        self.move_leg(seg_start, seg_end, speed)
-            self.capture_leg(line_start, line_end, speed)
+        for seg in segments:
+            self._run_segment(seg, speed)
         self.th.wait_moves()
         self.th.get_last_move_time()
+
+    def _run_segment(self, seg: Segment, speed: float) -> None:
+        if self._last_move_end is None or seg.start != self._last_move_end:
+            self._manual_move(seg.start, speed)
+            self._last_move_end = seg.start
+
+        capture_start_t = self.th.get_last_move_time() if seg.capture else None
+        self._manual_move(seg.end, speed)
+        self._commit(seg.end)
+        if capture_start_t is not None:
+            self._register_capture_window(capture_start_t)
+        self._last_move_end = seg.end
 
     def _manual_move(self, offset: Offset, speed: float) -> None:
         machine = self._origin + offset
