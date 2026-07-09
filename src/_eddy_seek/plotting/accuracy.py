@@ -13,8 +13,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..accuracy_stats import AccuracyStats, compute_accuracy_stats
+from ..accuracy.stats import AccuracyStats, compute_accuracy_stats
 from ..common import Offset
+from ..records import AccuracyRepeatRecord
 from ._plotly import (
     THEME_COLORS,
     apply_axes_theme,
@@ -26,7 +27,7 @@ from ._plotly import (
     plotly_available,
     xy_session_layout,
 )
-from .primitives import AccuracyRepeatRecord, pass_color
+from .renderer import pass_color
 
 AccuracyRun = tuple[str, list[AccuracyRepeatRecord], list[float] | None]
 

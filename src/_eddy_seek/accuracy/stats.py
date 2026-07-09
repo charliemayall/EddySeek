@@ -12,19 +12,13 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-from .common import Offset
-from .kconsole import ConsoleSymbols, KConsole
+from ..common import Offset
+from ..kconsole import ConsoleSymbols, KConsole
 
 logger = logging.getLogger(__name__)
-
-
-def _sample_stdev(values: list[float], mean: float) -> float:
-    if len(values) < 2:
-        return 0.0
-    variance = sum((v - mean) ** 2 for v in values) / (len(values) - 1)
-    return math.sqrt(variance)
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +34,14 @@ class AccuracyStats:
     ys_range: tuple[float, float]
 
 
-def compute_accuracy_stats(offsets: list[Offset]) -> AccuracyStats:
+def _sample_stdev(values: Sequence[float], mean: float) -> float:
+    if len(values) < 2:
+        return 0.0
+    variance = sum((v - mean) ** 2 for v in values) / (len(values) - 1)
+    return math.sqrt(variance)
+
+
+def compute_accuracy_stats(offsets: Sequence[Offset]) -> AccuracyStats:
     n = len(offsets)
     xs = [p.x for p in offsets]
     ys = [p.y for p in offsets]
@@ -74,9 +75,9 @@ def compute_accuracy_stats(offsets: list[Offset]) -> AccuracyStats:
 
 def report_accuracy_stats(
     console: KConsole,
-    offsets: list[Offset],
+    offsets: Sequence[Offset],
     *,
-    durations_s: list[float] | None = None,
+    durations_s: Sequence[float] | None = None,
 ) -> None:
     n = len(offsets)
     stats = compute_accuracy_stats(offsets)

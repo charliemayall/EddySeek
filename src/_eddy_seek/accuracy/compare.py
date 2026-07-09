@@ -15,12 +15,12 @@ import json
 import sys
 from pathlib import Path
 
-from .plotting._plotly import plotly_available, write_html
-from .plotting.accuracy import (
+from ..plotting._plotly import plotly_available, write_html
+from ..plotting.accuracy import (
     AccuracyRun,
     write_accuracy_comparison_plot,
 )
-from .plotting.accuracy_io import load_accuracy_run
+from ..plotting.accuracy_io import load_accuracy_run
 
 
 def _default_label(path: Path) -> str:

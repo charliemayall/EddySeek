@@ -15,14 +15,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .accuracy_stats import compute_accuracy_stats, report_accuracy_stats
+from .accuracy.stats import compute_accuracy_stats, report_accuracy_stats
 from .common import Offset, Position, yield_to_reactor
 from .kconsole import KConsole
 from .movement.gcode_state import GCodeState
 from .movement.handler import move_to_xy
 from .plotting.accuracy import write_accuracy_plot
 from .plotting.artifacts import write_figure
-from .plotting.primitives import AccuracyRepeatRecord
+from .records import AccuracyRepeatRecord
 from .session import ArtifactRunContext, SeekHost, SeekSessionResult
 
 logger = logging.getLogger(__name__)
