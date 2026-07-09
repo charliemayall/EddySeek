@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from klippy.toolhead import ToolHead
     from typing_extensions import Self
 
-    from _eddy_seek.movement.handler import MotionSample
+    from _eddy_seek.movement.types import MotionSample
 
 _ROUND_PRECISION = 2
 CHAR_DELTA = "\u0394"
@@ -200,7 +200,7 @@ def search_box(
 
 
 def samples_in_box(
-    samples: list[MotionSample],
+    samples: Sequence[MotionSample],
     box: tuple[float, float, float, float],
 ) -> list[MotionSample]:
     x_lo, x_hi, y_lo, y_hi = box
