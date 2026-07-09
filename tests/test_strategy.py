@@ -11,7 +11,7 @@ import math
 import pytest
 from pytest import raises
 
-from _eddy_seek.accuracy_stats import _sample_stdev
+from _eddy_seek.accuracy.stats import _sample_stdev
 from _eddy_seek.common import Offset
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.optimizer import (

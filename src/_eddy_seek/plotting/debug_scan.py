@@ -15,7 +15,6 @@ from collections.abc import Sequence
 from typing import Any, Literal
 
 from ..common import Offset
-from ..movement.handler import MotionSample
 from ._plotly import (
     _DEBUG_ROW_HEIGHT_PX,
     COLORSCALE,
@@ -33,7 +32,6 @@ from .debug_scan_analysis import (
     format_optional,
     format_position,
     grid_tolerance,
-    motion_samples,
     scaled_bin_result,
 )
 from .primitives import HeatmapRecord
@@ -49,7 +47,7 @@ _ESTIMATOR_STYLES: dict[str, dict[str, Any]] = {
 }
 
 
-def _bin_edges(centers: list[float], tolerance: float) -> list[float]:
+def _bin_edges(centers: Sequence[float], tolerance: float) -> list[float]:
     half = tolerance / 2.0
     if not centers:
         return []
@@ -107,16 +105,16 @@ def _add_heatmap_panel(
     *,
     row: int,
     col: int,
-    z: list[list[float | None]] | list[list[int]],
-    x_centers: list[float],
-    y_centers: list[float],
+    z: Sequence[Sequence[float | None]] | Sequence[Sequence[int]],
+    x_centers: Sequence[float],
+    y_centers: Sequence[float],
     box: tuple[float, float, float, float],
     center: Offset,
     result: Offset | None,
     tolerance: float,
     show_colorbar: bool,
     show_samples: bool,
-    samples: list[MotionSample],
+    probes: Sequence[tuple[Offset, float]],
     colorscale: str,
     colorbar_title: str,
     analysis: DebugScanAnalysis | None = None,
@@ -165,8 +163,8 @@ def _add_heatmap_panel(
     if show_samples:
         fig.add_trace(
             go.Scatter(
-                x=[sample.offset.x for sample in samples],
-                y=[sample.offset.y for sample in samples],
+                x=[offset.x for offset, _ in probes],
+                y=[offset.y for offset, _ in probes],
                 mode="markers",
                 name="raw samples",
                 marker={"size": 2, "color": "rgba(255,255,255,0.35)"},
@@ -301,15 +299,22 @@ def render_debug_scan_figure(
     center = heatmap.move.center
     result = heatmap.move.result
     box = heatmap.bounds.as_box()
-    z = [list(row) for row in heatmap.z]
-    x_centers = list(heatmap.x_centers)
-    y_centers = list(heatmap.y_centers)
-    samples = motion_samples(heatmap.samples)
+    z = heatmap.z
+    x_centers = heatmap.x_centers
+    y_centers = heatmap.y_centers
+    plot_probes = heatmap.samples.probes()
 
     analysis = analyze_debug_scan(heatmap, search_for)
     base_tolerance = grid_tolerance(x_centers, y_centers, box)
     panels: list[
-        tuple[int, float, list[list[float | None]], list[float], list[float], Offset]
+        tuple[
+            int,
+            float,
+            Sequence[Sequence[float | None]],
+            Sequence[float],
+            Sequence[float],
+            Offset,
+        ]
     ] = [
         (
             1,
@@ -339,7 +344,7 @@ def render_debug_scan_figure(
     summary_rows = [
         {
             "metric": "samples",
-            "value": str(len(samples)),
+            "value": str(len(heatmap.samples.xs)),
         },
         {
             "metric": "freq",
@@ -422,7 +427,7 @@ def render_debug_scan_figure(
         tolerance=base_tolerance,
         show_colorbar=True,
         show_samples=True,
-        samples=samples,
+        probes=plot_probes,
         colorscale=COLORSCALE,
         colorbar_title="weight",
         analysis=analysis,
@@ -442,7 +447,7 @@ def render_debug_scan_figure(
         tolerance=base_tolerance,
         show_colorbar=False,
         show_samples=False,
-        samples=samples,
+        probes=plot_probes,
         colorscale="Blues",
         colorbar_title="count",
         show_legend=False,
@@ -496,7 +501,7 @@ def render_debug_scan_figure(
             tolerance=tolerance,
             show_colorbar=False,
             show_samples=False,
-            samples=samples,
+            probes=plot_probes,
             colorscale=COLORSCALE,
             colorbar_title="weight",
             show_legend=False,

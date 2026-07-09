@@ -13,7 +13,7 @@ import logging
 from ..common import Offset
 from ..kconsole import KConsole
 from ..optimizer import weighted_centroid
-from ..plotting.primitives import (
+from ..records import (
     CentroidPassRecord,
     PassMove,
     XYCloud,
@@ -88,7 +88,7 @@ class CentroidStrategy(SeekStrategy):
                 f"eddy_seek: flat frequency response on centroid grid - "
                 f"keeping centre ({center.x:.4f}, {center.y:.4f})"
             )
-            _record_centroid_pass(ctx, pass_num, center, center, Offset.zero(), probes)
+            _record_centroid_pass(ctx, pass_num, center, center, probes)
             return center
 
         freqs = [freq for _, freq in probes]
@@ -103,7 +103,6 @@ class CentroidStrategy(SeekStrategy):
             pass_num,
             center,
             clamped,
-            (clamped - center).abs_components(),
             probes,
         )
         return clamped
@@ -114,7 +113,6 @@ def _record_centroid_pass(
     pass_num: int,
     center: Offset,
     result: Offset,
-    moved: Offset,
     probes: list[tuple[Offset, float]],
 ) -> None:
     ctx.recorder.record(

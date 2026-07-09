@@ -11,12 +11,12 @@ Debug scan heatmap analysis helpers (no rendering).
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
 from ..common import Offset
-from ..movement.handler import MotionSample
-from .primitives import HeatmapRecord, XYCloud
+from ..records import HeatmapRecord
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,17 +35,9 @@ class DebugScanAnalysis:
     density: list[list[int]]
 
 
-def motion_samples(cloud: XYCloud) -> list[MotionSample]:
-    freqs = cloud.freqs or (0.0,) * len(cloud.xs)
-    return [
-        MotionSample(Offset(x, y), freq, 0.0)
-        for x, y, freq in zip(cloud.xs, cloud.ys, freqs, strict=True)
-    ]
-
-
 def grid_tolerance(
-    x_centers: list[float],
-    y_centers: list[float],
+    x_centers: Sequence[float],
+    y_centers: Sequence[float],
     box: tuple[float, float, float, float],
 ) -> float:
     if len(x_centers) >= 2:
@@ -61,9 +53,9 @@ def grid_tolerance(
 
 
 def _marginal_slice(
-    z: list[list[float | None]],
-    x_centers: list[float],
-    y_centers: list[float],
+    z: Sequence[Sequence[float | None]],
+    x_centers: Sequence[float],
+    y_centers: Sequence[float],
     *,
     axis: Literal["x", "y"],
     index: int,
@@ -82,9 +74,9 @@ def _marginal_slice(
 
 
 def _marginal_max(
-    z: list[list[float | None]],
-    x_centers: list[float],
-    y_centers: list[float],
+    z: Sequence[Sequence[float | None]],
+    x_centers: Sequence[float],
+    y_centers: Sequence[float],
     *,
     axis: Literal["x", "y"],
 ) -> list[tuple[float, float]]:
@@ -105,7 +97,7 @@ def _marginal_max(
 
 
 def _parabolic_peak(
-    coords: list[float],
+    coords: Sequence[float],
     profile: list[tuple[float, float]],
     peak_index: int,
 ) -> float | None:
@@ -180,15 +172,15 @@ def analyze_debug_scan(
     center = heatmap.move.center
     result = heatmap.move.result
     box = heatmap.bounds.as_box()
-    z = [list(row) for row in heatmap.z]
-    x_centers = list(heatmap.x_centers)
-    y_centers = list(heatmap.y_centers)
-    samples = motion_samples(heatmap.samples)
+    z = heatmap.z
+    x_centers = heatmap.x_centers
+    y_centers = heatmap.y_centers
+    cloud = heatmap.samples
 
     tolerance = grid_tolerance(x_centers, y_centers, box)
     peak = peak_bin_indices(z)
     if peak is None:
-        density = bin_sample_counts(samples, box, tolerance, center)
+        density = bin_sample_counts(cloud, box, tolerance, center)
         return DebugScanAnalysis(
             bin_peak=result,
             centroid=None,
@@ -214,8 +206,7 @@ def analyze_debug_scan(
     background = sorted(flat_values)[len(flat_values) // 2] if flat_values else 0.0
     prominence = peak_value - background
 
-    probes = [(sample.offset, sample.freq) for sample in samples]
-    centroid = weighted_centroid(probes, search_for)
+    centroid = weighted_centroid(cloud, search_for)
     axis_x = axis_weighted_centroid(x_marginal, search_for)
     axis_y = axis_weighted_centroid(y_marginal, search_for)
     axis = Offset(axis_x, axis_y) if axis_x is not None and axis_y is not None else None
@@ -240,7 +231,7 @@ def analyze_debug_scan(
         peak_iy=peak_iy,
         x_marginal=x_profile,
         y_marginal=y_profile,
-        density=bin_sample_counts(samples, box, tolerance, center),
+        density=bin_sample_counts(cloud, box, tolerance, center),
     )
 
 
@@ -263,11 +254,10 @@ def scaled_bin_result(
 ) -> tuple[list[list[float | None]], list[float], list[float], Offset]:
     from ..optimizer import bin_frequencies, peak_bin_center
 
-    samples = motion_samples(heatmap.samples)
     box = heatmap.bounds.as_box()
     center = heatmap.move.center
     z, x_centers, y_centers = bin_frequencies(
-        samples, box, tolerance, center, search_for
+        heatmap.samples, box, tolerance, center, search_for
     )
     peak = peak_bin_center(z, x_centers, y_centers)
     return z, x_centers, y_centers, peak if peak is not None else heatmap.move.result

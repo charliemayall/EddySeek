@@ -14,10 +14,10 @@ import logging
 
 from ..common import Offset
 from ..kconsole import KConsole
-from ..movement.handler import MotionSample
 from ..movement.sweep import MotionCapture, SweepSettings, sweep_grid
+from ..movement.types import MotionSample
 from ..optimizer import bin_frequencies, peak_bin_center
-from ..plotting.primitives import (
+from ..records import (
     Bounds,
     HeatmapRecord,
     PassMove,

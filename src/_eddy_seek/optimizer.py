@@ -11,10 +11,12 @@ Peak finding and frequency-weighting math for seek strategies.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from typing import Literal
 
-from .common import Offset
-from .movement.handler import MotionSample
+from .common import Offset, samples_in_box
+from .movement.types import MotionSample
+from .records import XYCloud
 
 
 def frequency_weight(
@@ -39,10 +41,28 @@ def frequency_is_better(
 
 
 def weighted_centroid(
-    probes: list[tuple[Offset, float]],
+    probes: Sequence[tuple[Offset, float]] | XYCloud,
     search_for: Literal["min", "max"],
 ) -> Offset | None:
     """Frequency-weighted XY centroid, or ``None`` when the response is flat."""
+    if isinstance(probes, XYCloud):
+        if not probes.xs:
+            return None
+        freqs = probes.freqs or (0.0,) * len(probes.xs)
+        f_min = min(freqs)
+        f_max = max(freqs)
+        total_w = 0.0
+        centroid_x = 0.0
+        centroid_y = 0.0
+        for x, y, freq in zip(probes.xs, probes.ys, freqs, strict=True):
+            weight = frequency_weight(freq, f_min, f_max, search_for)
+            total_w += weight
+            centroid_x += x * weight
+            centroid_y += y * weight
+        if total_w < 1e-9:  # prevent division by zero
+            return None
+        return Offset(centroid_x / total_w, centroid_y / total_w)
+
     if not probes:
         return None
     freqs = [freq for _, freq in probes]
@@ -62,20 +82,25 @@ def weighted_centroid(
 
 
 def axis_weighted_centroid(
-    coords_and_freqs: list[tuple[float, float]],
+    coords_and_freqs: Sequence[tuple[float, float]],
     search_for: Literal["min", "max"],
 ) -> float | None:
     """1-D frequency-weighted centroid on a single axis profile."""
     if not coords_and_freqs:
         return None
-    probes = [(Offset(coord, 0.0), freq) for coord, freq in coords_and_freqs]
-    result = weighted_centroid(probes, search_for)
-    return result.x if result is not None else None
+    freqs = [freq for _, freq in coords_and_freqs]
+    f_min = min(freqs)
+    f_max = max(freqs)
+    weights = [frequency_weight(freq, f_min, f_max, search_for) for freq in freqs]
+    total_w = sum(weights)
+    if total_w < 1e-9:
+        return None
+    return sum(coord * w for (coord, _), w in zip(coords_and_freqs, weights)) / total_w
 
 
 def decoupled_centroid(
-    x_profile: list[tuple[float, float]],
-    y_profile: list[tuple[float, float]],
+    x_profile: Sequence[tuple[float, float]],
+    y_profile: Sequence[tuple[float, float]],
     search_for: Literal["min", "max"],
 ) -> Offset | None:
     """Independent X/Y weighted centroids from axis sweep profiles."""
@@ -105,19 +130,31 @@ def _grid_indices(
     return n_x_min, n_y_min, nx, ny, x_centers, y_centers
 
 
-def bin_sample_counts(
-    samples: list[MotionSample],
+def _in_box_freqs(
+    xs: Sequence[float],
+    ys: Sequence[float],
+    freqs: Sequence[float],
+    box: tuple[float, float, float, float],
+) -> list[float]:
+    x_lo, x_hi, y_lo, y_hi = box
+    return [
+        freq
+        for x, y, freq in zip(xs, ys, freqs, strict=True)
+        if x_lo <= x <= x_hi and y_lo <= y <= y_hi
+    ]
+
+
+def _bin_sample_counts_coords(
+    xs: Sequence[float],
+    ys: Sequence[float],
     box: tuple[float, float, float, float],
     tolerance: float,
     center: Offset,
 ) -> list[list[int]]:
-    """Per-bin sample counts on the same grid as ``bin_frequencies``."""
     n_x_min, n_y_min, nx, ny, _, _ = _grid_indices(box, tolerance, center)
     x_lo, x_hi, y_lo, y_hi = box
     counts = [[0] * nx for _ in range(ny)]
-    for sample in samples:
-        x = sample.offset.x
-        y = sample.offset.y
+    for x, y in zip(xs, ys, strict=True):
         if not (x_lo <= x <= x_hi and y_lo <= y <= y_hi):
             continue
         ix = math.floor((x - center.x) / tolerance + 0.5) - n_x_min
@@ -127,24 +164,38 @@ def bin_sample_counts(
     return counts
 
 
-def bin_frequencies(
-    samples: list[MotionSample],
+def bin_sample_counts(
+    samples: Sequence[MotionSample] | XYCloud,
+    box: tuple[float, float, float, float],
+    tolerance: float,
+    center: Offset,
+) -> list[list[int]]:
+    """Per-bin sample counts on the same grid as ``bin_frequencies``."""
+    if isinstance(samples, XYCloud):
+        return _bin_sample_counts_coords(samples.xs, samples.ys, box, tolerance, center)
+    in_box = samples_in_box(samples, box)
+    return _bin_sample_counts_coords(
+        [sample.offset.x for sample in in_box],
+        [sample.offset.y for sample in in_box],
+        box,
+        tolerance,
+        center,
+    )
+
+
+def _bin_frequencies_coords(
+    xs: Sequence[float],
+    ys: Sequence[float],
+    freqs: Sequence[float],
     box: tuple[float, float, float, float],
     tolerance: float,
     center: Offset,
     search_for: Literal["min", "max"],
 ) -> tuple[list[list[float | None]], list[float], list[float]]:
-    """Return ``(z[ny][nx] mean weight or None, x_centers, y_centers)``."""
     n_x_min, n_y_min, nx, ny, x_centers, y_centers = _grid_indices(
         box, tolerance, center
     )
-    x_lo, x_hi, y_lo, y_hi = box
-
-    in_box_freqs = [
-        sample.freq
-        for sample in samples
-        if x_lo <= sample.offset.x <= x_hi and y_lo <= sample.offset.y <= y_hi
-    ]
+    in_box_freqs = _in_box_freqs(xs, ys, freqs, box)
     if not in_box_freqs:
         z: list[list[float | None]] = [[None] * nx for _ in range(ny)]
         return z, x_centers, y_centers
@@ -153,16 +204,15 @@ def bin_frequencies(
 
     sums = [[0.0] * nx for _ in range(ny)]
     counts = [[0] * nx for _ in range(ny)]
-    for sample in samples:
-        x = sample.offset.x
-        y = sample.offset.y
+    x_lo, x_hi, y_lo, y_hi = box
+    for x, y, freq in zip(xs, ys, freqs, strict=True):
         if not (x_lo <= x <= x_hi and y_lo <= y <= y_hi):
             continue
         ix = math.floor((x - center.x) / tolerance + 0.5) - n_x_min
         iy = math.floor((y - center.y) / tolerance + 0.5) - n_y_min
         if not (0 <= ix < nx and 0 <= iy < ny):
             continue
-        weight = frequency_weight(sample.freq, f_min, f_max, search_for)
+        weight = frequency_weight(freq, f_min, f_max, search_for)
         sums[iy][ix] += weight
         counts[iy][ix] += 1
 
@@ -173,8 +223,33 @@ def bin_frequencies(
     return z, x_centers, y_centers
 
 
+def bin_frequencies(
+    samples: Sequence[MotionSample] | XYCloud,
+    box: tuple[float, float, float, float],
+    tolerance: float,
+    center: Offset,
+    search_for: Literal["min", "max"],
+) -> tuple[list[list[float | None]], list[float], list[float]]:
+    """Return ``(z[ny][nx] mean weight or None, x_centers, y_centers)``."""
+    if isinstance(samples, XYCloud):
+        freqs = samples.freqs or (0.0,) * len(samples.xs)
+        return _bin_frequencies_coords(
+            samples.xs, samples.ys, freqs, box, tolerance, center, search_for
+        )
+    in_box = samples_in_box(samples, box)
+    return _bin_frequencies_coords(
+        [sample.offset.x for sample in in_box],
+        [sample.offset.y for sample in in_box],
+        [sample.freq for sample in in_box],
+        box,
+        tolerance,
+        center,
+        search_for,
+    )
+
+
 def peak_bin_indices(
-    z: list[list[float | None]],
+    z: Sequence[Sequence[float | None]],
 ) -> tuple[int, int, float] | None:
     """Index and value of the bin with highest mean weight."""
     best_value: float | None = None
@@ -192,9 +267,9 @@ def peak_bin_indices(
 
 
 def peak_bin_center(
-    z: list[list[float | None]],
-    x_centers: list[float],
-    y_centers: list[float],
+    z: Sequence[Sequence[float | None]],
+    x_centers: Sequence[float],
+    y_centers: Sequence[float],
 ) -> Offset | None:
     """Bin with highest mean weight. Skip empty bins and flat response."""
     peak = peak_bin_indices(z)

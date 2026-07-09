@@ -15,13 +15,13 @@ import logging
 from ..common import Offset, Phase
 from ..config import SeekConfig
 from ..kconsole import KConsole
-from ..movement.handler import MotionSample
 from ..movement.sweep import (
     MotionCapture,
     SweepSettings,
     axis_sweep_centroid,
 )
-from ..plotting.primitives import (
+from ..movement.types import MotionSample
+from ..records import (
     Bounds,
     PassMove,
     SweepCentroidPassRecord,
@@ -91,9 +91,7 @@ class SweepCentroidStrategy(SeekStrategy):
                 f"eddy_seek: flat frequency response on sweep pass {pass_num} - "
                 f"keeping centre ({best.x:.4f}, {best.y:.4f})"
             )
-            _record_sweep_centroid_pass(
-                ctx, pass_num, phase, best, best, Offset.zero(), in_box, box
-            )
+            _record_sweep_centroid_pass(ctx, pass_num, phase, best, best, in_box, box)
             return best
 
         result = result_or_none.clamp(cfg.max_jog_x, cfg.max_jog_y)
@@ -109,7 +107,6 @@ class SweepCentroidStrategy(SeekStrategy):
             phase,
             best,
             result,
-            (result - best).abs_components(),
             in_box,
             box,
         )
@@ -136,7 +133,6 @@ def _record_sweep_centroid_pass(
     phase: Phase,
     center: Offset,
     result: Offset,
-    moved: Offset,
     samples: list[MotionSample],
     box: tuple[float, float, float, float],
 ) -> None:
