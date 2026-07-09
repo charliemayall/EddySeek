@@ -194,7 +194,7 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 **One tool:** load each tool, then `EDDY_SEEK_TOOL TOOL=n`. Run `SAVE_CONFIG` after each.
 
-**All tools:** load tool 0, then `EDDY_SEEK_TOOLS` (runs load macros for tools 1…N). Run `SAVE_CONFIG` once at the end.
+**All tools:** `EDDY_SEEK_TOOLS` (runs load macros `T0`…`Tn`). Run `SAVE_CONFIG` once at the end.
 
 `REPEATS=n` (default 3) runs each tool's seek `n` times at the same start position and saves the **mean** offset. With `n >= 2`, repeatability stats (σ, max scatter) match `EDDY_SEEK_ACCURACY`.
 

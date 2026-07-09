@@ -244,6 +244,35 @@ def test_align_tool_number_load_macro_only_when_requested():
         assert tools.load_calls == [1]
 
 
+def test_align_tool_number_load_macro_for_tool0_when_requested():
+    tools = _LoadMacroTools()
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
+    ok = ok_seek_result()
+
+    with patch("_eddy_seek.tool_align.align_tool", return_value=ok):
+        align_tool_number(
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
+            FakeGcmd(),
+            0,
+            None,
+            console=_console(),
+            load_tool=False,
+        )
+        assert tools.load_calls == []
+
+        align_tool_number(
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
+            FakeGcmd(),
+            0,
+            None,
+            console=_console(),
+            load_tool=True,
+        )
+        assert tools.load_calls == [0]
+
+
 def test_align_tool_number_approaches_x_then_y():
     tools = _LoadMacroTools()
     toolhead = RecordingToolhead(start=(5.0, 10.0))
@@ -324,6 +353,7 @@ def test_align_all_tools_milestone_console_messages():
         result = align_all_tools(host, tools, gcmd, tool_count=2)  # ty: ignore[invalid-argument-type]
 
     assert result.status == "ok"
+    assert tools.load_calls == [0, 1]
     assert gcmd.raw == [
         "echo: ES: Aligning tool 1 of 2…",
         "echo: Tool 0 reference - X=+10.10 Y=+19.80 mm",

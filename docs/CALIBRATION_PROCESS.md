@@ -53,15 +53,16 @@ the resulting offset is the XY difference from tool 0.
 
 ## Multi-tool alignment sequence
 
-`EDDY_SEEK_TOOLS` follows this logic (`EDDY_SEEK_TOOL` is the same seek steps but
-does not run load macros - load each tool before calling it):
+`EDDY_SEEK_TOOLS` runs each tool's load macro (`T0`…`Tn`) then seeks.
+`EDDY_SEEK_TOOL` is the same seek steps; pass `LOAD=1` to run the load macro.
 
 ```mermaid
 flowchart TD
     START([EDDY_SEEK_TOOLS]) --> SAVE[Save G-code state]
     SAVE --> LOOP{For each tool 0…N-1}
 
-    LOOP -->|tool 0| T0_MOVE[Move to sensor_x/sensor_y]
+    LOOP -->|tool 0| T0_LOAD[Run load macro T0]
+    T0_LOAD --> T0_MOVE[Move to sensor_x/sensor_y]
     T0_MOVE --> T0_START[Record start XY]
     T0_START --> T0_SEEK[Run XY seek from sensor position]
     T0_SEEK --> T0_OK{Seek OK?}

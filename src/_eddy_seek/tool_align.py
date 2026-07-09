@@ -170,8 +170,8 @@ def align_tool_number(
     Tool 0 establishes the reference centre.  Later tools are moved to that
     centre, then seeked.  The seek offset is the inter-tool XY offset.
 
-    When ``load_tool`` is true (``EDDY_SEEK_TOOLS``), the load macro runs first.
-    ``EDDY_SEEK_TOOL`` leaves ``load_tool`` false so the caller loads the tool.
+    When ``load_tool`` is true, the load macro runs before alignment moves.
+    ``EDDY_SEEK_TOOL`` defaults ``load_tool`` false; pass ``LOAD=1`` to run it.
     """
     if tool_number < 0 or tool_number >= tools.tool_count:
         logger.info(
@@ -193,7 +193,11 @@ def align_tool_number(
 
     if tool_number == 0:
         logger.info("eddy_seek: aligning tool 0 (reference)")
-        clear_gcode_offset_xy(host.printer)  # caller may have an offset applied
+        if load_tool:
+            macro = tools.format_load_macro(tool_number)
+            logger.info(f"eddy_seek: loading tool {tool_number} via {macro}")
+            tools.run_load_macro(tool_number)
+        clear_gcode_offset_xy(host.printer)  # load macro may have added an offset
         start = move_to_seek_start_pos(host, tools)
         seek_result = _seek_tool_repeated(host, gcmd, strategy=strategy, **seek_kw)
         if seek_result is None:
