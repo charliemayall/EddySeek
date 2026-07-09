@@ -410,7 +410,6 @@ def test_centroid_finalize_strategy_plot_returns_plot_path(requires_plotly, tmp_
         {
             "config": cfg,
             "session_id": "abcd1234-session",
-            "run_id": "batch123",
             "run_label": "tools",
             "artifact_label": "tools_t0",
             "artifact_write_at": PLOT_WRITE_AT,

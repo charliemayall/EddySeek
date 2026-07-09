@@ -25,6 +25,7 @@ from pytest import raises
 from _eddy_seek.common import Offset, Position
 from _eddy_seek.config import SeekConfig
 from _eddy_seek.kconsole import KConsole
+from _eddy_seek.session import ArtifactRunContext
 from _eddy_seek.tool_align import (
     _TARGET_SENSOR_OFFSET_FROM_REF,
     align_all_tools,
@@ -354,8 +355,7 @@ def test_align_all_tools_shares_artifact_run_context():
 
     assert result.status == "ok"
     assert len(captured) == 2
-    assert captured[0]["run_id"] == captured[1]["run_id"]
-    assert captured[0]["artifact_write_at"] == captured[1]["artifact_write_at"]
+    assert captured[0]["artifact"] is captured[1]["artifact"]
     assert captured[0]["artifact_label"] == "tools_t0"
     assert captured[1]["artifact_label"] == "tools_t1"
 
@@ -524,8 +524,7 @@ def test_align_tool_number_averages_repeats(
             tool_number,
             center,
             console=_console(gcmd if tool_number == 0 else None),
-            run_id="abc",
-            artifact_write_at=datetime.now(),
+            artifact=ArtifactRunContext(run_label="run", write_at=datetime.now()),
             repeats=3,
         )
 
@@ -563,8 +562,7 @@ def test_align_tool_number_fails_on_repeat_failure():
             0,
             None,
             console=_console(gcmd),
-            run_id="abc",
-            artifact_write_at=datetime.now(),
+            artifact=ArtifactRunContext(run_label="run", write_at=datetime.now()),
             repeats=2,
         )
 

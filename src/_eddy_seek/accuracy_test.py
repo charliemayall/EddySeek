@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 import random
-import uuid
 from dataclasses import replace
 from datetime import datetime
 
@@ -21,7 +20,7 @@ from .config import SeekConfig
 from .kconsole import KConsole
 from .movement.handler import manual_move_xy
 from .repeated_seek import finalize_repeat_seek, run_repeated_seeks
-from .session import SeekHost, SeekSession, SeekSessionResult
+from .session import ArtifactRunContext, SeekHost, SeekSession, SeekSessionResult
 from .strategy import strategy_for
 
 logger = logging.getLogger(__name__)
@@ -52,8 +51,7 @@ def run_accuracy_test(
     mock_enabled: bool,
 ) -> None:
     cfg = host.seek_config
-    run_id = uuid.uuid4().hex[:8]
-    write_at = datetime.now()
+    artifact = ArtifactRunContext(run_label="accuracy", write_at=datetime.now())
 
     def run_once(repeat: int) -> SeekSessionResult:
         mock_offset = Offset.zero()
@@ -62,10 +60,8 @@ def run_accuracy_test(
 
         result = SeekSession(
             host,
-            run_id=run_id,
-            run_label="accuracy",
+            artifact=artifact,
             artifact_label=f"r{repeat}",
-            artifact_write_at=write_at,
         ).run(
             gcmd,
             strategy_for(cfg.strategy),
@@ -96,10 +92,8 @@ def run_accuracy_test(
         host,
         console,
         repeated,
-        run_id=run_id,
-        write_at=write_at,
+        artifact=artifact,
         suffix="accuracy",
-        run_label="accuracy",
         log_plot_saved=True,
     )
     console.exit(f"Accuracy test complete ({len(offsets)} repeats)")

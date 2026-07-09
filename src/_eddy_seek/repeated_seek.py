@@ -13,7 +13,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 from .accuracy_stats import compute_accuracy_stats, report_accuracy_stats
@@ -24,7 +23,7 @@ from .movement.handler import move_to_xy
 from .plotting.accuracy import write_accuracy_plot
 from .plotting.artifacts import write_figure
 from .plotting.primitives import AccuracyRepeatRecord
-from .session import SeekHost, SeekSessionResult
+from .session import ArtifactRunContext, SeekHost, SeekSessionResult
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +41,8 @@ def write_repeat_scatter_plot(
     host: SeekHost,
     *,
     records: tuple[AccuracyRepeatRecord, ...],
-    run_id: str,
-    write_at: datetime,
+    artifact: ArtifactRunContext,
     suffix: str,
-    run_label: str,
 ) -> str | None:
     cfg = host.seek_config
     fig = write_accuracy_plot(repeats=list(records))
@@ -56,9 +53,9 @@ def write_repeat_scatter_plot(
     return write_figure(
         Path(cfg.result_folder),
         fig,
-        write_at=write_at,
+        write_at=artifact.write_at,
         suffix=suffix,
-        run_label=run_label,
+        run_label=artifact.run_label,
     )
 
 
@@ -67,10 +64,8 @@ def finalize_repeat_seek(
     console: KConsole,
     repeated: RepeatedSeekResult,
     *,
-    run_id: str,
-    write_at: datetime,
+    artifact: ArtifactRunContext,
     suffix: str,
-    run_label: str,
     log_plot_saved: bool = False,
 ) -> None:
     """Report repeatability stats and optionally write the scatter plot."""
@@ -84,10 +79,8 @@ def finalize_repeat_seek(
     plot_path = write_repeat_scatter_plot(
         host,
         records=repeated.records,
-        run_id=run_id,
-        write_at=write_at,
+        artifact=artifact,
         suffix=suffix,
-        run_label=run_label,
     )
     if plot_path is None:
         return

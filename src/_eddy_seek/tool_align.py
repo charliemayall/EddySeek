@@ -11,7 +11,6 @@ Alignment session logic: seek a single tool or run the full multi-tool sequence.
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
@@ -22,7 +21,12 @@ from .movement.guard import clear_gcode_offset_xy
 from .movement.handler import move_to_xy
 from .plot_announce import announce_seek_plot
 from .repeated_seek import finalize_repeat_seek, run_repeated_seeks
-from .session import SeekHost, SeekSession, SeekSessionResult
+from .session import (
+    ArtifactRunContext,
+    SeekHost,
+    SeekSession,
+    SeekSessionResult,
+)
 from .strategy import strategy_for
 from .tools import Tool, ToolAlignConfig
 
@@ -81,10 +85,8 @@ def align_tool(
     host: SeekHost,
     gcmd,
     *,
-    run_id: str | None = None,
-    run_label: str = "run",
+    artifact: ArtifactRunContext | None = None,
     artifact_label: str = "",
-    artifact_write_at: datetime | None = None,
     announce_plot: bool = False,
     strategy: str | None = None,
 ) -> SeekSessionResult:
@@ -93,10 +95,8 @@ def align_tool(
     strategy_impl = strategy_for(strategy_name)
     return SeekSession(
         host,
-        run_id=run_id,
-        run_label=run_label,
+        artifact=artifact,
         artifact_label=artifact_label,
-        artifact_write_at=artifact_write_at,
     ).run(gcmd, strategy_impl, boundaries=False, announce_plot=announce_plot)
 
 
@@ -107,16 +107,12 @@ def _seek_tool_repeated(
     repeats: int,
     console: KConsole,
     base_artifact_label: str,
-    run_id: str | None,
-    run_label: str,
-    artifact_write_at: datetime | None,
+    artifact: ArtifactRunContext | None,
     strategy: str | None = None,
 ) -> tuple[Offset, SeekSessionResult | None] | None:
     """Run ``repeats`` seeks at the current XY; return mean offset or None on failure."""
-    if repeats >= 2 and (run_id is None or artifact_write_at is None):
-        raise RuntimeError(
-            "eddy_seek: repeat seeks require run_id and artifact_write_at"
-        )
+    if repeats >= 2 and artifact is None:
+        raise RuntimeError("eddy_seek: repeat seeks require artifact run context")
 
     def run_once(repeat: int) -> SeekSessionResult:
         label = (
@@ -125,10 +121,8 @@ def _seek_tool_repeated(
         return align_tool(
             host,
             gcmd,
-            run_id=run_id,
-            run_label=run_label,
+            artifact=artifact,
             artifact_label=label,
-            artifact_write_at=artifact_write_at,
             announce_plot=repeats >= 2,
             strategy=strategy,
         )
@@ -144,16 +138,13 @@ def _seek_tool_repeated(
         return None
 
     if repeats >= 2:
-        assert run_id is not None
-        assert artifact_write_at is not None
+        assert artifact is not None
         finalize_repeat_seek(
             host,
             console,
             repeated,
-            run_id=run_id,
-            write_at=artifact_write_at,
+            artifact=artifact,
             suffix=base_artifact_label,
-            run_label=run_label,
         )
 
     return repeated.mean, repeated.last_result
@@ -168,9 +159,7 @@ def align_tool_number(
     *,
     console: KConsole,
     load_tool: bool = False,
-    run_id: str | None = None,
-    run_label: str = "run",
-    artifact_write_at: datetime | None = None,
+    artifact: ArtifactRunContext | None = None,
     batch: bool = False,
     repeats: int = 1,
     strategy: str | None = None,
@@ -199,9 +188,7 @@ def align_tool_number(
         "repeats": repeats,
         "console": console,
         "base_artifact_label": artifact_label,
-        "run_id": run_id,
-        "run_label": run_label,
-        "artifact_write_at": artifact_write_at,
+        "artifact": artifact,
     }
 
     if tool_number == 0:
@@ -294,8 +281,7 @@ def align_all_tools(
         f"eddy_seek: align_all_tools starting {count} tool(s) repeats={repeats}"
     )
     tool0_center: Position | None = None
-    run_id = uuid.uuid4().hex[:8]
-    write_at = datetime.now()
+    artifact = ArtifactRunContext(run_label="tools", write_at=datetime.now())
     try:
         for tool_number in range(count):
             if tool_number == 0:
@@ -310,9 +296,7 @@ def align_all_tools(
                 tool0_center,
                 console=console,
                 load_tool=True,
-                run_id=run_id,
-                run_label="tools",
-                artifact_write_at=write_at,
+                artifact=artifact,
                 batch=True,
                 repeats=repeats,
             )

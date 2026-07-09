@@ -71,6 +71,14 @@ class _SearchRun:
 
 
 @dataclass(frozen=True, slots=True)
+class ArtifactRunContext:
+    """Shared artifact folder timestamp for a batch of seeks."""
+
+    run_label: str
+    write_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class SeekSessionResult:
     session_id: str
     start_time: float
@@ -92,20 +100,16 @@ class SeekSession:
         self,
         host: SeekHost,
         *,
-        run_id: str | None = None,
-        run_label: str = "run",
+        artifact: ArtifactRunContext | None = None,
         artifact_label: str = "",
-        artifact_write_at: datetime | None = None,
     ) -> None:
         self._host = host
         self.config = host.seek_config
         self._printer = host.printer
         self._gcode = self._printer.lookup_object("gcode")
         self.session_id = str(uuid.uuid4())
-        self.run_id = run_id
-        self.run_label = run_label
+        self._artifact = artifact
         self.artifact_label = artifact_label
-        self._artifact_write_at = artifact_write_at
         self.start_time = time.time()
         self._motion: MotionHandler | None = None
         cfg = host.seek_config
@@ -117,10 +121,16 @@ class SeekSession:
         self._session_start: Position | None = None
 
     @property
+    def run_label(self) -> str:
+        if self._artifact is None:
+            return "run"
+        return self._artifact.run_label
+
+    @property
     def artifact_write_at(self) -> datetime:
-        if self._artifact_write_at is None:
+        if self._artifact is None:
             raise RuntimeError("eddy_seek: artifact write at not set")
-        return self._artifact_write_at
+        return self._artifact.write_at
 
     def artifact_suffix(self, strategy: str) -> str:
         if self.artifact_label:

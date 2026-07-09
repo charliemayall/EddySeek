@@ -11,7 +11,6 @@ eddy_seek.py  -  Klipper extra for nozzle alignment via LDC1612.
 from __future__ import annotations
 
 import logging
-import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import fields
@@ -25,7 +24,7 @@ from ._eddy_seek.kconsole import KConsole
 from ._eddy_seek.movement.guard import clear_gcode_offset_xy
 from ._eddy_seek.movement.handler import MIN_CAPTURE_SAMPLES
 from ._eddy_seek.sensor_z import assert_sensor_z
-from ._eddy_seek.session import SeekHost, SeekSession
+from ._eddy_seek.session import ArtifactRunContext, SeekHost, SeekSession
 from ._eddy_seek.strategy import strategy_for
 from ._eddy_seek.tool_align import align_all_tools, align_tool_number
 from ._eddy_seek.tools import ToolAlignConfig
@@ -333,15 +332,12 @@ class EddySeek(SeekHost):
         )
         console = self.refresh_console(gcmd)
         console.entry("Seeking nozzle centre…")
-        write_at = datetime.now()
-        run_id = uuid.uuid4().hex[:8]
+        artifact = ArtifactRunContext(run_label="start", write_at=datetime.now())
         strategy = strategy_for(self.seek_config.strategy_from_gcmd(gcmd))
         SeekSession(
             self,
-            run_id=run_id,
-            run_label="start",
+            artifact=artifact,
             artifact_label="start",
-            artifact_write_at=write_at,
         ).run(gcmd, strategy)
 
     def cmd_EDDY_SEEK_TOOL(self, gcmd: GCodeCommand) -> None:
@@ -360,8 +356,7 @@ class EddySeek(SeekHost):
         )
         console = self.refresh_console(gcmd)
         console.entry(f"Aligning tool {tool_number}…")
-        write_at = datetime.now()
-        run_id = uuid.uuid4().hex[:8]
+        artifact = ArtifactRunContext(run_label="tool", write_at=datetime.now())
         try:
             tool, tool0_center, error = align_tool_number(
                 self,
@@ -371,9 +366,7 @@ class EddySeek(SeekHost):
                 self._tool0_center,
                 console=console,
                 load_tool=load_tool,
-                run_id=run_id,
-                run_label="tool",
-                artifact_write_at=write_at,
+                artifact=artifact,
                 repeats=repeats,
                 strategy=strategy,
             )
