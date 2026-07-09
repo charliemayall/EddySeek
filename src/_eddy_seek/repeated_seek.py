@@ -5,7 +5,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-Shared repeat-and-average seek loop for EDDY_SEEK_ACCURACY and tool alignment.
+Shared repeat-and-average seek loop for EDDY_SEEK_ACCURACY and commands with REPEATS=<int> params.
 """
 
 from __future__ import annotations
