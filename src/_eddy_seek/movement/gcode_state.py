@@ -5,7 +5,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-SAVE_GCODE_STATE / RESTORE_GCODE_STATE helpers.
+Gcode session boundary helpers (state save/restore and XY offset).
 """
 
 from __future__ import annotations
@@ -13,13 +13,23 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
+from ..common import Offset
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from klippy.gcode import GCodeDispatch
+    from klippy.klippy import Printer
 
 # 1 ms dwell before MOVE restore; enough to clear Klipper's move timer
 _MOVE_RESTORE_DWELL_MS = 1
+
+
+def clear_gcode_offset_xy(printer: Printer) -> None:
+    """Zero XY gcode offset so alignment moves use machine coordinates."""
+    printer.lookup_object("gcode").run_script_from_command(
+        f"SET_GCODE_OFFSET {Offset.zero().to_gcode()}"
+    )
 
 
 def save_gcode_state(gcode: GCodeDispatch, name: str) -> None:

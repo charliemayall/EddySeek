@@ -11,7 +11,7 @@ from typing import Any, cast
 from fakes import CommandError, FakeGcmd, RecordingToolhead
 from pytest import raises
 
-from _eddy_seek.sensor_z import assert_sensor_z
+from _eddy_seek.movement.guard import assert_sensor_z
 
 
 def test_assert_sensor_z_skips_when_unset():
