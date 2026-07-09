@@ -330,7 +330,7 @@ def render_debug_scan_figure(
     freqs = list(heatmap.samples.freqs or ())
     scale_rows = [
         {
-            "scale": f"@{scale}×",
+            "scale": f"@{scale}x",
             "tolerance": f"{tol:.4g}",
             "result": f"({panel_result.x:+.4f}, {panel_result.y:+.4f})",
         }
@@ -374,7 +374,7 @@ def render_debug_scan_figure(
             "value": format_optional(analysis.fwhm_y, unit=" mm"),
         },
     ]
-    final = f"Final (1×): ({result.x:+.4f}, {result.y:+.4f}) mm"
+    final = f"Final (1x): ({result.x:+.4f}, {result.y:+.4f}) mm"
 
     peak_y = y_centers[analysis.peak_iy]
     peak_x = x_centers[analysis.peak_ix]
@@ -392,13 +392,13 @@ def render_debug_scan_figure(
             [{"colspan": 2}, None],
         ],
         subplot_titles=[
-            "1× weight",
+            "1x weight",
             "sample density",
             f"X slice @ Y={peak_y:+.3g} mm",
             f"Y slice @ X={peak_x:+.3g} mm",
-            "2× bin",
-            "4× bin",
-            "8× bin",
+            "2x bin",
+            "4x bin",
+            "8x bin",
             "",
             "",
             "",

@@ -139,8 +139,8 @@ flowchart TD
 
 ### Centroid strategy (`strategy: centroid`)
 
-Each pass probes a **3×3 grid** around the current best point. Grid spacing
-halves every pass (`max_jog/2 × 0.5^(pass−1)`). Sampled frequencies are
+Each pass probes a **3x3 grid** around the current best point. Grid spacing
+halves every pass (`max_jog/2 x 0.5^(pass−1)`). Sampled frequencies are
 weighted toward the target extreme and the toolhead moves to the weighted
 centroid.
 
@@ -160,7 +160,7 @@ peak is found with a frequency-weighted 2D centroid over in-range samples.
 ```mermaid
 flowchart TD
   COARSE["Coarse pass(es): bidirectional X/Y sweeps<br/>±max_jog, staggered cross offsets"] --> FINE
-  FINE["Fine pass(es): narrower sweeps<br/>range × fine_shrink"] --> CENT["2D weighted centroid"]
+  FINE["Fine pass(es): narrower sweeps<br/>range x fine_shrink"] --> CENT["2D weighted centroid"]
   CENT --> CHECK{"Converged?"}
   CHECK -->|no| FINE
   CHECK -->|yes| DONE([Best offset])
@@ -210,10 +210,10 @@ offset_y: -0.456000
 is_calibrated: True
 ```
 
-| Tool    | `offset_x` / `offset_y` meaning                             |
-| ------- | ----------------------------------------------------------- |
-| es_T0   | Always `0, 0` - defines the reference centre                |
-| es_T1…  | XY shift needed so this nozzle matches tool 0 on the sensor |
+| Tool   | `offset_x` / `offset_y` meaning                             |
+| ------ | ----------------------------------------------------------- |
+| es_T0  | Always `0, 0` - defines the reference centre                |
+| es_T1… | XY shift needed so this nozzle matches tool 0 on the sensor |
 
 `SAVE_CONFIG` persists these values. Your toolchanger macros or motion system
 apply them when switching tools.

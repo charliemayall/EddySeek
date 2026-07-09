@@ -79,7 +79,7 @@ class DivergenceError(SeekExitError):
         super().__init__(
             strategy,
             f"{strategy} pass corrections diverging at pass {pass_num}: "
-            f"correction {correction:.4f} mm > {multiplier} × {prior_correction:.4f} mm",
+            f"correction {correction:.4f} mm > {multiplier} x {prior_correction:.4f} mm",
             exit_kind=SeekExitKind.DIVERGENCE,
         )
 

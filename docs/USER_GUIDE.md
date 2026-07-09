@@ -127,7 +127,7 @@ See [example.cfg](../example.cfg) for a complete example.
 | `sweep_cross_offset`   | `0.3`   | Stagger between parallel sweeps (mm)                   |
 | `coarse_phases`        | `2`     | Coarse search passes before fine passes                |
 | `coarse_cross_passes`  | `3`     | Staggered sweep lines per coarse pass (fine uses 1)    |
-| `fine_shrink`          | `0.6`   | Fine pass range multiplier (× max_jog)                 |
+| `fine_shrink`          | `0.6`   | Fine pass range multiplier (x max_jog)                 |
 | `min_sweep_samples`    | `20`    | Minimum profile points before centroid fit             |
 | `sweep_arc_resolution` | `0.1`   | Max chord length per connector arc between sweeps (mm) |
 
@@ -223,7 +223,7 @@ Continuous axis sweeps (like Klipper's bed mesh `rapid_scan` method). Coarse bid
 
 ### Centroid (`strategy: centroid`)
 
-3×3 grid around the current best point with `dwell_time` at each probe. Grid spacing is `max_jog_x/y / 2`, halving each pass. Very slow - backup strategy when sweep centroid sample rate is too low.
+3x3 grid around the current best point with `dwell_time` at each probe. Grid spacing is `max_jog_x/y / 2`, halving each pass. Very slow - backup strategy when sweep centroid sample rate is too low.
 
 ### Debug scan (`strategy: debug_scan`)
 

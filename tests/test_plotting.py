@@ -293,9 +293,9 @@ def test_debug_scan_plot_returns_figure(requires_plotly):
     )
     header = fig.layout.meta["eddy_header"]
     scale_table = header["tables"][0]
-    assert scale_table["rows"][1]["scale"] == "@2×"
-    assert scale_table["rows"][2]["scale"] == "@4×"
-    assert scale_table["rows"][3]["scale"] == "@8×"
+    assert scale_table["rows"][1]["scale"] == "@2x"
+    assert scale_table["rows"][2]["scale"] == "@4x"
+    assert scale_table["rows"][3]["scale"] == "@8x"
     summary = {row["metric"]: row["value"] for row in header["tables"][1]["rows"]}
     assert summary["centroid"] != "n/a"
     assert "prominence" in summary
