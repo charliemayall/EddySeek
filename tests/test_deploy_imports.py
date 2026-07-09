@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from fakes import write_minimal_klippy_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,13 +32,7 @@ def _purge_eddy_seek_modules() -> None:
 @pytest.fixture
 def klippy_extras(tmp_path):
     klippy_root = tmp_path / "klippy"
-    klippy_pkg = klippy_root / "klippy"
-    klippy_pkg.mkdir(parents=True)
-    (klippy_pkg / "__init__.py").write_text("")
-    (klippy_pkg / "gcode.py").write_text(
-        "class CommandError(Exception):\n    pass\n\n"
-        "class GCodeCommand:\n    error = CommandError\n"
-    )
+    write_minimal_klippy_tree(klippy_root)
 
     extras = klippy_root / "extras"
     extras.mkdir(parents=True)
@@ -82,13 +77,7 @@ def test_install_script(tmp_path):
 
     (install_dir / "ldc1612.py").write_text(LDC1612_STUB)
     klippy_root = tmp_path / "klippy"
-    klippy_pkg = klippy_root / "klippy"
-    klippy_pkg.mkdir(parents=True, exist_ok=True)
-    (klippy_pkg / "__init__.py").write_text("")
-    (klippy_pkg / "gcode.py").write_text(
-        "class CommandError(Exception):\n    pass\n\n"
-        "class GCodeCommand:\n    error = CommandError\n"
-    )
+    write_minimal_klippy_tree(klippy_root)
     sys.path.insert(0, str(klippy_root))
     try:
         mod = importlib.import_module("extras.eddy_seek")

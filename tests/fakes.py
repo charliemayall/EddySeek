@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock
 
@@ -129,7 +130,7 @@ class FakeGcode(_GCodeDispatchBase):
     def respond_info(self, msg: str, log: bool = True) -> None:
         pass
 
-    def get_status(self, eventtime: float) -> dict[str, dict[str, str]]:
+    def get_status(self, eventtime: float) -> dict[str, Any]:
         return {"commands": {cmd: {} for cmd in self._commands}}
 
     def register_command(
@@ -287,3 +288,21 @@ def ok_seek_result(
     }
     defaults.update(kwargs)
     return SeekSessionResult(**defaults)  # ty: ignore[invalid-argument-type]
+
+
+_KLIPPY_GCODE_STUB = (
+    "class CommandError(Exception):\n"
+    "    pass\n\n"
+    "class GCodeCommand:\n"
+    "    error = CommandError\n"
+)
+
+
+def write_minimal_klippy_tree(klippy_root: Path) -> None:
+    """Stub klippy + ty_extensions so ``extras.eddy_seek`` imports in tests."""
+    klippy_pkg = klippy_root / "klippy"
+    klippy_pkg.mkdir(parents=True, exist_ok=True)
+    (klippy_pkg / "__init__.py").write_text("")
+    (klippy_pkg / "gcode.py").write_text(_KLIPPY_GCODE_STUB)
+    (klippy_pkg / "klippy.py").write_text("class Printer:\n    pass\n")
+    (klippy_root / "ty_extensions.py").write_text("class Unknown:\n    pass\n")

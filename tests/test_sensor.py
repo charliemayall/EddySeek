@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import pytest
+from fakes import write_minimal_klippy_tree
 from pytest import raises
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,13 +35,7 @@ def _purge_eddy_seek_modules() -> None:
 @pytest.fixture
 def eddy_seek_mod(tmp_path):
     klippy_root = tmp_path / "klippy"
-    klippy_pkg = klippy_root / "klippy"
-    klippy_pkg.mkdir(parents=True)
-    (klippy_pkg / "__init__.py").write_text("")
-    (klippy_pkg / "gcode.py").write_text(
-        "class CommandError(Exception):\n    pass\n\n"
-        "class GCodeCommand:\n    error = CommandError\n"
-    )
+    write_minimal_klippy_tree(klippy_root)
 
     extras = klippy_root / "extras"
     extras.mkdir(parents=True)
