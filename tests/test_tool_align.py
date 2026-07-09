@@ -243,6 +243,27 @@ def test_align_tool_number_load_macro_only_when_requested():
         assert tools.load_calls == [1]
 
 
+def test_align_tool_number_approaches_x_then_y():
+    tools = _LoadMacroTools()
+    toolhead = RecordingToolhead(start=(5.0, 10.0))
+    host = _FakeSeekHost(FakePrinter(toolhead=toolhead))
+    tool0_center = Position(20.0, 30.0)
+    ok = ok_seek_result()
+
+    with patch("_eddy_seek.tool_align.align_tool", return_value=ok):
+        align_tool_number(
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
+            FakeGcmd(),
+            1,
+            tool0_center,
+            console=_console(),
+            load_tool=True,
+        )
+
+    assert toolhead.moves == [[20.0, 10.0], [20.0, 30.0]]
+
+
 def test_align_tool_number_requires_tool0_after_restart():
     tools = _LoadMacroTools()
     host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))

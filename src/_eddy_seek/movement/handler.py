@@ -407,7 +407,7 @@ class MotionHandler(_SessionMotionBase):
                     "eddy_seek: LDC1612 sensor outage during sweep "
                     f"(no data by t={capture_end:.3f})"
                 )
-            reactor.pause(systime + 0.010)  # ty: ignore[unresolved-attribute]
+            reactor.pause(systime + 0.010)
             self._process_buffered_data()
 
     def _sensor_outage(self, systime: float, end_time: float) -> bool:

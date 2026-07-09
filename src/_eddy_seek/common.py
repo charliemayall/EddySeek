@@ -29,10 +29,8 @@ BASE_REACTOR_YIELD_S = 0.001
 
 
 def yield_to_reactor(reactor: Reactor, seconds: float = BASE_REACTOR_YIELD_S) -> None:
-    """Let Klipper service the MCU before blocking on plot I/O."""
-    reactor.pause(  # ty: ignore[unresolved-attribute]
-        reactor.monotonic() + seconds
-    )
+    """Let Klipper service the MCU"""
+    reactor.pause(reactor.monotonic() + seconds)
 
 
 class StrEnum(str, Enum):

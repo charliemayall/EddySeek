@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from .common import Offset, Position
+from .common import Offset, Position, yield_to_reactor
 from .kconsole import KConsole
 from .movement.guard import clear_gcode_offset_xy
 from .movement.handler import move_to_xy
@@ -250,7 +250,12 @@ def align_tool_number(
         tools.run_load_macro(tool_number)
     clear_gcode_offset_xy(host.printer)  # load macro may have added an offset
     toolhead = host.printer.lookup_object("toolhead")
-    move_to_xy(toolhead, tool0_center, host.seek_config.jog_speed, wait=True)
+    speed = host.seek_config.jog_speed
+    current = Position.from_toolhead(toolhead)
+    # DONT GO DIAGONAL, may clip into the "box" where the tools are.
+    move_to_xy(toolhead, current.with_x(tool0_center.x), speed, wait=True)
+    move_to_xy(toolhead, tool0_center, speed, wait=True)
+    yield_to_reactor(host.printer.get_reactor())
 
     seek_result = _seek_tool_repeated(host, gcmd, strategy=strategy, **seek_kw)
     if seek_result is None:
