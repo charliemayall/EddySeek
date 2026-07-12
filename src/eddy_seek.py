@@ -17,8 +17,6 @@ from dataclasses import fields
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from klippy.klippy import Printer
-
 from ._eddy_seek.accuracy import run_accuracy_test
 from ._eddy_seek.common import Offset, Position
 from ._eddy_seek.config import SeekConfig, load_seek_config
@@ -34,6 +32,7 @@ if TYPE_CHECKING:
     from klippy.extras.configfile import ConfigWrapper
     from klippy.extras.ldc1612 import LDC1612
     from klippy.gcode import GCodeCommand
+    from klippy.klippy import Printer
 
     from ._eddy_seek.tools import ToolAlignConfig
 
