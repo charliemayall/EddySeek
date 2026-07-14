@@ -1,5 +1,8 @@
 # EddySeek
 
+[![version](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/charliemayall/EddySeek/main/pyproject.toml&query=%24.project.version&label=version)](https://github.com/charliemayall/EddySeek)
+[![license](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/charliemayall/EddySeek/main/pyproject.toml&query=%24.project.license&label=license)](LICENSE)
+
 **Nozzle alignment for Klipper toolchangers using an LDC1612 eddy-current sensor.**
 
 EddySeek reads an LDC1612 coil, runs XY search routines, and measures per-tool XY offsets relative to a reference nozzle.
