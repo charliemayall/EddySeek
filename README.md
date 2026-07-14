@@ -10,15 +10,6 @@ EddySeek reads an LDC1612 coil, runs XY search routines, and measures per-tool X
 > proven across many machines. Validate alignment results on your own hardware
 > before relying on them, and keep an eye on the toolhead during the first runs.
 
-## Demo
-
-![Centroid search demo](docs/media/demo_centroid.webp)
-
-Full quality: [`docs/media/demo_centroid.mp4`](docs/media/demo_centroid.mp4)
-
-> **Note:** The video shows a stationary screw with a sensor being aligned over it for demonstration.
-> On a toolchanger, the **nozzle** moves and the **sensor stays fixed** on the bed or frame.
-
 ## Quick start
 
 ```bash
