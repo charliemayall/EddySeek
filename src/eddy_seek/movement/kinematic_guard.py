@@ -99,7 +99,7 @@ class KnownKinematicLimits:
 
         input_shaper = self._printer.lookup_object("input_shaper", None)
         if input_shaper is not None:
-            input_shaper.disable_shaping()  # ty: ignore[unresolved-attribute]
+            input_shaper.disable_shaping()
             logger.info("EDDY_SEEK: disabled input shaping")
         else:
             logger.info("EDDY_SEEK: no input shaping found")
@@ -122,7 +122,7 @@ class KnownKinematicLimits:
 
         input_shaper = self._printer.lookup_object("input_shaper", None)
         if input_shaper is not None:
-            input_shaper.enable_shaping()  # ty: ignore[unresolved-attribute]
+            input_shaper.enable_shaping()
             logger.info("EDDY_SEEK: enabled input shaping")
 
         return

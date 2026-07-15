@@ -1,5 +1,8 @@
 # EddySeek
 
+[![version](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/charliemayall/EddySeek/main/pyproject.toml&query=%24.project.version&label=version)](https://github.com/charliemayall/EddySeek)
+[![license](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/charliemayall/EddySeek/main/pyproject.toml&query=%24.project.license&label=license)](LICENSE)
+
 **Nozzle alignment for Klipper toolchangers using an LDC1612 eddy-current sensor.**
 
 EddySeek reads an LDC1612 coil, runs XY search routines, and measures per-tool XY offsets relative to a reference nozzle.
@@ -10,25 +13,27 @@ EddySeek reads an LDC1612 coil, runs XY search routines, and measures per-tool X
 > proven across many machines. Validate alignment results on your own hardware
 > before relying on them, and keep an eye on the toolhead during the first runs.
 
-## Demo
+## Near-drop-in support
 
-![Centroid search demo](docs/media/demo_centroid.webp)
+- Bondtech INDX (select during install prompt, or via `toolchanger_type` in `[eddy_seek]` config section)
 
-Full quality: [`docs/media/demo_centroid.mp4`](docs/media/demo_centroid.mp4)
+Any other toolchanger will still work, it just takes a bit more integration on your side.
 
-> **Note:** The video shows a stationary screw with a sensor being aligned over it for demonstration.
-> On a toolchanger, the **nozzle** moves and the **sensor stays fixed** on the bed or frame.
-
-## Quick start
+## Getting Started
 
 ```bash
 cd ~
 git clone https://github.com/charliemayall/EddySeek.git
 cd EddySeek
 ./install.sh
+
 ```
 
-Add to `moonraker.conf` for update-manager support:
+You will be prompted with a few questions to help you get set up quickly.
+
+Then, see the [User Guide](docs/USER_GUIDE.md) for configuration and usage.
+
+Optional: Add to `moonraker.conf` for update-manager support
 
 ```ini
 [update_manager eddy_seek]
@@ -42,18 +47,7 @@ is_system_service: False
 post_update_script: install.sh
 ```
 
-Add `[eddy_seek]` to `printer.cfg` (I2C settings plus `sensor_x` / `sensor_y` - see the [User Guide](docs/USER_GUIDE.md)). Speed settings (`jog_speed`, `sweep_coarse_speed`, `sweep_fine_speed`) are in **mm/s**. Then `FIRMWARE_RESTART`, and:
-
-```gcode
-EDDY_SEEK_QUERY
-EDDY_SEEK_START
-```
-
-For toolchanger workflows, see the full guide. Per-tool sections (`T0`, `T1`, …) support optional `manual_adjust_x` / `manual_adjust_y` tweaks (mm) added on top of measured offsets when applying alignment.
-
-> **Height above sensor:** Park the nozzle at probe height before starting alignment (EddySeek does not move Z). In testing, **2-3 mm** above the sensor has worked well.
-
-## Documentation
+## Full Documentation
 
 **[User Guide](docs/USER_GUIDE.md)** - install, configuration, G-code reference,
 toolchanger alignment workflow, strategies, Moonraker fields, and troubleshooting.

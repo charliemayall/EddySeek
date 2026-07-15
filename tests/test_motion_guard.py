@@ -9,7 +9,7 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 import pytest
 from fakes import FakeGcode, FakePrinter
 
-from _eddy_seek.movement.guard import (
+from eddy_seek.movement.guard import (
     MAX_ACCEL,
     MAX_SCV,
     KnownKinematicLimits,

@@ -28,11 +28,11 @@ from .session import (
     SeekSessionResult,
 )
 from .strategy import strategy_for
-from .tools import Tool, ToolAlignConfig
+from .tools.protocol import ToolAlignConfig, ToolProtocol
 
 logger = logging.getLogger(__name__)
 
-_GCODE_STATE_REPEAT = "_eddy_seek_tool_repeat"
+_GCODE_STATE_REPEAT = "eddy_seek_tool_repeat"
 # Suggest sensor_x/y tweaks when tool 0's seek offset exceeds this (mm).
 _TARGET_SENSOR_OFFSET_FROM_REF = 0.5
 
@@ -163,7 +163,7 @@ def align_tool_number(
     batch: bool = False,
     repeats: int = 1,
     strategy: str | None = None,
-) -> tuple[Tool | None, Position | None, str | None]:
+) -> tuple[ToolProtocol | None, Position | None, str | None]:
     """
     Align one tool and return its updated Tool record.
 
@@ -314,7 +314,7 @@ def align_all_tools(
                 tools.update_tool(tool)
 
         logger.info(f"eddy_seek: align_all_tools done {count} tool(s)")
-        console.exit(f"{count} tools aligned - run SAVE_CONFIG to persist")
+        console.exit(f"{count} tools aligned - {tools.persist_hint()}")
         return ToolAlignResult("ok", tool0_center, None)
 
     finally:

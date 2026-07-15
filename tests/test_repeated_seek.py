@@ -12,10 +12,10 @@ from unittest.mock import patch
 
 from fakes import FakeGcmd, FakePrinter, RecordingToolhead, ok_seek_result
 
-from _eddy_seek.common import Offset, Position
-from _eddy_seek.config import SeekConfig
-from _eddy_seek.kconsole import KConsole
-from _eddy_seek.repeated_seek import run_repeated_seeks
+from eddy_seek.common import Offset, Position
+from eddy_seek.config import SeekConfig
+from eddy_seek.kconsole import KConsole
+from eddy_seek.repeated_seek import run_repeated_seeks
 
 
 def _console() -> KConsole:
@@ -46,7 +46,7 @@ def test_run_repeated_seeks_physically_returns_between_repeats():
         move_targets.append(pos)
 
     with patch(
-        "_eddy_seek.repeated_seek.move_to_xy",
+        "eddy_seek.repeated_seek.move_to_xy",
         side_effect=capture_move,
     ):
         result = run_repeated_seeks(

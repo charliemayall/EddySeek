@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 if TYPE_CHECKING:
-    from klippy.extras.configfile import ConfigWrapper
+    from klippy.configfile import ConfigWrapper
     from klippy.gcode import GCodeCommand
 
 logger = logging.getLogger(__name__)

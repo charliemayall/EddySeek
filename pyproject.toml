@@ -17,26 +17,27 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-root = "src"
-module-name = "_eddy_seek"
+module-name = "eddy_seek"
 
 [tool.ty.environment]
-extra-paths = ["typings", "src"]
+extra-paths = ["src"]
 python-version = "3.10"
 
 [tool.ty.src]
 include = ["src", "tests"]
 
 [tool.ty.analysis]
-allowed-unresolved-imports = ["klippy.**", "kaleido"]
+allowed-unresolved-imports = ["kaleido"]
 
 [[tool.ty.overrides]]
-include = ["src/eddy_seek.py"]
+include = ["src/eddy_seek/host.py"]
 
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"
 
 [dependency-groups]
 dev = [
+    "klippy-stubs>=0.3.0",
     "plotly>=6.8.0",
     "pytest>=9.1.1",
     "ruff>=0.15.20",
@@ -47,9 +48,6 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-
-[tool.ruff]
-exclude = ["typings"]
 
 [tool.ruff.lint]
 select = [

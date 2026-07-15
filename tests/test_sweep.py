@@ -12,30 +12,30 @@ import pytest
 from fakes import fake_motion_printer
 from pytest import raises
 
-from _eddy_seek.common import Axis, Offset, Phase, Position, samples_in_box, search_box
-from _eddy_seek.config import SeekConfig
-from _eddy_seek.movement.handler import (
+from eddy_seek.common import Axis, Offset, Phase, Position, samples_in_box, search_box
+from eddy_seek.config import SeekConfig
+from eddy_seek.movement.handler import (
     MotionHandler,
     align_measurements,
     get_clamped_speed_for_min_samples_over_span,
     manual_move_xy,
     move_to_xy,
 )
-from _eddy_seek.movement.paths import (
+from eddy_seek.movement.paths import (
     as_capture_segments,
     as_move_segments,
     iter_cross_offsets,
     traversal_endpoints,
 )
-from _eddy_seek.movement.profiles import axis_profile
-from _eddy_seek.movement.sweep import (
+from eddy_seek.movement.profiles import axis_profile
+from eddy_seek.movement.sweep import (
     MotionCapture,
     SweepSettings,
     axis_sweep_centroid,
     sweep_axis,
 )
-from _eddy_seek.movement.types import MotionSample, Segment
-from _eddy_seek.plotting.primitives import ProbeRecord
+from eddy_seek.movement.types import MotionSample, Segment
+from eddy_seek.plotting.primitives import ProbeRecord
 
 
 def _make_handler(printer, origin: Position = Position.zero()) -> MotionHandler:
@@ -150,7 +150,7 @@ def test_align_measurements_uses_toolhead_lookup():
     toolhead.get_kinematics.return_value.calc_position.return_value = [10.5, 20.0]
 
     with patch(
-        "_eddy_seek.movement.handler.lookup_toolhead_position",
+        "eddy_seek.movement.handler.lookup_toolhead_position",
         return_value=Position(10.5, 20.0),
     ) as lookup:
         samples = align_measurements(toolhead, Position(10.0, 20.0), [(1.0, 100.0)])
@@ -324,7 +324,7 @@ def test_sweep_axis_coarse_uses_coarse_cross_passes():
     ]
 
     with patch(
-        "_eddy_seek.movement.sweep.plan_axis_path",
+        "eddy_seek.movement.sweep.plan_axis_path",
         return_value=[],
     ) as plan_path:
         sweep_axis(
@@ -378,7 +378,7 @@ def test_sweep_axis_wires_path(phase, pass_num, fake_path):
     ]
 
     with patch(
-        "_eddy_seek.movement.sweep.plan_axis_path",
+        "eddy_seek.movement.sweep.plan_axis_path",
         return_value=fake_path,
     ) as plan_path:
         sweep_axis(
@@ -407,7 +407,7 @@ def test_sweep_axis_fine_phase_uses_single_cross_pass():
     ]
 
     with patch(
-        "_eddy_seek.movement.sweep.plan_axis_path",
+        "eddy_seek.movement.sweep.plan_axis_path",
         return_value=[],
     ) as plan_path:
         sweep_axis(
@@ -441,7 +441,7 @@ def test_axis_sweep_centroid_builds_profiles_and_centroid():
     ]
 
     with patch(
-        "_eddy_seek.movement.sweep.sweep_axis",
+        "eddy_seek.movement.sweep.sweep_axis",
         side_effect=[samples_x, samples_y],
     ):
         result = axis_sweep_centroid(
@@ -477,7 +477,7 @@ def test_axis_sweep_centroid_raises_when_too_few_samples():
 
     with (
         patch(
-            "_eddy_seek.movement.sweep.sweep_axis",
+            "eddy_seek.movement.sweep.sweep_axis",
             side_effect=[samples_x, samples_y],
         ),
         raises(RuntimeError, match="test collected 10 in-range samples"),

@@ -11,8 +11,8 @@ from datetime import datetime
 from fakes import CommandError, FakeGcmd, FakeKlipperConfig, as_config
 from pytest import raises
 
-from _eddy_seek.common import session_artifact_run_dir
-from _eddy_seek.config import (
+from eddy_seek.common import session_artifact_run_dir
+from eddy_seek.config import (
     SeekConfig,
     _field_name_for_key,
     _parse_runtime_value,

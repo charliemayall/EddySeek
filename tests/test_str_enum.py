@@ -1,4 +1,4 @@
-from _eddy_seek.common import StrEnum
+from eddy_seek.common import StrEnum
 
 
 class Sample(StrEnum):

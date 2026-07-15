@@ -28,7 +28,7 @@ LDC1612_STUB = (
 
 def _purge_eddy_seek_modules() -> None:
     for name in list(sys.modules):
-        if name == "extras.eddy_seek" or name.startswith("extras._eddy_seek"):
+        if name == "extras.eddy_seek" or name.startswith("extras.eddy_seek."):
             del sys.modules[name]
 
 
@@ -40,8 +40,7 @@ def eddy_seek_mod(tmp_path):
     extras = klippy_root / "extras"
     extras.mkdir(parents=True)
     (extras / "ldc1612.py").write_text(LDC1612_STUB)
-    (extras / "eddy_seek.py").symlink_to(ROOT / "src" / "eddy_seek.py")
-    (extras / "_eddy_seek").symlink_to(ROOT / "src" / "_eddy_seek")
+    (extras / "eddy_seek").symlink_to(ROOT / "src" / "eddy_seek")
 
     sys.path.insert(0, str(klippy_root))
     try:
@@ -73,7 +72,7 @@ class _FakeSensor:
 
 
 def _stream_host(eddy_seek_mod):
-    class _StreamHost(eddy_seek_mod.EddySeek):
+    class _StreamHost(eddy_seek_mod.host.EddySeek):
         def __init__(self) -> None:
             self._sensor = _FakeSensor()
             self._stream_refs = 0
@@ -91,7 +90,7 @@ def _stream_host(eddy_seek_mod):
 
 def test_load_sensor_requires_ldc1612(eddy_seek_mod):
     with raises(ValueError, match="sensor_type"):
-        eddy_seek_mod.EddySeek._load_ldc1612(_FakeConfig("bogus"))
+        eddy_seek_mod.host.EddySeek._load_ldc1612(_FakeConfig("bogus"))
 
 
 def test_sensor_stream_only_while_referenced(eddy_seek_mod):
@@ -129,10 +128,9 @@ def test_disconnect_stops_sensor_stream(eddy_seek_mod):
 
 
 def test_sample_rate_from_count(eddy_seek_mod):
-    assert eddy_seek_mod._sample_rate_from_count(count=0, duration_s=0.2) is None
-    assert eddy_seek_mod._sample_rate_from_count(
-        count=80, duration_s=0.2
-    ) == pytest.approx(400.0)
+    fn = eddy_seek_mod.host._sample_rate_from_count
+    assert fn(count=0, duration_s=0.2) is None
+    assert fn(count=80, duration_s=0.2) == pytest.approx(400.0)
 
 
 def test_handle_batch_capture_only_when_capturing(eddy_seek_mod):

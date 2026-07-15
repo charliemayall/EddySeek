@@ -11,6 +11,7 @@ Symlink EddySeek into Klipper's extras directory (optionally, user specified tar
 
 from __future__ import annotations
 
+import argparse
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,18 @@ DEFAULT_DEST = Path.home() / "klipper" / "klippy" / "extras"
 PRINTER_CONFIG_DIR = Path.home() / "printer_data" / "config"
 EDDY_SEEK_CFG = PRINTER_CONFIG_DIR / "eddy_seek.cfg"
 EXAMPLE_CFG = EDDY_SEEK_DIR / "example.cfg"
+EXAMPLE_INDX_CFG = EDDY_SEEK_DIR / "example_indx.cfg"
+EXAMPLE_MINIMAL_CFG = EDDY_SEEK_DIR / "example_minimal.cfg"
+# (toolchanger_type key, menu label, example file) - keep keys in sync with tools/types.py
+TOOLCHANGER_CONFIG_CHOICES: tuple[tuple[str | None, str, Path], ...] = (
+    (
+        None,
+        "minimal - sensor + seek only (autodetect at startup)",
+        EXAMPLE_MINIMAL_CFG,
+    ),
+    ("diy", "diy - Tn macros, es_Tn sections", EXAMPLE_CFG),
+    ("indx", "indx - Bondtech CHANGE_TOOL", EXAMPLE_INDX_CFG),
+)
 KLIPPY_ENV = Path.home() / "klippy-env"
 KLIPPY_PIP = KLIPPY_ENV / "bin" / "pip3"
 KLIPPY_PYTHON = KLIPPY_ENV / "bin" / "python3"
@@ -44,6 +57,23 @@ def cprint(text, color: COLORS):
     print(_c(text, color))
 
 
+def prompt_toolchanger_config_source() -> Path | None:
+    """Prompt for a toolchanger template; default is minimal / autodetect."""
+    print("\nSelect toolchanger template:")
+    for idx, (_key, label, _path) in enumerate(TOOLCHANGER_CONFIG_CHOICES):
+        prefix = "[Enter] " if idx == 0 else f"  {idx}) "
+        print(f"{prefix}{label}")
+    choice = input("Choice: ").strip().lower()
+    if choice in ("", "0"):
+        return EXAMPLE_MINIMAL_CFG
+    if choice in ("1", "diy"):
+        return EXAMPLE_CFG
+    if choice in ("2", "indx"):
+        return EXAMPLE_INDX_CFG
+    print(f"{_c('-- ', COLORS.GRAY)}unknown choice {choice!r}, skipping config copy")
+    return None
+
+
 def offer_example_config() -> None:
     if not sys.stdin.isatty():
         return
@@ -52,15 +82,18 @@ def offer_example_config() -> None:
     if EDDY_SEEK_CFG.exists():
         print(f"{_c('-- ', COLORS.GRAY)}config already exists: {EDDY_SEEK_CFG}")
         return
-    if not EXAMPLE_CFG.is_file():
-        print(f"{_c('-- ', COLORS.GRAY)}missing {EXAMPLE_CFG}, skipping config copy")
-        return
-    ans = input(f"Copy example.cfg to {EDDY_SEEK_CFG}? (y/n): ")
+    ans = input(f"Copy starter config to {EDDY_SEEK_CFG}? (y/n): ")
     if ans.lower() != "y":
         return
+    source = prompt_toolchanger_config_source()
+    if source is None:
+        return
+    if not source.is_file():
+        print(f"{_c('-- ', COLORS.GRAY)}missing {source}, skipping config copy")
+        return
     PRINTER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(EXAMPLE_CFG, EDDY_SEEK_CFG)
-    cprint(f"Copied example config to {EDDY_SEEK_CFG}", COLORS.GREEN)
+    shutil.copy2(source, EDDY_SEEK_CFG)
+    cprint(f"Copied {source.name} to {EDDY_SEEK_CFG}", COLORS.GREEN)
     print(
         f"""\n{_c("Config next step:", COLORS.GREEN)}
     Add this line to your printer.cfg:
@@ -146,18 +179,35 @@ def warn_for_python_version():
         )
 
 
-def main() -> None:
-    warn_for_python_version()
-    dest = (
-        Path(sys.argv[1]).expanduser().resolve()
-        if len(sys.argv) > 1  # handle custom destination arg
-        else DEFAULT_DEST
+def parse_args(argv: list[str] | None = None) -> tuple[bool, Path]:
+    parser = argparse.ArgumentParser(
+        description="Symlink EddySeek into Klipper's extras directory.",
     )
+    parser.add_argument(
+        "--skip",
+        action="store_true",
+        help="Skip interactive prompts (config copy, plotly install, Klipper restart).",
+    )
+    parser.add_argument(
+        "dest",
+        nargs="?",
+        type=Path,
+        default=DEFAULT_DEST,
+        help=f"Klipper extras directory (default: {DEFAULT_DEST})",
+    )
+    args = parser.parse_args(argv)
+    return args.skip, args.dest.expanduser().resolve()
+
+
+def main(argv: list[str] | None = None) -> None:
+    warn_for_python_version()
+    skip, dest = parse_args(argv)
     src_dir = EDDY_SEEK_DIR / "src"
-    if not (src_dir / "eddy_seek.py").is_file():
+    pkg_src = src_dir / "eddy_seek"
+    if not (pkg_src / "__init__.py").is_file():
         print(
             f"""
-            Error: missing {src_dir / "eddy_seek.py"},\
+            Error: missing {pkg_src / "__init__.py"},\
             did you clone the repository?\n
             Try removing and re-cloning the repository.
             """,
@@ -167,35 +217,31 @@ def main() -> None:
 
     dest.mkdir(parents=True, exist_ok=True)
 
-    entry = dest / "eddy_seek.py"
-    entry.unlink(missing_ok=True)
-    entry.symlink_to((src_dir / "eddy_seek.py").resolve())
-
-    pkg = dest / "_eddy_seek"
+    pkg = dest / "eddy_seek"
     if pkg.is_symlink() or pkg.is_file():
         pkg.unlink()
-    elif pkg.is_dir():
+    elif pkg.is_dir() and not pkg.is_symlink():
         shutil.rmtree(pkg)
-    pkg.symlink_to((src_dir / "_eddy_seek").resolve())
+    pkg.symlink_to(pkg_src.resolve())
 
     caches = purge_pycache(src_dir, dest)
     if caches:
         print(f"{_c('-- ', COLORS.GRAY)}cleaned up caches")
 
     cprint("\u2728 EddySeek: installed \u2728".center(60), COLORS.GREEN)
-    print(f"{_c('-- ', COLORS.GRAY)}{dest / 'eddy_seek.py'}")
-    print(f"{_c('-- ', COLORS.GRAY)}{dest / '_eddy_seek/'}")
+    print(f"{_c('-- ', COLORS.GRAY)}{dest / 'eddy_seek/'}")
     print(
         f"""\n{_c("Next steps:", COLORS.GREEN)}\n
-    1. Configure EddySeek in printer.cfg (see example.cfg or eddy_seek.cfg)
+    1. Configure EddySeek in printer.cfg (see example*.cfg or eddy_seek.cfg)
     2. Restart Klipper: sudo systemctl restart klipper
 
     After git pull, re-run ./install.sh then restart Klipper.
     """
     )
-    offer_example_config()
-    offer_plotly_install()
-    restart_klipper()
+    if not skip:
+        offer_example_config()
+        offer_plotly_install()
+        restart_klipper()
 
 
 if __name__ == "__main__":

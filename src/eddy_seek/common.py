@@ -17,11 +17,11 @@ from enum import Enum
 from typing import TYPE_CHECKING, overload
 
 if TYPE_CHECKING:
-    from klippy.klippy import Reactor
+    from klippy.reactor import Reactor
     from klippy.toolhead import ToolHead
     from typing_extensions import Self
 
-    from _eddy_seek.movement.types import MotionSample
+    from eddy_seek.movement.types import MotionSample
 
 _ROUND_PRECISION = 2
 CHAR_DELTA = "\u0394"

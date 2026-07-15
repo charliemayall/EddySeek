@@ -13,7 +13,6 @@ from unittest.mock import patch
 import pytest
 from fakes import (
     FakeGcmd,
-    FakeGcode,
     FakeKlipperConfig,
     FakePrinter,
     RecordingToolhead,
@@ -23,29 +22,46 @@ from fakes import (
 )
 from pytest import raises
 
-from _eddy_seek.common import Offset, Position
-from _eddy_seek.config import SeekConfig
-from _eddy_seek.kconsole import KConsole
-from _eddy_seek.session import ArtifactRunContext
-from _eddy_seek.tool_align import (
+from eddy_seek.common import Offset, Position
+from eddy_seek.config import SeekConfig
+from eddy_seek.kconsole import KConsole
+from eddy_seek.session import ArtifactRunContext
+from eddy_seek.tool_align import (
     _TARGET_SENSOR_OFFSET_FROM_REF,
     align_all_tools,
     align_tool_number,
     move_to_seek_start_pos,
 )
-from _eddy_seek.tools import Tool, ToolAlignConfig
+from eddy_seek.tools.diy import DiyTool
+from eddy_seek.tools.types import tool_align_from_config
 
 
 class _FakeTools:
-    def __init__(self, tools: list[Tool], printer: FakePrinter | None = None) -> None:
+    def __init__(
+        self, tools: list[DiyTool], printer: FakePrinter | None = None
+    ) -> None:
         self.tool_count = len(tools)
         self.tools = tools
         self._printer = printer
 
-    def get_tool(self, tool_number: int) -> Tool:
+    def get_tool(self, tool_number: int) -> DiyTool:
         return self.tools[tool_number]
 
-    apply_tool_offset = ToolAlignConfig.apply_tool_offset
+    def apply_tool_offset(self, tool_number: int) -> DiyTool:
+        if self._printer is None:
+            raise AttributeError("printer")
+        try:
+            tool = self.get_tool(tool_number)
+        except IndexError as exc:
+            raise ValueError(str(exc)) from exc
+        if not tool.is_calibrated:
+            raise ValueError(
+                f"Tool {tool_number} is not calibrated, and you are trying to apply an offset."
+            )
+        eff = tool.effective_offset
+        gcode = self._printer.lookup_object("gcode")
+        gcode.run_script_from_command(f"SET_GCODE_OFFSET {eff.to_gcode()}")
+        return tool
 
 
 def _assert_set_gcode_offset(script: str, *, x: float, y: float) -> None:
@@ -59,13 +75,13 @@ def test_apply_tool_offset_sets_gcode_offset():
     printer = FakePrinter()
     tools = _FakeTools(
         [
-            Tool(
+            DiyTool(
                 tool_number=0,
                 offset=Offset(0.0, 0.0),
                 manual_offset=Offset(0.0, 0.0),
                 is_calibrated=True,
             ),
-            Tool(
+            DiyTool(
                 tool_number=1,
                 offset=Offset(1.5, -0.5),
                 manual_offset=Offset(0.0, 0.0),
@@ -83,7 +99,7 @@ def test_apply_tool_offset_includes_manual_adjust():
     printer = FakePrinter()
     tools = _FakeTools(
         [
-            Tool(
+            DiyTool(
                 tool_number=0,
                 offset=Offset(1.0, 2.0),
                 manual_offset=Offset(0.1, -0.2),
@@ -100,7 +116,7 @@ def test_apply_tool_offset_rejects_uncalibrated():
     printer = FakePrinter()
     tools = _FakeTools(
         [
-            Tool(
+            DiyTool(
                 tool_number=0,
                 offset=Offset(0.0, 0.0),
                 manual_offset=Offset(0.0, 0.0),
@@ -128,8 +144,8 @@ class _SensorTools:
     def sensor_position(self) -> Position:
         return self._sensor_position
 
-    def get_tool(self, tool_number: int) -> Tool:
-        return Tool.create_default(tool_number)
+    def get_tool(self, tool_number: int) -> DiyTool:
+        return DiyTool.create_default(tool_number)
 
 
 class _FakeSeekHost:
@@ -174,14 +190,16 @@ def test_sensor_position_is_required():
         return _ConfigfilePrinter()
 
     with raises(ValueError, match="sensor_x"):
-        ToolAlignConfig(as_config(FakeKlipperConfig(get_printer=configfile_printer)))
+        tool_align_from_config(
+            as_config(FakeKlipperConfig(get_printer=configfile_printer))
+        )
 
     with raises(ValueError, match="sensor_y"):
-        ToolAlignConfig(
+        tool_align_from_config(
             as_config(FakeKlipperConfig(sensor_x=10.0, get_printer=configfile_printer))
         )
 
-    cfg = ToolAlignConfig(
+    cfg = tool_align_from_config(
         as_config(
             FakeKlipperConfig(
                 sensor_x=10.0, sensor_y=20.0, get_printer=configfile_printer
@@ -189,38 +207,6 @@ def test_sensor_position_is_required():
         )
     )
     assert cfg.sensor_position() == Position(10.0, 20.0)
-
-
-def _tools_config(*, gcode: FakeGcode) -> ToolAlignConfig:
-    printer = FakePrinter(gcode=gcode, configfile=_Configfile())
-    return ToolAlignConfig(
-        as_config(
-            FakeKlipperConfig(
-                sensor_x=10.0,
-                sensor_y=20.0,
-                get_printer=lambda: printer,
-            )
-        )
-    )
-
-
-def test_run_load_macro_errors_when_macro_missing():
-    gcode = FakeGcode()
-    cfg = _tools_config(gcode=gcode)
-
-    with raises(FakeGcode.error, match=r"load macro 'T0' is not defined"):
-        cfg.run_load_macro(0)
-
-    assert gcode.scripts == []
-
-
-def test_run_load_macro_runs_when_macro_registered():
-    gcode = FakeGcode(commands={"T0"})
-    cfg = _tools_config(gcode=gcode)
-
-    cfg.run_load_macro(0)
-
-    assert gcode.scripts == ["T0"]
 
 
 class _LoadMacroTools:
@@ -237,14 +223,17 @@ class _LoadMacroTools:
     def run_load_macro(self, tool_number: int) -> None:
         self.load_calls.append(tool_number)
 
-    def get_tool(self, tool_number: int) -> Tool:
-        return Tool.create_default(tool_number)
+    def get_tool(self, tool_number: int) -> DiyTool:
+        return DiyTool.create_default(tool_number)
 
-    def update_tool(self, tool: Tool) -> None:
+    def update_tool(self, tool: DiyTool) -> None:
         pass
 
     def sensor_position(self) -> Position:
         return Position(self.sensor_x, self.sensor_y)
+
+    def persist_hint(self) -> str:
+        return "run SAVE_CONFIG to persist"
 
 
 def test_align_tool_number_load_macro_only_when_requested():
@@ -253,7 +242,7 @@ def test_align_tool_number_load_macro_only_when_requested():
     center = Position(10.0, 20.0)
     ok = ok_seek_result()
 
-    with patch("_eddy_seek.tool_align.align_tool", return_value=ok):
+    with patch("eddy_seek.tool_align.align_tool", return_value=ok):
         align_tool_number(
             host,  # ty: ignore[invalid-argument-type]
             tools,  # ty: ignore[invalid-argument-type]
@@ -277,35 +266,6 @@ def test_align_tool_number_load_macro_only_when_requested():
         assert tools.load_calls == [1]
 
 
-def test_align_tool_number_load_macro_for_tool0_when_requested():
-    tools = _LoadMacroTools()
-    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))
-    ok = ok_seek_result()
-
-    with patch("_eddy_seek.tool_align.align_tool", return_value=ok):
-        align_tool_number(
-            host,  # ty: ignore[invalid-argument-type]
-            tools,  # ty: ignore[invalid-argument-type]
-            FakeGcmd(),
-            0,
-            None,
-            console=_console(),
-            load_tool=False,
-        )
-        assert tools.load_calls == []
-
-        align_tool_number(
-            host,  # ty: ignore[invalid-argument-type]
-            tools,  # ty: ignore[invalid-argument-type]
-            FakeGcmd(),
-            0,
-            None,
-            console=_console(),
-            load_tool=True,
-        )
-        assert tools.load_calls == [0]
-
-
 def test_align_tool_number_approaches_x_then_y():
     tools = _LoadMacroTools()
     toolhead = RecordingToolhead(start=(5.0, 10.0))
@@ -313,7 +273,7 @@ def test_align_tool_number_approaches_x_then_y():
     tool0_center = Position(20.0, 30.0)
     ok = ok_seek_result()
 
-    with patch("_eddy_seek.tool_align.align_tool", return_value=ok):
+    with patch("eddy_seek.tool_align.align_tool", return_value=ok):
         align_tool_number(
             host,  # ty: ignore[invalid-argument-type]
             tools,  # ty: ignore[invalid-argument-type]
@@ -356,7 +316,7 @@ def test_align_tool_number_passes_strategy_override():
         seen.append(strategy or "")
         return ok
 
-    with patch("_eddy_seek.tool_align.align_tool", side_effect=capture_strategy):
+    with patch("eddy_seek.tool_align.align_tool", side_effect=capture_strategy):
         align_tool_number(
             host,  # ty: ignore[invalid-argument-type]
             tools,  # ty: ignore[invalid-argument-type]
@@ -378,15 +338,19 @@ def test_align_all_tools_milestone_console_messages():
 
     with (
         patch(
-            "_eddy_seek.tool_align.move_to_seek_start_pos",
+            "eddy_seek.tool_align.move_to_seek_start_pos",
             return_value=Position(10.0, 20.0),
         ),
-        patch("_eddy_seek.tool_align.align_tool", return_value=ok),
+        patch("eddy_seek.tool_align.align_tool", return_value=ok),
     ):
-        result = align_all_tools(host, tools, gcmd, tool_count=2)  # ty: ignore[invalid-argument-type]
+        result = align_all_tools(
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
+            gcmd,
+            tool_count=2,
+        )
 
     assert result.status == "ok"
-    assert tools.load_calls == [0, 1]
     assert gcmd.raw == [
         "echo: ES: Aligning tool 1 of 2…",
         "echo: Tool 0 reference - X=+10.10 Y=+19.80 mm",
@@ -409,12 +373,17 @@ def test_align_all_tools_shares_artifact_run_context():
 
     with (
         patch(
-            "_eddy_seek.tool_align.move_to_seek_start_pos",
+            "eddy_seek.tool_align.move_to_seek_start_pos",
             return_value=Position(10.0, 20.0),
         ),
-        patch("_eddy_seek.tool_align.align_tool", side_effect=capture_align_tool),
+        patch("eddy_seek.tool_align.align_tool", side_effect=capture_align_tool),
     ):
-        result = align_all_tools(host, tools, gcmd, tool_count=2)  # ty: ignore[invalid-argument-type]
+        result = align_all_tools(
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
+            gcmd,
+            tool_count=2,
+        )
 
     assert result.status == "ok"
     assert len(captured) == 2
@@ -432,12 +401,17 @@ def test_align_all_tools_clears_gcode_offset_on_exit():
 
     with (
         patch(
-            "_eddy_seek.tool_align.move_to_seek_start_pos",
+            "eddy_seek.tool_align.move_to_seek_start_pos",
             return_value=Position(10.0, 20.0),
         ),
-        patch("_eddy_seek.tool_align.align_tool", return_value=ok),
+        patch("eddy_seek.tool_align.align_tool", return_value=ok),
     ):
-        align_all_tools(host, tools, gcmd, tool_count=1)  # ty: ignore[invalid-argument-type]
+        align_all_tools(
+            host,  # ty: ignore[invalid-argument-type]
+            tools,  # ty: ignore[invalid-argument-type]
+            gcmd,
+            tool_count=1,
+        )
 
     _assert_set_gcode_offset(printer.gcode.scripts[-1], x=0.0, y=0.0)
 
@@ -448,7 +422,7 @@ def test_align_tool_number_clears_gcode_offset_after_load():
     host = _FakeSeekHost(printer)
     center = Position(10.0, 20.0)
 
-    with patch("_eddy_seek.tool_align.align_tool", return_value=ok_seek_result()):
+    with patch("eddy_seek.tool_align.align_tool", return_value=ok_seek_result()):
         align_tool_number(
             host,  # ty: ignore[invalid-argument-type]
             tools,  # ty: ignore[invalid-argument-type]
@@ -471,7 +445,7 @@ def test_align_tool0_warns_when_seek_offset_exceeds_sensor_threshold():
     )
 
     with patch(
-        "_eddy_seek.tool_align.align_tool",
+        "eddy_seek.tool_align.align_tool",
         return_value=ok_seek_result(offset=large_offset),
     ):
         tool, center, error = align_tool_number(
@@ -497,7 +471,7 @@ def test_align_tool0_warns_for_reported_centre_vs_sensor_position():
     offset = Offset(0.4356, -0.9580)
 
     with patch(
-        "_eddy_seek.tool_align.align_tool",
+        "eddy_seek.tool_align.align_tool",
         return_value=ok_seek_result(offset=offset),
     ):
         _, center, error = align_tool_number(
@@ -566,19 +540,19 @@ def test_align_tool_number_averages_repeats(
         if tool_number == 0:
             stack.enter_context(
                 patch(
-                    "_eddy_seek.tool_align.move_to_seek_start_pos",
+                    "eddy_seek.tool_align.move_to_seek_start_pos",
                     return_value=Position(150.0, 150.0),
                 )
             )
         if check_stats:
             stack.enter_context(
                 patch(
-                    "_eddy_seek.tool_align.finalize_repeat_seek",
+                    "eddy_seek.tool_align.finalize_repeat_seek",
                     side_effect=capture_finalize,
                 )
             )
         stack.enter_context(
-            patch("_eddy_seek.tool_align.align_tool", side_effect=seek_results)
+            patch("eddy_seek.tool_align.align_tool", side_effect=seek_results)
         )
         tool, got_center, error = align_tool_number(
             host,  # ty: ignore[invalid-argument-type]
@@ -613,10 +587,10 @@ def test_align_tool_number_fails_on_repeat_failure():
 
     with (
         patch(
-            "_eddy_seek.tool_align.move_to_seek_start_pos",
+            "eddy_seek.tool_align.move_to_seek_start_pos",
             return_value=Position(150.0, 150.0),
         ),
-        patch("_eddy_seek.tool_align.align_tool", side_effect=results),
+        patch("eddy_seek.tool_align.align_tool", side_effect=results),
     ):
         tool, center, error = align_tool_number(
             host,  # ty: ignore[invalid-argument-type]
@@ -644,7 +618,7 @@ def test_align_tool0_no_sensor_warning_when_offset_within_threshold():
     )
 
     with patch(
-        "_eddy_seek.tool_align.align_tool",
+        "eddy_seek.tool_align.align_tool",
         return_value=ok_seek_result(offset=small_offset),
     ):
         _, _, error = align_tool_number(

@@ -1,0 +1,29 @@
+# Toolchanger kits
+
+Kit-specific glue between EddySeek and how a printer loads tools and stores XY offsets.
+
+| Module        | Role                                   |
+| ------------- | -------------------------------------- |
+| `protocol.py` | `ToolProtocol` + `ToolAlignConfig` ABC |
+| `diy.py`      | `DiyTool` + `DiyToolAlignConfig`       |
+| `indx.py`     | `IndxTool` + `IndxToolAlignConfig`     |
+| `types.py`    | Registry + `tool_align_from_config`    |
+
+Select the kit with `toolchanger_type` in `[eddy_seek]` (default `diy`).
+
+## Built-in types
+
+**`diy`** - generic load macros (`T0`, `T1`, …). Offsets live in `[es_Tn]` autosave sections with optional `manual_adjust_x/y`. Apply via `SET_GCODE_OFFSET`; wire `EDDY_SEEK_APPLY_OFFSET` into your own macros.
+
+**`indx`** - [Bondtech INDX](https://github.com/BondtechAB/INDX) macros. Loads via `CHANGE_TOOL`, persists XY to `SAVE_VARIABLE` (`t{n}_offset_x/y`). Tool count from `gcode_macro TOOL_POSITIONS`. Do **not** use `EDDY_SEEK_APPLY_OFFSET` - `CHANGE_TOOL` applies XY from save variables. See `indx.py` module docstring for upstream macro contracts.
+
+## Auto-detection
+
+On startup, registered kits may fingerprint the printer config (`suggest_for_config`). If a match differs from your active `toolchanger_type`, EddySeek logs an info suggestion - it never changes config for you. `diy` is the default fallback and is not auto-detected.
+
+## Adding a kit
+
+1. Add `tools/<name>.py` with a `Tool` dataclass implementing `ToolProtocol` and a `ToolAlignConfig` subclass.
+2. Register in `registry.toolchanger_types()` (see `registry.py`).
+3. Import the module from `types.py` so the registry is populated.
+4. Add tests in `tests/test_toolchangers.py`.

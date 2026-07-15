@@ -6,8 +6,8 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 This file may be distributed under the terms of the GNU GPLv3 license.
 """
 
-from _eddy_seek.common import Axis, Offset
-from _eddy_seek.movement.paths import (
+from eddy_seek.common import Axis, Offset
+from eddy_seek.movement.paths import (
     cross_pass_connector_legs,
     cubic_bezier_chord_legs,
     plan_axis_leg_connectors,
@@ -15,7 +15,7 @@ from _eddy_seek.movement.paths import (
     plan_axis_path,
     uturn_connector_legs,
 )
-from _eddy_seek.movement.types import Segment
+from eddy_seek.movement.types import Segment
 
 
 def test_cross_pass_connector_endpoints():

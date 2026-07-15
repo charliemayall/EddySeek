@@ -10,15 +10,15 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from _eddy_seek.common import Offset
-from _eddy_seek.config import SeekConfig
-from _eddy_seek.plotting.primitives import (
+from eddy_seek.common import Offset
+from eddy_seek.config import SeekConfig
+from eddy_seek.plotting.primitives import (
     CentroidPassRecord,
     PassMove,
     XYCloud,
 )
-from _eddy_seek.plotting.recorder import SessionRecorder
-from _eddy_seek.session import SeekSessionResult, _write_seek_trace
+from eddy_seek.plotting.recorder import SessionRecorder
+from eddy_seek.session import SeekSessionResult, _write_seek_trace
 
 
 class _TraceSensor:

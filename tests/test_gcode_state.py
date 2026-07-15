@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from fakes import FakeGcode
 
-from _eddy_seek.movement.gcode_state import (
+from eddy_seek.movement.gcode_state import (
     GCodeState,
     restore_gcode_state,
     save_gcode_state,

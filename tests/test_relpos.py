@@ -2,7 +2,7 @@
 EddySeek - Offset vs Position algebra.
 """
 
-from _eddy_seek.common import Offset, Position
+from eddy_seek.common import Offset, Position
 
 
 def test_position_plus_offset():

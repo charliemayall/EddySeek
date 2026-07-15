@@ -25,7 +25,7 @@ LDC1612_STUB = (
 
 def _purge_eddy_seek_modules() -> None:
     for name in list(sys.modules):
-        if name == "extras.eddy_seek" or name.startswith("extras._eddy_seek"):
+        if name == "extras.eddy_seek" or name.startswith("extras.eddy_seek."):
             del sys.modules[name]
 
 
@@ -38,8 +38,7 @@ def klippy_extras(tmp_path):
     extras.mkdir(parents=True)
 
     (extras / "ldc1612.py").write_text(LDC1612_STUB)
-    (extras / "eddy_seek.py").symlink_to(ROOT / "src" / "eddy_seek.py")
-    (extras / "_eddy_seek").symlink_to(ROOT / "src" / "_eddy_seek")
+    (extras / "eddy_seek").symlink_to(ROOT / "src" / "eddy_seek")
 
     sys.path.insert(0, str(klippy_root))
     yield extras
@@ -49,7 +48,7 @@ def klippy_extras(tmp_path):
 
 def test_install_script(tmp_path):
     install_dir = tmp_path / "klippy" / "extras"
-    cache = ROOT / "src" / "_eddy_seek" / "movement" / "__pycache__"
+    cache = ROOT / "src" / "eddy_seek" / "movement" / "__pycache__"
     cache.mkdir(parents=True, exist_ok=True)
     (cache / "guard.cpython-311.pyc").write_bytes(b"stale")
 
@@ -65,14 +64,11 @@ def test_install_script(tmp_path):
     assert "cleaned" in result.stdout
     assert not cache.exists()
 
-    assert (install_dir / "eddy_seek.py").resolve() == (
-        ROOT / "src" / "eddy_seek.py"
+    assert (install_dir / "eddy_seek").resolve() == (
+        ROOT / "src" / "eddy_seek"
     ).resolve()
-    assert (install_dir / "_eddy_seek").resolve() == (
-        ROOT / "src" / "_eddy_seek"
-    ).resolve()
-    assert (install_dir / "_eddy_seek" / "config.py").resolve() == (
-        ROOT / "src" / "_eddy_seek" / "config.py"
+    assert (install_dir / "eddy_seek" / "config.py").resolve() == (
+        ROOT / "src" / "eddy_seek" / "config.py"
     ).resolve()
 
     (install_dir / "ldc1612.py").write_text(LDC1612_STUB)
@@ -82,7 +78,7 @@ def test_install_script(tmp_path):
     try:
         mod = importlib.import_module("extras.eddy_seek")
         assert hasattr(mod, "load_config")
-        assert hasattr(mod, "EddySeek")
+        assert hasattr(mod.host, "EddySeek")
     finally:
         sys.path.pop(0)
         _purge_eddy_seek_modules()
@@ -92,10 +88,9 @@ def test_eddy_seek_relative_imports_after_install(klippy_extras):
     mod = importlib.import_module("extras.eddy_seek")
     assert mod.__name__ == "extras.eddy_seek"
     assert hasattr(mod, "load_config")
-    assert hasattr(mod, "EddySeek")
+    assert hasattr(mod.host, "EddySeek")
 
-    # Relative imports from eddy_seek.py resolved the _eddy_seek package members.
-    assert importlib.import_module("extras._eddy_seek.config") is not None
-    assert importlib.import_module("extras._eddy_seek.tool_align") is not None
-    assert importlib.import_module("extras._eddy_seek.strategy") is not None
-    assert importlib.import_module("extras._eddy_seek.movement.sweep") is not None
+    assert importlib.import_module("extras.eddy_seek.config") is not None
+    assert importlib.import_module("extras.eddy_seek.tool_align") is not None
+    assert importlib.import_module("extras.eddy_seek.strategy") is not None
+    assert importlib.import_module("extras.eddy_seek.movement.sweep") is not None

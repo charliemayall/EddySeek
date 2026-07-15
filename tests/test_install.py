@@ -35,6 +35,8 @@ def config_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(install, "PRINTER_CONFIG_DIR", config_dir)
     monkeypatch.setattr(install, "EDDY_SEEK_CFG", config_dir / "eddy_seek.cfg")
     monkeypatch.setattr(install, "EXAMPLE_CFG", ROOT / "example.cfg")
+    monkeypatch.setattr(install, "EXAMPLE_INDX_CFG", ROOT / "example_indx.cfg")
+    monkeypatch.setattr(install, "EXAMPLE_MINIMAL_CFG", ROOT / "example_minimal.cfg")
     return config_dir
 
 
@@ -94,19 +96,81 @@ def test_offer_example_config_skips_existing_file(
     assert "config already exists" in capsys.readouterr().out
 
 
-def test_offer_example_config_copies_on_yes(
+def _active_config_keys(text: str) -> set[str]:
+    keys: set[str] = set()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if ":" in stripped:
+            keys.add(stripped.split(":", 1)[0].strip())
+    return keys
+
+
+def test_offer_example_config_copies_minimal_on_default(
     monkeypatch: pytest.MonkeyPatch,
     config_paths: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr("builtins.input", lambda _: "y")
+    inputs = iter(["y", ""])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
     config_paths.mkdir(parents=True)
     install.offer_example_config()
     assert install.EDDY_SEEK_CFG.is_file()
+    text = install.EDDY_SEEK_CFG.read_text()
+    keys = _active_config_keys(text)
+    assert "toolchanger_type" not in keys
+    assert "tool_count" not in keys
     out = capsys.readouterr().out
-    assert "Copied example config" in out
+    assert "Copied example_minimal.cfg" in out
     assert "[include eddy_seek.cfg]" in out
+
+
+def test_offer_example_config_copies_diy_template(
+    monkeypatch: pytest.MonkeyPatch,
+    config_paths: Path,
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    inputs = iter(["y", "diy"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    config_paths.mkdir(parents=True)
+    install.offer_example_config()
+    text = install.EDDY_SEEK_CFG.read_text()
+    assert "tool_count:" in text
+    assert "load_tool_macro_prefix:" in text
+
+
+def test_offer_example_config_copies_indx_template(
+    monkeypatch: pytest.MonkeyPatch,
+    config_paths: Path,
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    inputs = iter(["y", "2"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    config_paths.mkdir(parents=True)
+    install.offer_example_config()
+    text = install.EDDY_SEEK_CFG.read_text()
+    assert "toolchanger_type: indx" in text
+    assert "tool_count:" not in text
+
+
+def test_offer_example_config_skips_on_invalid_template_choice(
+    monkeypatch: pytest.MonkeyPatch, config_paths: Path
+) -> None:
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    inputs = iter(["y", "stealth"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    config_paths.mkdir(parents=True)
+    install.offer_example_config()
+    assert not install.EDDY_SEEK_CFG.exists()
+
+
+def test_prompt_toolchanger_config_source_parses_choices(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("builtins.input", lambda _: "indx")
+    assert install.prompt_toolchanger_config_source() == install.EXAMPLE_INDX_CFG
 
 
 def test_offer_example_config_skips_on_no(
@@ -122,7 +186,8 @@ def test_offer_example_config_skips_on_directory_not_found(
     monkeypatch: pytest.MonkeyPatch, config_paths: Path
 ) -> None:
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr("builtins.input", lambda _: "y")
+    inputs = iter(["y", ""])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
     assert not config_paths.exists()
     install.offer_example_config()
     assert not config_paths.exists()
@@ -144,6 +209,19 @@ def klippy_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(install, "KLIPPY_PIP", pip)
     monkeypatch.setattr(install, "KLIPPY_PYTHON", python)
     return env, pip, python
+
+
+def test_main_skip_skips_prompts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    dest = tmp_path / "extras"
+    calls: list[str] = []
+    monkeypatch.setattr(install, "offer_example_config", lambda: calls.append("config"))
+    monkeypatch.setattr(install, "offer_plotly_install", lambda: calls.append("plotly"))
+    monkeypatch.setattr(install, "restart_klipper", lambda: calls.append("restart"))
+    install.main(["--skip", str(dest)])
+    assert calls == []
+    assert (dest / "eddy_seek").resolve() == (ROOT / "src" / "eddy_seek").resolve()
 
 
 def test_offer_plotly_install_skips_when_not_tty(

@@ -121,9 +121,9 @@ def lookup_toolhead_position(toolhead: ToolHead, print_time: float) -> Position:
     kin = toolhead.get_kinematics()
     kin_spos = {
         s.get_name(): s.mcu_to_commanded_position(s.get_past_mcu_position(print_time))
-        for s in kin.get_steppers()  # ty: ignore[unresolved-attribute]
+        for s in kin.get_steppers()
     }
-    pos = kin.calc_position(kin_spos)  # ty: ignore[unresolved-attribute]
+    pos = kin.calc_position(kin_spos)
     return Position.from_pair(pos)
 
 
@@ -341,7 +341,7 @@ class MotionHandler(_SessionMotionBase):
     def _sensor_outage(self, systime: float, end_time: float) -> bool:
         try:
             mcu = self._printer.lookup_object("mcu")
-            est = mcu.estimated_print_time(systime)  # ty: ignore[unresolved-attribute]
+            est = mcu.estimated_print_time(systime)
             return est > end_time + 1.0
         except (KeyError, AttributeError):
             return False

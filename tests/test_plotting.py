@@ -14,26 +14,26 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fakes import PLOT_HTML_SUFFIX, PLOT_RUN_DIR, PLOT_WRITE_AT
 
-from _eddy_seek.common import Offset, Phase, session_artifact_filename
-from _eddy_seek.config import SeekConfig
-from _eddy_seek.movement.types import MotionSample
-from _eddy_seek.optimizer import bin_frequencies
-from _eddy_seek.plotting import (
+from eddy_seek.common import Offset, Phase, session_artifact_filename
+from eddy_seek.config import SeekConfig
+from eddy_seek.movement.types import MotionSample
+from eddy_seek.optimizer import bin_frequencies
+from eddy_seek.plotting import (
     render_session_plot,
     write_figure,
 )
-from _eddy_seek.plotting._plotly import THEME_COLORS, write_html
-from _eddy_seek.plotting.artifacts import finalize_strategy_plot
-from _eddy_seek.plotting.debug_scan import render_debug_scan_figure
-from _eddy_seek.plotting.primitives import (
+from eddy_seek.plotting._plotly import THEME_COLORS, write_html
+from eddy_seek.plotting.artifacts import finalize_strategy_plot
+from eddy_seek.plotting.debug_scan import render_debug_scan_figure
+from eddy_seek.plotting.primitives import (
     Bounds,
     HeatmapRecord,
     PassMove,
     XYCloud,
 )
-from _eddy_seek.plotting.recorder import SessionRecorder
-from _eddy_seek.strategy.centroid import CentroidStrategy, _record_centroid_pass
-from _eddy_seek.strategy.sweep_centroid import _record_sweep_centroid_pass
+from eddy_seek.plotting.recorder import SessionRecorder
+from eddy_seek.strategy.centroid import CentroidStrategy, _record_centroid_pass
+from eddy_seek.strategy.sweep_centroid import _record_sweep_centroid_pass
 
 
 def test_plot_filename():
@@ -376,7 +376,7 @@ def test_save_preview_debug_scan_plot(requires_plotly):
 
 
 def test_render_returns_none_without_plotly(tmp_path):
-    with patch("_eddy_seek.plotting.centroid.plotly_available", return_value=False):
+    with patch("eddy_seek.plotting.centroid.plotly_available", return_value=False):
         recorder = SessionRecorder(trace=False, plots=True)
         ctx = SimpleNamespace(recorder=recorder)
         _record_centroid_pass(

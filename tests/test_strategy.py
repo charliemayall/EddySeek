@@ -11,19 +11,19 @@ import math
 import pytest
 from pytest import raises
 
-from _eddy_seek.accuracy.stats import _sample_stdev
-from _eddy_seek.common import Offset
-from _eddy_seek.config import SeekConfig
-from _eddy_seek.optimizer import (
+from eddy_seek.accuracy.stats import _sample_stdev
+from eddy_seek.common import Offset
+from eddy_seek.config import SeekConfig
+from eddy_seek.optimizer import (
     axis_weighted_centroid,
     frequency_is_better,
     frequency_weight,
     weighted_centroid,
 )
-from _eddy_seek.plotting.recorder import SessionRecorder
-from _eddy_seek.session import SeekSession
-from _eddy_seek.strategy import strategy_for
-from _eddy_seek.strategy.base import (
+from eddy_seek.plotting.recorder import SessionRecorder
+from eddy_seek.session import SeekSession
+from eddy_seek.strategy import strategy_for
+from eddy_seek.strategy.base import (
     DivergenceError,
     InsufficientSamplesError,
     MaxPassesError,
@@ -31,8 +31,8 @@ from _eddy_seek.strategy.base import (
     SeekStrategy,
     _check_pass_divergence,
 )
-from _eddy_seek.strategy.centroid import CentroidStrategy
-from _eddy_seek.strategy.sweep_centroid import SweepCentroidStrategy
+from eddy_seek.strategy.centroid import CentroidStrategy
+from eddy_seek.strategy.sweep_centroid import SweepCentroidStrategy
 
 
 def _test_cfg(**overrides) -> SeekConfig:

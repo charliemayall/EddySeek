@@ -15,22 +15,23 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fakes import FakeGcmd, FakePrinter, RecordingToolhead, ok_seek_result
 
-from _eddy_seek.accuracy import compute_accuracy_stats, run_accuracy_test
-from _eddy_seek.common import Offset
-from _eddy_seek.config import SeekConfig
-from _eddy_seek.plotting.accuracy import (
+from eddy_seek.accuracy import run_accuracy_test
+from eddy_seek.accuracy.stats import compute_accuracy_stats
+from eddy_seek.common import Offset
+from eddy_seek.config import SeekConfig
+from eddy_seek.plotting.accuracy import (
     AccuracyRun,
     write_accuracy_comparison_plot,
     write_accuracy_plot,
 )
-from _eddy_seek.plotting.accuracy_io import (
+from eddy_seek.plotting.accuracy_io import (
     load_accuracy_run,
     parse_accuracy_html,
     parse_accuracy_json,
     parse_offset_cell,
 )
-from _eddy_seek.plotting.artifacts import write_figure
-from _eddy_seek.plotting.primitives import AccuracyRepeatRecord
+from eddy_seek.plotting.artifacts import write_figure
+from eddy_seek.plotting.primitives import AccuracyRepeatRecord
 
 
 def test_mock_does_not_inflate_reference_relative_spread():
@@ -138,10 +139,10 @@ def test_run_accuracy_test_uses_repeated_seeks():
 
     with (
         patch(
-            "_eddy_seek.accuracy.test.run_repeated_seeks",
+            "eddy_seek.accuracy.test.run_repeated_seeks",
             return_value=expected,
         ) as repeated_mock,
-        patch("_eddy_seek.accuracy.test.finalize_repeat_seek"),
+        patch("eddy_seek.accuracy.test.finalize_repeat_seek"),
     ):
         repeated_mock.return_value = None
         run_accuracy_test(
@@ -155,12 +156,12 @@ def test_run_accuracy_test_uses_repeated_seeks():
 
     with (
         patch(
-            "_eddy_seek.accuracy.test.run_repeated_seeks",
+            "eddy_seek.accuracy.test.run_repeated_seeks",
         ) as repeated_mock,
-        patch("_eddy_seek.accuracy.test.finalize_repeat_seek") as finalize_mock,
+        patch("eddy_seek.accuracy.test.finalize_repeat_seek") as finalize_mock,
     ):
-        from _eddy_seek.common import Offset
-        from _eddy_seek.repeated_seek import RepeatedSeekResult
+        from eddy_seek.common import Offset
+        from eddy_seek.repeated_seek import RepeatedSeekResult
 
         repeated_mock.return_value = RepeatedSeekResult(
             offsets=(Offset(0.1, 0.0), Offset(0.2, 0.0)),
@@ -197,17 +198,17 @@ def test_run_accuracy_test_records_reference_relative_offsets_with_mock():
 
     with (
         patch(
-            "_eddy_seek.accuracy.test._apply_mock_offset",
+            "eddy_seek.accuracy.test._apply_mock_offset",
             side_effect=mocks,
         ),
         patch(
-            "_eddy_seek.accuracy.test.SeekSession",
+            "eddy_seek.accuracy.test.SeekSession",
             side_effect=lambda *args, **kwargs: MagicMock(
                 run=MagicMock(return_value=seek_results.pop(0))
             ),
         ),
         patch(
-            "_eddy_seek.accuracy.test.finalize_repeat_seek",
+            "eddy_seek.accuracy.test.finalize_repeat_seek",
             side_effect=capture_finalize,
         ),
     ):
@@ -311,7 +312,7 @@ def test_write_accuracy_comparison_plot(requires_plotly):
 
 
 def test_accuracy_compare_cli(requires_plotly, plot_tmp, tmp_path):
-    from _eddy_seek.accuracy.compare import main
+    from eddy_seek.accuracy.compare import main
 
     results_dir, _, write_at = plot_tmp
     records_a = (

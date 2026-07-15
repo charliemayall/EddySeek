@@ -22,8 +22,8 @@ try:
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
 except (ImportError, ModuleNotFoundError):
-    go = None  # ty: ignore[invalid-assignment]
-    make_subplots = None  # ty: ignore[invalid-assignment]
+    go = None  # ty:ignore[invalid-assignment]
+    make_subplots = None  # ty:ignore[invalid-assignment]
 
 
 PASS_COLORS = (

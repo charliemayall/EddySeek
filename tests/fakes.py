@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock
 
-from _eddy_seek.common import Offset
-from _eddy_seek.session import SeekSessionResult
+from eddy_seek.common import Offset
+from eddy_seek.session import SeekSessionResult
 
 PLOT_SESSION_ID = "abcd1234"
 PLOT_WRITE_AT = datetime(2026, 7, 2, 14, 30)
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     from klippy.gcode import GCodeCommand, GCodeDispatch
     from klippy.klippy import Printer
 
-    from _eddy_seek.tools import ToolAlignConfig
+    from eddy_seek.tools.protocol import ToolAlignConfig
 
     _GCodeCommandBase = GCodeCommand
     _GCodeDispatchBase = GCodeDispatch
@@ -195,6 +195,9 @@ class FakeKlipperConfig:
         if key not in self._options:
             return default
         return str(self._options[key]).lower() in ("true", "1", "yes", "on")
+
+    def get_prefix_options(self, prefix: str) -> dict[str, str]:
+        return {k: str(v) for k, v in self._options.items() if k.startswith(prefix)}
 
 
 def as_config(fake: FakeKlipperConfig) -> ConfigWrapper:

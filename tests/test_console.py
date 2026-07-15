@@ -10,8 +10,8 @@ from pathlib import Path
 
 from fakes import PLOT_HTML_SUFFIX, FakeGcmd
 
-from _eddy_seek.config import SeekConfig
-from _eddy_seek.kconsole import KConsole
+from eddy_seek.config import SeekConfig
+from eddy_seek.kconsole import KConsole
 
 
 def test_console_prefix_mapping():

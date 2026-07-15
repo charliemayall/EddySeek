@@ -5,7 +5,7 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-eddy_seek.py  -  Klipper extra for nozzle alignment via LDC1612.
+Klipper host object: LDC1612 streaming, G-code commands, tool alignment.
 """
 
 from __future__ import annotations
@@ -17,28 +17,28 @@ from dataclasses import fields
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from ._eddy_seek.accuracy import run_accuracy_test
-from ._eddy_seek.common import Offset, Position
-from ._eddy_seek.config import SeekConfig, load_seek_config
-from ._eddy_seek.kconsole import KConsole
-from ._eddy_seek.movement.guard import block_for_sensor_z, clear_gcode_offset_xy
-from ._eddy_seek.movement.handler import MIN_CAPTURE_SAMPLES
-from ._eddy_seek.session import ArtifactRunContext, SeekHost, SeekSession
-from ._eddy_seek.strategy import strategy_for
-from ._eddy_seek.tool_align import align_all_tools, align_tool_number
-from ._eddy_seek.tools import ToolAlignConfig
+from .accuracy import run_accuracy_test
+from .common import Position
+from .config import SeekConfig, load_seek_config
+from .kconsole import KConsole
+from .movement.guard import block_for_sensor_z, clear_gcode_offset_xy
+from .movement.handler import MIN_CAPTURE_SAMPLES
+from .session import ArtifactRunContext, SeekHost, SeekSession
+from .strategy import strategy_for
+from .tool_align import align_all_tools, align_tool_number
+from .tools.types import tool_align_from_config
 
 if TYPE_CHECKING:
-    from klippy.extras.configfile import ConfigWrapper
+    from klippy.configfile import ConfigWrapper
     from klippy.extras.ldc1612 import LDC1612
     from klippy.gcode import GCodeCommand
     from klippy.klippy import Printer
 
-    from ._eddy_seek.tools import ToolAlignConfig
+    from .tools.protocol import ToolAlignConfig
 
 _LDC1612: Any
 try:
-    from .ldc1612 import LDC1612 as _LDC1612
+    from ..ldc1612 import LDC1612 as _LDC1612
 except (ModuleNotFoundError, ImportError):
     _LDC1612 = None
 
@@ -58,7 +58,7 @@ class EddySeek(SeekHost):
     def __init__(self, config: ConfigWrapper) -> None:
         self.printer: Printer = config.get_printer()
         self.seek_config: SeekConfig = load_seek_config(config)
-        self._tools: ToolAlignConfig = ToolAlignConfig(config)
+        self._tools: ToolAlignConfig = tool_align_from_config(config)
         self._status_samples: list[float] = []
         self._capture_buf: list[float] = []
         self._capture_count: int = 0
@@ -66,7 +66,7 @@ class EddySeek(SeekHost):
         self._total_samples: int = 0
         self._last_freq: float = 0.0
         self._tool0_center: Position | None = None
-        self._sensor: LDC1612 = self._load_ldc1612(config)
+        self._sensor = self._load_ldc1612(config)
         self._stream_refs = 0
         self._batch_client_added = False
         self._sample_rate_hz: float | None = None
@@ -180,8 +180,8 @@ class EddySeek(SeekHost):
             "seek": self.seek_config.to_dict(),
             "tools": {
                 "tool_count": self._tools.tool_count,
-                "tool_prefix": self._tools.tool_prefix,
-                "load_tool_macro_prefix": self._tools.load_tool_macro,
+                "toolchanger_type": self._tools.toolchanger_type,
+                **self._tools.kit_trace(),
                 "tools": [tool.to_dict() for tool in self._tools.tools],
             },
             "sensor_name": self._sensor.name,
@@ -253,10 +253,7 @@ class EddySeek(SeekHost):
             if self._capture_buf
             else 0.0
         )
-        tools = {
-            self._tools.section_name(tool.tool_number): tool.to_dict()
-            for tool in self._tools.tools
-        }
+        tools = self._tools.status_tools()
         return {
             "last_freq": round(self._last_freq, 2),
             "smooth_mean": round(smooth_mean, 2),
@@ -268,6 +265,7 @@ class EddySeek(SeekHost):
                 if self._sample_rate_hz is not None
                 else None
             ),
+            "toolchanger_type": self._tools.toolchanger_type,
             "tools": tools,
         }
 
@@ -390,26 +388,25 @@ class EddySeek(SeekHost):
         if result.tool0_center is not None:
             self._tool0_center = result.tool0_center
         if result.status == "ok":
-            self._tools.save_tools()
+            # Only tools aligned this run - avoids wiping INDX save_variables
+            # for tools outside TOOLS=n.
+            for tool in self._tools.tools[:tool_count]:
+                self._tools.save_tool(tool)
 
     def cmd_EDDY_SEEK_APPLY_OFFSET(self, gcmd: GCodeCommand) -> None:
         tool_number = gcmd.get_int("TOOL", 0, minval=0)
         logger.info(f"eddy_seek: EDDY_SEEK_APPLY_OFFSET tool={tool_number}")
         console = self.refresh_console(gcmd)
+        if not self._tools.supports_apply_offset():
+            console.warn("EDDY_SEEK_APPLY_OFFSET is not used for this toolchanger kit")
+            return
         try:
             tool = self._tools.apply_tool_offset(tool_number)
         except ValueError as exc:
             console.warn(str(exc))
             return
         eff = tool.effective_offset
-        if tool.manual_offset != Offset.zero():
-            console.info(
-                f"Tool {tool_number} offset applied (manual_adjust + calibrated) - {eff.to_console_str()}"
-            )
-        else:
-            console.info(
-                f"Tool {tool_number} offset applied (calibrated) - {eff.to_console_str()}"
-            )
+        console.info(f"Tool {tool_number} offset applied - {eff.to_console_str()}")
 
     @block_for_sensor_z
     def cmd_EDDY_SEEK_ACCURACY(self, gcmd: GCodeCommand) -> None:
