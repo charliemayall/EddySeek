@@ -40,6 +40,7 @@ _LDC1612: Any
 try:
     from ..ldc1612 import LDC1612 as _LDC1612
 except (ModuleNotFoundError, ImportError):
+    # shouldnt happen on host, only in tests
     _LDC1612 = None
 
 logger = logging.getLogger(__name__)
