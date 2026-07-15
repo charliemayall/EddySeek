@@ -82,9 +82,9 @@ Optional LDC1612 tuning keys (`frequency`, `max_sensor_hz`, `reg_drive_current`,
 
 Generic toolchanger: see [Minimal calibration workflow](#minimal-calibration-workflow) for a more detailed workflow.
 
-INDX: see [Bondtech INDX](#bondtech-indx-toolchanger_type-indx)
+Bondtech INDX: see [Bondtech INDX](#bondtech-indx-toolchanger_type-indx)
 
-### DIY toolchanger (default)
+### Generic toolchanger (default)
 
 1. Install EddySeek (see [Install](#install)).
 2. Add `[eddy_seek]` to `printer.cfg`, or `[include eddy_seek.cfg]` in `printer.cfg`
@@ -93,13 +93,13 @@ INDX: see [Bondtech INDX](#bondtech-indx-toolchanger_type-indx)
 5. `FIRMWARE_RESTART`
 6. `EDDY_SEEK_QUERY` - confirm you are getting samples.
 7. Load Tool 0, park at probe height above the sensor at sensor_x, sensor_y.
-   8 `EDDY_SEEK_START` - you should see the toolhead align with the sensor from its current position. If the toolhead is not aligned, you should adjust `sensor_x` and `sensor_y` to be closer to the toolhead.
-8. Repeat step 8 until you very little to no offset found, this is a good position to set as your `sensor_x` and `sensor_y`.
-9. Keep Tool 0 loaded, and run `EDDY_SEEK_TOOL TOOL=0`
-10. Calibrate each tool by running `EDDY_SEEK_TOOL TOOL=n`, use `LOAD=1` to have EddySeek load the tool for you.
-11. `SAVE_CONFIG` - persist offsets in `es_Tn` sections in `printer.cfg`.
-12. Add `EDDY_SEEK_APPLY_OFFSET TOOL=n` to your toolchange macros or slicer
-13. Done!
+8. `EDDY_SEEK_START` - you should see the toolhead align with the sensor from its current position. If the toolhead is not aligned, you should adjust `sensor_x` and `sensor_y` to be closer to the toolhead.
+9. Repeat step 8 until you very little to no offset found, this is a good position to set as your `sensor_x` and `sensor_y`.
+10. Keep Tool 0 loaded, and run `EDDY_SEEK_TOOL TOOL=0`
+11. Calibrate each tool by running `EDDY_SEEK_TOOL TOOL=n`, use `LOAD=1` to have EddySeek load the tool for you.
+12. `SAVE_CONFIG` - persist offsets in `es_Tn` sections in `printer.cfg`.
+13. Add `EDDY_SEEK_APPLY_OFFSET TOOL=n` to your toolchange macros or slicer
+14. Done!
 
 ### Bondtech INDX (`toolchanger_type: indx`)
 
@@ -134,45 +134,47 @@ See [example.cfg](../example.cfg) (DIY), [example_indx.cfg](../example_indx.cfg)
 
 ### `[eddy_seek]` - main options
 
-| Option                    | Default                                   | Description                                                                            |
-| ------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------- |
-| `sensor_type`             | _(required)_                              | `ldc1612`                                                                              |
-| `i2c_address`             | `42`                                      | LDC1612 I2C address (`0x2a`)                                                           |
-| `i2c_mcu`                 | _(required)_                              | MCU name, e.g. `mcu`                                                                   |
-| `i2c_bus`                 | _(required)_                              | I2C bus, e.g. `i2c1`                                                                   |
-| `tool_count`              | `1`                                       | Number of tools (DIY only; config error if set with `toolchanger_type: indx`)          |
-| `toolchanger_type`        | `diy`                                     | `diy` or `indx` - INDX uses `CHANGE_TOOL` and `TOOL_POSITIONS`                         |
-| `tool_prefix`             | `es_T`                                    | Prefix for saved offset sections (`es_T1`, …)                                          |
-| `load_tool_macro_prefix`  | `T`                                       | Prefix for load macros (`T0`, `T1`, …; DIY only)                                       |
-| `sensor_x` / `sensor_y`   | _(required)_                              | Machine XY of sensor coil; tool 0 jogs here before seeking                             |
-| `sensor_z`                | _(optional)_                              | Machine Z for seek commands; errors if outside `[sensor_z, sensor_z + 0.25]` mm        |
-| `max_jog_x` / `max_jog_y` | `2.5`                                     | Max search radius from start (mm)                                                      |
-| `tolerance`               | `0.05`                                    | Stop when both axes move less than this (mm)                                           |
-| `dwell_time`              | `0.5`                                     | Seconds at each probe point (grid strategies only)                                     |
-| `jog_speed`               | `80`                                      | Feedrate for search jogs (mm/s)                                                        |
-| `search_for`              | `max`                                     | `max` or `min` - which frequency extreme marks the nozzle centre, `max` for most users |
-| `strategy`                | `sweep_centroid`                          | `sweep_centroid`, `centroid`, or `debug_scan` (diag only)                              |
-| `max_passes`              | `6`                                       | Search passes before giving up                                                         |
-| `save_session_trace`      | `False`                                   | Write probe JSON to `result_folder` (debug)                                            |
-| `save_plots`              | `False`                                   | Write HTML plots to `result_folder` (needs plotly)                                     |
-| `result_folder`           | `~/printer_data/config/eddy_seek_results` | Output directory for debug artefacts                                                   |
-| `debug`                   | `False`                                   | Verbose console; pass `VERBOSE=1` on any command for one-off verbosity                 |
+<!-- BEGIN:seek-config-main -->
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `sensor_type` | _(required)_ | `ldc1612` |
+| `i2c_address` | `42` | LDC1612 I2C address (`0x2a`) |
+| `i2c_mcu` | _(required)_ | MCU name, e.g. `mcu` |
+| `i2c_bus` | _(required)_ | I2C bus, e.g. `i2c1` |
+| `tool_count` | `1` | Number of tools (DIY only; config error if set with `toolchanger_type: indx`) |
+| `toolchanger_type` | `diy` | `diy` or `indx` - INDX uses `CHANGE_TOOL` and `TOOL_POSITIONS` |
+| `tool_prefix` | `es_T` | Prefix for saved offset sections (`es_T1`, …) |
+| `load_tool_macro_prefix` | `T` | Prefix for load macros (`T0`, `T1`, …; DIY only) |
+| `sensor_x` / `sensor_y` | _(required)_ | Machine XY of sensor coil; tool 0 jogs here before seeking |
+| `sensor_z` | _(optional)_ | Machine Z for seek commands; errors if outside `[sensor_z, sensor_z + 0.25]` mm |
+| `max_jog_x` / `max_jog_y` | `2.5` | Max search radius from start (mm) |
+| `tolerance` | `0.05` | Stop when both axes move less than this (mm) |
+| `dwell_time` | `0.5` | Seconds at each probe point (grid strategies only) |
+| `jog_speed` | `80` | Feedrate for search jogs (mm/s) |
+| `search_for` | `max` | Which frequency extreme marks the nozzle centre (`max` for most users) |
+| `strategy` | `sweep_centroid` | `sweep_centroid`, `centroid`, or `debug_scan` (diag only) |
+| `max_passes` | `6` | Search passes before giving up |
+| `save_session_trace` | `False` | Write probe JSON to `result_folder` (debug) |
+| `save_plots` | `False` | Write HTML plots to `result_folder` (needs plotly) |
+| `result_folder` | `~/printer_data/config/eddy_seek_results` | Output directory for debug artefacts |
+| `debug` | `False` | Verbose console; pass `VERBOSE=1` on any command for one-off verbosity |
+<!-- END:seek-config-main -->
 
 ### `[eddy_seek]` - `strategy: sweep_centroid` options
 
-| Option                 | Default | Description                                            |
-| ---------------------- | ------- | ------------------------------------------------------ |
-| `sweep_coarse_speed`   | `20`    | Coarse sweep feedrate (mm/s)                           |
-| `sweep_fine_speed`     | `10`    | Fine sweep feedrate (mm/s)                             |
-| `sweep_overscan`       | `1.0`   | Extra travel beyond jog range (mm)                     |
-| `sweep_cross_offset`   | `0.3`   | Stagger between parallel sweeps (mm)                   |
-| `coarse_phases`        | `2`     | Coarse search passes before fine passes                |
-| `coarse_cross_passes`  | `3`     | Staggered sweep lines per coarse pass (fine uses 1)    |
-| `fine_shrink`          | `0.6`   | Fine pass range multiplier (x max_jog)                 |
-| `min_sweep_samples`    | `20`    | Minimum profile points before centroid fit             |
-| `sweep_arc_resolution` | `0.1`   | Max chord length per connector arc between sweeps (mm) |
-
-> **Breaking change:** `SWEEP_ARC_RESOLUTION` replaces `CIRCLE_ARC_RESOLUTION` in `printer.cfg` and `EDDY_SEEK_SET`.
+<!-- BEGIN:seek-config-sweep -->
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `sweep_coarse_speed` | `20` | Coarse sweep feedrate (mm/s) |
+| `sweep_fine_speed` | `10` | Fine sweep feedrate (mm/s) |
+| `sweep_overscan` | `1` | Extra travel beyond jog range (mm) |
+| `sweep_cross_offset` | `0.3` | Stagger between parallel sweeps (mm) |
+| `fine_shrink` | `0.6` | Fine pass range multiplier (x max_jog) |
+| `min_sweep_samples` | `20` | Minimum profile points before centroid fit |
+| `coarse_phases` | `2` | Coarse search passes before fine passes |
+| `coarse_cross_passes` | `3` | Staggered sweep lines per coarse pass (fine uses 1) |
+| `sweep_arc_resolution` | `0.1` | Max chord length per connector arc between sweeps (mm) |
+<!-- END:seek-config-sweep -->
 
 ### `[eddy_seek]` - general notes
 
@@ -243,16 +245,18 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 ## G-code commands
 
-| Command                                                                 | Description                                                                                                                                                                                                                                            |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `EDDY_SEEK_QUERY`                                                       | Print frequency statistics                                                                                                                                                                                                                             |
-| `EDDY_SEEK_RESET`                                                       | Manually clear capture buffer (not usually needed)                                                                                                                                                                                                     |
-| `EDDY_SEEK_SET [<key>=<value> …]`                                       | Override config until `FIRMWARE_RESTART`. Bare command prints current values (e.g. `STRATEGY=<enum>`, `TOLERANCE=<float>`).                                                                                                                            |
-| `EDDY_SEEK_START [STRATEGY=<enum>]`                                     | XY search from current position                                                                                                                                                                                                                        |
-| `EDDY_SEEK_ACCURACY [REPEATS=<int> MOCK=<0\|1>]`                        | Run full seeks (default 3, min 2, max 50) and report σ / max scatter. `MOCK=1` applies a small random start offset each repeat.                                                                                                                        |
+<!-- BEGIN:gcode-commands -->
+| Command | Description |
+| ------- | ----------- |
+| `EDDY_SEEK_QUERY` | Print frequency statistics |
+| `EDDY_SEEK_RESET` | Manually clear capture buffer (not usually needed) |
+| `EDDY_SEEK_SET [<key>=<value> …]` | Override config until `FIRMWARE_RESTART`. Bare command prints current values (e.g. `STRATEGY=<enum>`, `TOLERANCE=<float>`). |
+| `EDDY_SEEK_START [STRATEGY=<enum>]` | XY search from current position |
+| `EDDY_SEEK_ACCURACY [REPEATS=<int> MOCK=<0\|1>]` | Run full seeks (default 3, min 2, max 50) and report σ / max scatter. `MOCK=1` applies a small random start offset each repeat. |
 | `EDDY_SEEK_TOOL TOOL=<int> [REPEATS=<int> LOAD=<0\|1> STRATEGY=<enum>]` | Align one tool. Caller loads the tool unless `LOAD=1`. `REPEATS` seeks are averaged per tool (default 3).<br><br>⚠️Your load macro must put the toolhead in a position where it is safe to move X to tool 0's center, and then Y to tool 0's center.⚠️ |
-| `EDDY_SEEK_TOOLS [TOOLS=<int> REPEATS=<int>]`                           | Align tools 0…n−1 with averaged seeks (default: all tools, 3 repeats each).                                                                                                                                                                            |
-| `EDDY_SEEK_APPLY_OFFSET [TOOL=<int>]`                                   | DIY only: apply saved XY via `SET_GCODE_OFFSET`. Errors on INDX (`CHANGE_TOOL` owns apply).                                                                                                                                                            |
+| `EDDY_SEEK_TOOLS [TOOLS=<int> REPEATS=<int>]` | Align tools 0…n−1 with averaged seeks (default: all tools, 3 repeats each). |
+| `EDDY_SEEK_APPLY_OFFSET [TOOL=<int>]` | DIY only: apply saved XY via `SET_GCODE_OFFSET`. Errors on INDX (`CHANGE_TOOL` owns apply). |
+<!-- END:gcode-commands -->
 
 ---
 

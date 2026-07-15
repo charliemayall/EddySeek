@@ -7,8 +7,8 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 
 SeekConfig - parsing of [eddy_seek] section in printer.cfg.
 
-Field ``metadata`` drives validation, ``EDDY_SEEK_SET`` parsing, and (mostly)
-``load_seek_config``:
+Field ``metadata`` drives validation, ``EDDY_SEEK_SET`` parsing, ``load_seek_config``,
+and generated USER_GUIDE reference tables:
 
 - ``gcode`` - G-code param name; presence means runtime-settable
 - ``positive`` - float must be > 0
@@ -16,6 +16,7 @@ Field ``metadata`` drives validation, ``EDDY_SEEK_SET`` parsing, and (mostly)
 - ``min`` - int must be >= this value
 - ``enum`` - allowed string values
 - ``bool`` - parse true/false/1/0 from G-code strings
+- ``doc`` - description for generated docs
 """
 
 from __future__ import annotations
@@ -36,24 +37,53 @@ logger = logging.getLogger(__name__)
 @dataclass(kw_only=True)
 class SeekConfig:
     max_jog_x: float = field(
-        default=2.5, metadata={"gcode": "MAX_JOG_X", "positive": True}
+        default=2.5,
+        metadata={
+            "gcode": "MAX_JOG_X",
+            "positive": True,
+            "doc": "Max search radius from start (mm)",
+        },
     )
     max_jog_y: float = field(
-        default=2.5, metadata={"gcode": "MAX_JOG_Y", "positive": True}
+        default=2.5,
+        metadata={
+            "gcode": "MAX_JOG_Y",
+            "positive": True,
+            "doc": "Max search radius from start (mm)",
+        },
     )
     tolerance: float = field(
-        default=0.05, metadata={"gcode": "TOLERANCE", "positive": True}
+        default=0.05,
+        metadata={
+            "gcode": "TOLERANCE",
+            "positive": True,
+            "doc": "Stop when both axes move less than this (mm)",
+        },
     )
     dwell_time: float = field(
-        default=0.5, metadata={"gcode": "DWELL_TIME", "positive": True}
+        default=0.5,
+        metadata={
+            "gcode": "DWELL_TIME",
+            "positive": True,
+            "doc": "Seconds at each probe point (grid strategies only)",
+        },
     )
     jog_speed: float = field(
         default=80 * 60.0,
-        metadata={"gcode": "JOG_SPEED", "positive": True, "speed": True},
+        metadata={
+            "gcode": "JOG_SPEED",
+            "positive": True,
+            "speed": True,
+            "doc": "Feedrate for search jogs (mm/s)",
+        },
     )
     search_for: Literal["min", "max"] = field(
         default="max",
-        metadata={"gcode": "SEARCH_FOR", "enum": ("min", "max")},
+        metadata={
+            "gcode": "SEARCH_FOR",
+            "enum": ("min", "max"),
+            "doc": "Which frequency extreme marks the nozzle centre (`max` for most users)",
+        },
     )
     strategy: Literal["centroid", "sweep_centroid", "debug_scan"] = field(
         default="sweep_centroid",
@@ -64,45 +94,119 @@ class SeekConfig:
                 "sweep_centroid",
                 "debug_scan",
             ),
+            "doc": "`sweep_centroid`, `centroid`, or `debug_scan` (diag only)",
         },
     )
-    max_passes: int = field(default=6, metadata={"gcode": "MAX_PASSES", "min": 1})
+    max_passes: int = field(
+        default=6,
+        metadata={
+            "gcode": "MAX_PASSES",
+            "min": 1,
+            "doc": "Search passes before giving up",
+        },
+    )
     save_session_trace: bool = field(
-        default=False, metadata={"gcode": "SAVE_SESSION_TRACE", "bool": True}
+        default=False,
+        metadata={
+            "gcode": "SAVE_SESSION_TRACE",
+            "bool": True,
+            "doc": "Write probe JSON to `result_folder` (debug)",
+        },
     )
     save_plots: bool = field(
-        default=False, metadata={"gcode": "SAVE_PLOTS", "bool": True}
+        default=False,
+        metadata={
+            "gcode": "SAVE_PLOTS",
+            "bool": True,
+            "doc": "Write HTML plots to `result_folder` (needs plotly)",
+        },
     )
-    result_folder: str = field(default="~/printer_data/config/eddy_seek_results")
+    result_folder: str = field(
+        default="~/printer_data/config/eddy_seek_results",
+        metadata={"doc": "Output directory for debug artefacts"},
+    )
 
     sweep_coarse_speed: float = field(
         default=20 * 60.0,
-        metadata={"gcode": "SWEEP_COARSE_SPEED", "positive": True, "speed": True},
+        metadata={
+            "gcode": "SWEEP_COARSE_SPEED",
+            "positive": True,
+            "speed": True,
+            "doc": "Coarse sweep feedrate (mm/s)",
+        },
     )
     sweep_fine_speed: float = field(
         default=10 * 60.0,
-        metadata={"gcode": "SWEEP_FINE_SPEED", "positive": True, "speed": True},
+        metadata={
+            "gcode": "SWEEP_FINE_SPEED",
+            "positive": True,
+            "speed": True,
+            "doc": "Fine sweep feedrate (mm/s)",
+        },
     )
     sweep_overscan: float = field(
-        default=1.0, metadata={"gcode": "SWEEP_OVERSCAN", "positive": True}
+        default=1.0,
+        metadata={
+            "gcode": "SWEEP_OVERSCAN",
+            "positive": True,
+            "doc": "Extra travel beyond jog range (mm)",
+        },
     )
     sweep_cross_offset: float = field(
-        default=0.3, metadata={"gcode": "SWEEP_CROSS_OFFSET", "positive": True}
+        default=0.3,
+        metadata={
+            "gcode": "SWEEP_CROSS_OFFSET",
+            "positive": True,
+            "doc": "Stagger between parallel sweeps (mm)",
+        },
     )
     fine_shrink: float = field(
-        default=0.6, metadata={"gcode": "FINE_SHRINK", "positive": True}
+        default=0.6,
+        metadata={
+            "gcode": "FINE_SHRINK",
+            "positive": True,
+            "doc": "Fine pass range multiplier (x max_jog)",
+        },
     )
     min_sweep_samples: int = field(
-        default=20, metadata={"gcode": "MIN_SWEEP_SAMPLES", "min": 3}
+        default=20,
+        metadata={
+            "gcode": "MIN_SWEEP_SAMPLES",
+            "min": 3,
+            "doc": "Minimum profile points before centroid fit",
+        },
     )
-    coarse_phases: int = field(default=2, metadata={"gcode": "COARSE_PHASES", "min": 1})
+    coarse_phases: int = field(
+        default=2,
+        metadata={
+            "gcode": "COARSE_PHASES",
+            "min": 1,
+            "doc": "Coarse search passes before fine passes",
+        },
+    )
     coarse_cross_passes: int = field(
-        default=3, metadata={"gcode": "COARSE_CROSS_PASSES", "min": 1}
+        default=3,
+        metadata={
+            "gcode": "COARSE_CROSS_PASSES",
+            "min": 1,
+            "doc": "Staggered sweep lines per coarse pass (fine uses 1)",
+        },
     )
     sweep_arc_resolution: float = field(
-        default=0.1, metadata={"gcode": "SWEEP_ARC_RESOLUTION", "positive": True}
+        default=0.1,
+        metadata={
+            "gcode": "SWEEP_ARC_RESOLUTION",
+            "positive": True,
+            "doc": "Max chord length per connector arc between sweeps (mm)",
+        },
     )
-    debug: bool = field(default=False, metadata={"bool": True})
+    debug: bool = field(
+        default=False,
+        metadata={
+            "bool": True,
+            "doc": "Verbose console; pass `VERBOSE=1` on any command for one-off verbosity",
+        },
+    )
 
     def __post_init__(self) -> None:
         _validate(self)

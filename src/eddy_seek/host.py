@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from .accuracy import run_accuracy_test
 from .common import Position
 from .config import SeekConfig, load_seek_config
+from .gcode_commands import GCODE_COMMANDS
 from .kconsole import KConsole
 from .movement.guard import block_for_sensor_z, clear_gcode_offset_xy
 from .movement.handler import MIN_CAPTURE_SAMPLES
@@ -73,46 +74,12 @@ class EddySeek(SeekHost):
         self._sample_rate_hz: float | None = None
         self.console: KConsole | None = None
         gcode = self.printer.lookup_object("gcode")
-        gcode.register_command(
-            "EDDY_SEEK_QUERY",
-            self.cmd_EDDY_SEEK_QUERY,
-            desc="Print current LDC1612 frequency to console",
-        )
-        gcode.register_command(
-            "EDDY_SEEK_RESET",
-            self.cmd_EDDY_SEEK_RESET,
-            desc="Clear capture buffer before a new alignment measurement",
-        )
-        gcode.register_command(
-            "EDDY_SEEK_SET",
-            self.cmd_EDDY_SEEK_SET,
-            desc="Temporarily override seek settings until Klipper restart",
-        )
-        gcode.register_command(
-            "EDDY_SEEK_START",
-            self.cmd_EDDY_SEEK_START,
-            desc="Run XY seek search to find the eddy sensor centre",
-        )
-        gcode.register_command(
-            "EDDY_SEEK_ACCURACY",
-            self.cmd_EDDY_SEEK_ACCURACY,
-            desc="Run seek REPEATS times and report repeatability statistics",
-        )
-        gcode.register_command(
-            "EDDY_SEEK_TOOL",
-            self.cmd_EDDY_SEEK_TOOL,
-            desc="Align a single tool on the eddy sensor",
-        )
-        gcode.register_command(
-            "EDDY_SEEK_TOOLS",
-            self.cmd_EDDY_SEEK_TOOLS,
-            desc="Align all tools against tool 0 on the eddy sensor",
-        )
-        gcode.register_command(
-            "EDDY_SEEK_APPLY_OFFSET",
-            self.cmd_EDDY_SEEK_APPLY_OFFSET,
-            desc="Apply saved XY offset for a tool via SET_GCODE_OFFSET",
-        )
+        for cmd in GCODE_COMMANDS:
+            gcode.register_command(
+                cmd.name,
+                getattr(self, f"cmd_{cmd.name}"),
+                desc=cmd.klipper_desc,
+            )
         if self.seek_config.debug:
             gcode.register_command(
                 "ES_DEBUG_CONSOLE",
