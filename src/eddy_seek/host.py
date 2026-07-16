@@ -26,7 +26,7 @@ from .movement.guard import block_for_sensor_z, clear_gcode_offset_xy
 from .movement.handler import MIN_CAPTURE_SAMPLES
 from .session import ArtifactRunContext, SeekHost, SeekSession
 from .strategy import strategy_for
-from .tool_align import align_all_tools, align_tool_number
+from .tool_align import align_tool_number
 from .tools.types import tool_align_from_config
 
 if TYPE_CHECKING:
@@ -312,11 +312,10 @@ class EddySeek(SeekHost):
         if tool_number == -1:
             raise gcmd.error("TOOL=<number> is required for EDDY_SEEK_TOOL")
         repeats = gcmd.get_int("REPEATS", 3, minval=1, maxval=50)
-        load_tool = gcmd.get_int("LOAD", 0, minval=0, maxval=1) == 1
         strategy = self.seek_config.strategy_from_gcmd(gcmd)
         logger.info(
             f"eddy_seek: EDDY_SEEK_TOOL tool={tool_number} repeats={repeats} "
-            f"load={load_tool} strategy={strategy}"
+            f"strategy={strategy}"
         )
         console = self.refresh_console(gcmd)
         console.entry(f"Aligning tool {tool_number}…")
@@ -329,7 +328,6 @@ class EddySeek(SeekHost):
                 tool_number,
                 self._tool0_center,
                 console=console,
-                load_tool=load_tool,
                 artifact=artifact,
                 repeats=repeats,
                 strategy=strategy,
@@ -345,21 +343,6 @@ class EddySeek(SeekHost):
                     self._tools.save_tool(tool)
         finally:
             clear_gcode_offset_xy(self.printer)
-
-    @block_for_sensor_z
-    def cmd_EDDY_SEEK_TOOLS(self, gcmd: GCodeCommand) -> None:
-        self.refresh_console(gcmd)
-        tool_count = gcmd.get_int("TOOLS", self._tools.tool_count, minval=1)
-        repeats = gcmd.get_int("REPEATS", 3, minval=1, maxval=50)
-        logger.info(f"eddy_seek: EDDY_SEEK_TOOLS tools={tool_count} repeats={repeats}")
-        result = align_all_tools(self, self._tools, gcmd, tool_count, repeats=repeats)
-        if result.tool0_center is not None:
-            self._tool0_center = result.tool0_center
-        if result.status == "ok":
-            # Only tools aligned this run - avoids wiping INDX save_variables
-            # for tools outside TOOLS=n.
-            for tool in self._tools.tools[:tool_count]:
-                self._tools.save_tool(tool)
 
     def cmd_EDDY_SEEK_APPLY_OFFSET(self, gcmd: GCodeCommand) -> None:
         tool_number = gcmd.get_int("TOOL", 0, minval=0)

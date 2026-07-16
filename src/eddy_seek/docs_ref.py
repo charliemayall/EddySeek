@@ -50,16 +50,6 @@ _TOOL_SECTION_ROWS: tuple[tuple[str, str, str], ...] = (
     ),
     ("`tool_prefix`", "`es_T`", "Prefix for saved offset sections (`es_T1`, …)"),
     (
-        "`load_tool_macro_prefix`",
-        "`T`",
-        "Prefix for load macros (`T0`, `T1`, …; DIY only)",
-    ),
-    (
-        "`sensor_x` / `sensor_y`",
-        "_(required)_",
-        "Machine XY of sensor coil; tool 0 jogs here before seeking",
-    ),
-    (
         "`sensor_z`",
         "_(optional)_",
         "Machine Z for seek commands; errors if outside `[sensor_z, sensor_z + 0.25]` mm",

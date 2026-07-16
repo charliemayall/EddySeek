@@ -100,7 +100,7 @@ def offer_example_config() -> None:
 
         [include {EDDY_SEEK_CFG.name}]
 
-    Then edit {EDDY_SEEK_CFG} for your machine (I2C, sensor_x/y, tool settings).
+    Then edit {EDDY_SEEK_CFG} for your machine (I2C, sensor_z, tool settings).
     """
     )
 

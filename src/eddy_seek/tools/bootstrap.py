@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from .protocol import ParsedSensors, ToolAlignConfig
+from .protocol import ToolAlignConfig
 
 if TYPE_CHECKING:
     from klippy.configfile import ConfigWrapper
@@ -24,11 +24,11 @@ logger = logging.getLogger(__name__)
 
 def read_config_context(
     config: ConfigWrapper,
-) -> tuple[ParsedSensors, Printer, ConfigWrapper]:
-    sensor_pos = ToolAlignConfig.parse_sensor_position_config(config)
+) -> tuple[float | None, Printer, ConfigWrapper]:
+    sensor_z = ToolAlignConfig.parse_sensor_z_config(config)
     printer = config.get_printer()
     main_config = printer.lookup_object("configfile").read_main_config()
-    return sensor_pos, printer, main_config
+    return sensor_z, printer, main_config
 
 
 def detect_toolchanger_types(
@@ -64,16 +64,14 @@ def log_kit_startup(
     *,
     toolchanger_type: str,
     tool_count: int,
-    sensor_pos: ParsedSensors,
+    sensor_z: float | None,
     extra: str = "",
 ) -> None:
-    sensor_z_text = f"{sensor_pos.z:.4f}" if sensor_pos.z is not None else "unset"
+    sensor_z_text = f"{sensor_z:.4f}" if sensor_z is not None else "unset"
     suffix = f" {extra}" if extra else ""
     logger.info(
         f"eddy_seek: tools config toolchanger_type={toolchanger_type} "
-        f"tool_count={tool_count} "
-        f"sensor=({sensor_pos.x:.4f}, {sensor_pos.y:.4f}, {sensor_z_text})"
-        f"{suffix}"
+        f"tool_count={tool_count} sensor_z={sensor_z_text}{suffix}"
     )
 
 

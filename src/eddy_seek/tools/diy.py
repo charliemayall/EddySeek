@@ -94,7 +94,7 @@ class DiyTool(ToolRecord):
 
 
 class DiyToolAlignConfig(ToolAlignConfig):
-    """Generic load-macro toolchanger (``T0``, ``T1``, …) with ``[es_Tn]`` persistence."""
+    """DIY toolchanger with ``[es_Tn]`` persistence."""
 
     def __init__(
         self,
@@ -102,29 +102,22 @@ class DiyToolAlignConfig(ToolAlignConfig):
         printer,
         tool_count: int,
         tools: list[DiyTool],
-        sensor_x: float,
-        sensor_y: float,
         sensor_z: float | None,
         tool_prefix: str,
-        load_tool_macro: str,
     ) -> None:
         super().__init__(
             printer=printer,
             tool_count=tool_count,
             tools=tools,
-            sensor_x=sensor_x,
-            sensor_y=sensor_y,
             sensor_z=sensor_z,
             toolchanger_type="diy",
         )
         self.tool_prefix = tool_prefix
-        self.load_tool_macro = load_tool_macro
 
     @classmethod
     def _from_config(cls, config: ConfigWrapper) -> DiyToolAlignConfig:
         tool_prefix = config.get("tool_prefix", "es_T")
-        load_tool_macro = config.get("load_tool_macro_prefix", "T")
-        sensor_pos, printer, main_config = read_config_context(config)
+        sensor_z, printer, main_config = read_config_context(config)
         tool_count = config.getint("tool_count", 1, minval=1)
         types = toolchanger_types()
         run_detection("diy", main_config, types, DETECTION_ORDER)
@@ -136,18 +129,15 @@ class DiyToolAlignConfig(ToolAlignConfig):
         log_kit_startup(
             toolchanger_type="diy",
             tool_count=tool_count,
-            sensor_pos=sensor_pos,
-            extra=f"prefix={tool_prefix!r} load_macro={load_tool_macro!r}",
+            sensor_z=sensor_z,
+            extra=f"prefix={tool_prefix!r}",
         )
         return cls(
             printer=printer,
             tool_count=tool_count,
             tools=tools,
-            sensor_x=sensor_pos.x,
-            sensor_y=sensor_pos.y,
-            sensor_z=sensor_pos.z,
+            sensor_z=sensor_z,
             tool_prefix=tool_prefix,
-            load_tool_macro=load_tool_macro,
         )
 
     @staticmethod
@@ -162,16 +152,12 @@ class DiyToolAlignConfig(ToolAlignConfig):
     def section_name(self, tool_number: int) -> str:
         return f"{self.tool_prefix}{tool_number}"
 
-    def format_load_macro(self, tool_number: int) -> str:
-        return f"{self.load_tool_macro}{tool_number}"
-
     def tool_status_key(self, tool_number: int) -> str:
         return self.section_name(tool_number)
 
     def kit_trace(self) -> dict[str, str | int]:
         return {
             "tool_prefix": self.tool_prefix,
-            "load_tool_macro_prefix": self.load_tool_macro,
         }
 
     def save_tool(self, tool: ToolProtocol) -> None:

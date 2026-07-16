@@ -13,9 +13,9 @@ Select the kit with `toolchanger_type` in `[eddy_seek]` (default `diy`).
 
 ## Built-in types
 
-**`diy`** - generic load macros (`T0`, `T1`, …). Offsets live in `[es_Tn]` autosave sections with optional `manual_adjust_x/y`. Apply via `SET_GCODE_OFFSET`; wire `EDDY_SEEK_APPLY_OFFSET` into your own macros.
+**`diy`** - generic toolchanger. Offsets live in `[es_Tn]` autosave sections with optional `manual_adjust_x/y`. Apply via `SET_GCODE_OFFSET`; wire `EDDY_SEEK_APPLY_OFFSET` into your own macros. You load tools yourself before `EDDY_SEEK_TOOL`.
 
-**`indx`** - [Bondtech INDX](https://github.com/BondtechAB/INDX) macros. Loads via `CHANGE_TOOL`, persists XY to `SAVE_VARIABLE` (`t{n}_offset_x/y`). Tool count from `gcode_macro TOOL_POSITIONS`. Do **not** use `EDDY_SEEK_APPLY_OFFSET` - `CHANGE_TOOL` applies XY from save variables. See `indx.py` module docstring for upstream macro contracts.
+**`indx`** - [Bondtech INDX](https://github.com/BondtechAB/INDX) macros. Load via `CHANGE_TOOL` before alignment. Persists XY to `SAVE_VARIABLE` (`t{n}_offset_x/y`). Tool count from `gcode_macro TOOL_POSITIONS`. Do **not** use `EDDY_SEEK_APPLY_OFFSET` - `CHANGE_TOOL` applies XY from save variables. See `indx.py` module docstring for upstream macro contracts.
 
 ## Auto-detection
 

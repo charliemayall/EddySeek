@@ -21,7 +21,6 @@ from eddy_seek.tools.diy import (
 )
 from eddy_seek.tools.indx import (
     IndxTool,
-    IndxToolAlignConfig,
     ToolAlignConfig,
 )
 from eddy_seek.tools.types import (
@@ -117,19 +116,11 @@ def _tool_config(
     return tool_align_from_config(
         as_config(
             FakeKlipperConfig(
-                sensor_x=10.0,
-                sensor_y=20.0,
                 get_printer=get_printer,
                 **options,
             )
         )
     )
-
-
-def test_diy_format_load_macro():
-    cfg = _tool_config(tool_count=2, load_tool_macro_prefix="T")
-    assert isinstance(cfg, DiyToolAlignConfig)
-    assert cfg.format_load_macro(1) == "T1"
 
 
 def test_diy_apply_offset_set_gcode_only():
@@ -168,13 +159,6 @@ def test_diy_does_not_warn_on_tool_count(caplog: LogCaptureFixture):
     with caplog.at_level(logging.WARNING):
         _tool_config(tool_count=4)
     assert caplog.records == []
-
-
-def test_indx_format_load_macro():
-    main = _main({_TOOL_POSITIONS: {"variable_tool_count": 3}})
-    cfg = _tool_config(main=main, toolchanger_type="indx")
-    assert isinstance(cfg, IndxToolAlignConfig)
-    assert cfg.format_load_macro(2) == "CHANGE_TOOL TOOL=2"
 
 
 def test_indx_tool_count_from_tool_positions():
@@ -229,8 +213,6 @@ def test_indx_hydrates_save_variables():
     cfg = tool_align_from_config(
         as_config(
             FakeKlipperConfig(
-                sensor_x=10.0,
-                sensor_y=20.0,
                 get_printer=get_printer,
                 toolchanger_type="indx",
             )
@@ -253,8 +235,8 @@ def test_indx_rejects_diy_only_keys():
     main = _main({_TOOL_POSITIONS: {"variable_tool_count": 3}})
     with raises(ValueError, match="does not use tool_count"):
         _tool_config(main=main, toolchanger_type="indx", tool_count=4)
-    with raises(ValueError, match="does not use load_tool_macro_prefix"):
-        _tool_config(main=main, toolchanger_type="indx", load_tool_macro_prefix="T")
+    with raises(ValueError, match="does not use tool_prefix"):
+        _tool_config(main=main, toolchanger_type="indx", tool_prefix="es_T")
 
 
 def test_detect_toolchanger_types_indx_from_indx_section():
@@ -295,7 +277,7 @@ def test_indx_without_tool_positions_errors():
         _tool_config(toolchanger_type="indx")
 
 
-def test_tool_align_config_diy_load_and_save():
+def test_tool_align_config_diy_save_and_apply():
     gcode = FakeGcode()
     main = _main()
     configfile = _Configfile(main)
@@ -304,12 +286,8 @@ def test_tool_align_config_diy_load_and_save():
         main=main,
         configfile=configfile,
         tool_count=2,
-        load_tool_macro_prefix="T",
     )
     assert isinstance(cfg, DiyToolAlignConfig)
-    assert cfg.format_load_macro(1) == "T1"
-    cfg.run_load_macro(1)
-    assert gcode.scripts == ["T1"]
     tool = DiyTool(
         tool_number=1,
         offset=Offset(0.5, 0.25),
@@ -333,7 +311,6 @@ def test_tool_align_config_indx_wires_through():
         main=main, gcode=gcode, configfile=configfile, toolchanger_type="indx"
     )
     assert cfg.tool_count == 2
-    assert cfg.format_load_macro(1) == "CHANGE_TOOL TOOL=1"
     tool = IndxTool(
         tool_number=1,
         offset=Offset(0.3, 0.4),

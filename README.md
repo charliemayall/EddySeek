@@ -56,7 +56,7 @@ toolchanger alignment workflow, strategies, Moonraker fields, and troubleshootin
 
 - Klipper / Kalico
 - LDC1612 eddy-current sensor (dedicated probe for nozzle alignment)
-- Tool-load G-code macros for each tool (e.g. `T0`, `T1`, …)
+- Tool-load G-code macros for each tool (e.g. `T0`, `T1`, …) — EddySeek does not load tools for you
 
 ## Development
 

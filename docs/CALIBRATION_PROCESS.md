@@ -19,7 +19,6 @@ valley) that marks the sensor centre.
 | -------------------- | ----------------------- | ---------------------------------------------------- |
 | Single-position seek | `EDDY_SEEK_START`       | Offset from current XY to sensor centre              |
 | One tool             | `EDDY_SEEK_TOOL TOOL=n` | Per-tool offset staged in config autosave            |
-| All tools            | `EDDY_SEEK_TOOLS`       | Tool 0 defines centre; tools 1…N measured against it |
 
 After any tool alignment command succeeds, run `SAVE_CONFIG` to write offsets to
 `printer.cfg`.
@@ -33,55 +32,45 @@ flowchart TD
     A[Install eddy_seek + configure I2C] --> B[FIRMWARE_RESTART]
     B --> C[EDDY_SEEK_QUERY - verify sensor stream]
     C --> D[Park tool 0 above sensor at probe height]
-    D --> E{Alignment mode}
-    E -->|All tools| F[EDDY_SEEK_TOOLS]
-    E -->|One at a time| G[EDDY_SEEK_TOOL TOOL=0]
-    G --> H[Load tool n, then EDDY_SEEK_TOOL TOOL=n]
+    D --> G[EDDY_SEEK_TOOL TOOL=0]
+    G --> H[Load tool n, park at sensor, then EDDY_SEEK_TOOL TOOL=n]
     H --> MORE{More tools?}
     MORE -->|yes| H
     MORE -->|no| J[Offsets staged in T0, T1, … sections]
-    F --> J
     J --> K[SAVE_CONFIG]
     K --> L[Wire offsets into toolchanger / motion system]
 ```
 
-**Tool 0** is special: it establishes the absolute sensor-centre XY in machine
-coordinates. **Subsequent tools** are loaded, moved to that centre, then seeked;
-the resulting offset is the XY difference from tool 0.
+**Tool 0** is special: it establishes the absolute sensor-centre XY from its
+current parked position. **Subsequent tools** are moved to that centre (X then Y),
+then seeked; the resulting offset is the XY difference from tool 0.
 
 ---
 
 ## Multi-tool alignment sequence
 
-`EDDY_SEEK_TOOLS` runs each tool's load macro (`T0`…`Tn`) then seeks.
-`EDDY_SEEK_TOOL` is the same seek steps; pass `LOAD=1` to run the load macro.
+Load each tool yourself before `EDDY_SEEK_TOOL`. EddySeek does not run load macros.
 
 ```mermaid
 flowchart TD
-    START([EDDY_SEEK_TOOLS]) --> SAVE[Save G-code state]
-    SAVE --> LOOP{For each tool 0…N-1}
+    START([EDDY_SEEK_TOOL TOOL=n]) --> LOOP{Which tool?}
 
-    LOOP -->|tool 0| T0_LOAD[Run load macro T0]
-    T0_LOAD --> T0_MOVE[Move to sensor_x/sensor_y]
-    T0_MOVE --> T0_START[Record start XY]
-    T0_START --> T0_SEEK[Run XY seek from sensor position]
+    LOOP -->|tool 0| T0_START[Record current XY]
+    T0_START --> T0_SEEK[Run XY seek from current position]
     T0_SEEK --> T0_OK{Seek OK?}
-    T0_OK -->|no| FAIL([Report error, restore state])
+    T0_OK -->|no| FAIL([Report error])
     T0_OK -->|yes| T0_CENTER["tool0_center = start + offset<br/>offset_x/y = 0"]
     T0_CENTER --> STAGE0[Stage T0 in autosave]
 
-    LOOP -->|tool 1…N-1| LOAD[Run load macro Tn]
-    LOAD --> MOVE[Move to tool0_center XY]
+    LOOP -->|tool 1…N-1| MOVE[Move X then Y to tool0_center]
     MOVE --> TN_SEEK[Run XY seek from centre]
     TN_SEEK --> TN_OK{Seek OK?}
     TN_OK -->|no| FAIL
     TN_OK -->|yes| TN_OFF["offset_x/y = seek result<br/>(difference from tool 0)"]
     TN_OFF --> STAGEN[Stage Tn in autosave]
 
-    STAGE0 --> LOOP
-    STAGEN --> LOOP
-    LOOP -->|done| DONE([Report success - run SAVE_CONFIG])
-    DONE --> RESTORE[Restore G-code state]
+    STAGE0 --> DONE([Report success - run SAVE_CONFIG])
+    STAGEN --> DONE
 ```
 
 ---

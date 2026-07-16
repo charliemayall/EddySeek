@@ -138,7 +138,6 @@ def test_offer_example_config_copies_diy_template(
     install.offer_example_config()
     text = install.EDDY_SEEK_CFG.read_text()
     assert "tool_count:" in text
-    assert "load_tool_macro_prefix:" in text
 
 
 def test_offer_example_config_copies_indx_template(

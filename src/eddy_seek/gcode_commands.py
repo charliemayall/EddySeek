@@ -57,17 +57,11 @@ GCODE_COMMANDS: tuple[GcodeCommand, ...] = (
     GcodeCommand(
         "EDDY_SEEK_TOOL",
         "Align a single tool on the eddy sensor",
-        "`EDDY_SEEK_TOOL TOOL=<int> [REPEATS=<int> LOAD=<0\\|1> STRATEGY=<enum>]`",
-        "Align one tool. Caller loads the tool unless `LOAD=1`. "
+        "`EDDY_SEEK_TOOL TOOL=<int> [REPEATS=<int> STRATEGY=<enum>]`",
+        "Align one tool. Load the tool before running. "
         "`REPEATS` seeks are averaged per tool (default 3).<br><br>"
-        "⚠️Your load macro must put the toolhead in a position where it is safe to move X "
+        "⚠️The toolhead must be in a position where it is safe to move X "
         "to tool 0's center, and then Y to tool 0's center.⚠️",
-    ),
-    GcodeCommand(
-        "EDDY_SEEK_TOOLS",
-        "Align all tools against tool 0 on the eddy sensor",
-        "`EDDY_SEEK_TOOLS [TOOLS=<int> REPEATS=<int>]`",
-        "Align tools 0…n−1 with averaged seeks (default: all tools, 3 repeats each).",
     ),
     GcodeCommand(
         "EDDY_SEEK_APPLY_OFFSET",

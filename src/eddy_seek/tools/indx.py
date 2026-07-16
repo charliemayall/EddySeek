@@ -12,7 +12,6 @@ https://github.com/BondtechAB/INDX/tree/main/macros
 
 EddySeek relies on:
 
-- **Load macro** - ``CHANGE_TOOL TOOL={n}`` from ``indx-tc-macros.cfg`` (``format_load_macro``).
 - **Kit detection** - printer config contains ``[indx]``
   (Bondtech INDX Klipper object; see upstream README).
 - **Tool count** - ``[gcode_macro TOOL_POSITIONS]`` option ``tool_count`` or
@@ -48,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 _TOOL_POSITIONS_SECTION = "gcode_macro TOOL_POSITIONS"
 _INDX_SECTION = "indx"
-_DIY_ONLY_KEYS = frozenset({"tool_count", "load_tool_macro_prefix", "tool_prefix"})
+_DIY_ONLY_KEYS = frozenset({"tool_count", "tool_prefix"})
 
 
 @dataclass
@@ -113,16 +112,12 @@ class IndxToolAlignConfig(ToolAlignConfig):
         printer,
         tool_count: int,
         tools: list[IndxTool],
-        sensor_x: float,
-        sensor_y: float,
         sensor_z: float | None,
     ) -> None:
         super().__init__(
             printer=printer,
             tool_count=tool_count,
             tools=tools,
-            sensor_x=sensor_x,
-            sensor_y=sensor_y,
             sensor_z=sensor_z,
             toolchanger_type="indx",
         )
@@ -137,7 +132,7 @@ class IndxToolAlignConfig(ToolAlignConfig):
                     f"(remove it from [eddy_seek])"
                 )
 
-        sensor_pos, printer, main_config = read_config_context(config)
+        sensor_z, printer, main_config = read_config_context(config)
         try:
             tool_count = _indx_tool_count(main_config)
         except ValueError as exc:
@@ -151,15 +146,13 @@ class IndxToolAlignConfig(ToolAlignConfig):
         log_kit_startup(
             toolchanger_type="indx",
             tool_count=tool_count,
-            sensor_pos=sensor_pos,
+            sensor_z=sensor_z,
         )
         return cls(
             printer=printer,
             tool_count=tool_count,
             tools=tools,
-            sensor_x=sensor_pos.x,
-            sensor_y=sensor_pos.y,
-            sensor_z=sensor_pos.z,
+            sensor_z=sensor_z,
         )
 
     @staticmethod
@@ -188,9 +181,6 @@ class IndxToolAlignConfig(ToolAlignConfig):
         if _has_indx_kit(main_config):
             return f"[{_INDX_SECTION}] section in config"
         return None
-
-    def format_load_macro(self, tool_number: int) -> str:
-        return f"CHANGE_TOOL TOOL={tool_number}"
 
     def tool_status_key(self, tool_number: int) -> str:
         return f"t{tool_number}"

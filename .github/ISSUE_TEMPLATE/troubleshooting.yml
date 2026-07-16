@@ -12,7 +12,7 @@ body:
     id: board-sensor
     attributes:
       label: 1. What board and sensor were you using?
-      placeholder: BTT Octopus v1.1, Raspberry Pi 4, LDC1612 eddy probe on sensor_x
+      placeholder: BTT Octopus v1.1, Raspberry Pi 4, LDC1612 eddy probe above sensor coil
     validations:
       required: true
 

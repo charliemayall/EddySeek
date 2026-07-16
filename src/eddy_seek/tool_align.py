@@ -5,15 +5,12 @@ EddySeek - Eddy sensor nozzle alignment on toolchanger and nozzle change 3D prin
 
 This file may be distributed under the terms of the GNU GPLv3 license.
 
-Alignment session logic: seek a single tool or run the full multi-tool sequence.
+Alignment session logic: seek a single tool against the eddy sensor.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Literal
 
 from .common import Offset, Position, yield_to_reactor
 from .kconsole import KConsole
@@ -33,52 +30,14 @@ from .tools.protocol import ToolAlignConfig, ToolProtocol
 logger = logging.getLogger(__name__)
 
 _GCODE_STATE_REPEAT = "eddy_seek_tool_repeat"
-# Suggest sensor_x/y tweaks when tool 0's seek offset exceeds this (mm).
-_TARGET_SENSOR_OFFSET_FROM_REF = 0.5
 
 
-@dataclass(frozen=True, slots=True)
-class ToolAlignResult:
-    status: Literal["ok", "failed"]
-    tool0_center: Position | None
-    error_message: str | None
-
-
-def _warn_sensor_position_if_needed(
-    sensor: Position,
-    seek_offset: Offset,
-    *,
-    console: KConsole,
-) -> None:
-    abs_offset = seek_offset.abs_components()
-    if max(abs_offset.x, abs_offset.y) <= _TARGET_SENSOR_OFFSET_FROM_REF:
-        return
-    suggested_x = sensor.x + seek_offset.x
-    suggested_y = sensor.y + seek_offset.y
-    console.warn(
-        f"Tool 0 seek result center: {seek_offset.to_console_str()} "
-        f"is significantly different from your configured sensor_x/sensor_y position "
-        f"This makes seeks slower for Tool 0, and less accurate for all tools. Consider updating "
-        f"(suggested: sensor_x: {suggested_x:.2f}, sensor_y: {suggested_y:.2f}), "
-        f"then FIRMWARE_RESTART"
-    )
-
-
-def move_to_seek_start_pos(
-    host: SeekHost,
-    tools: ToolAlignConfig,
-) -> Position:
-    """
-    Decide where tool 0's seek begins.
-
-    Tool 0 starts at the configured sensor coil XY so unattended
-    ``EDDY_SEEK_TOOLS`` does not rely on the caller's current position.
-    """
-    sensor = tools.sensor_position()
-    logger.info(f"eddy_seek: moving tool 0 to sensor position {sensor.to_gcode()}")
+def move_to_seek_start_pos(host: SeekHost) -> Position:
+    """Return current toolhead XY as tool 0 seek start."""
     toolhead = host.printer.lookup_object("toolhead")
-    move_to_xy(toolhead, sensor, host.seek_config.jog_speed, wait=True)
-    return Position.from_toolhead(toolhead)
+    start = Position.from_toolhead(toolhead)
+    logger.info(f"eddy_seek: tool 0 seek start {start.to_gcode()}")
+    return start
 
 
 def align_tool(
@@ -158,9 +117,7 @@ def align_tool_number(
     tool0_center: Position | None,
     *,
     console: KConsole,
-    load_tool: bool = False,
     artifact: ArtifactRunContext | None = None,
-    batch: bool = False,
     repeats: int = 1,
     strategy: str | None = None,
 ) -> tuple[ToolProtocol | None, Position | None, str | None]:
@@ -169,9 +126,6 @@ def align_tool_number(
 
     Tool 0 establishes the reference centre.  Later tools are moved to that
     centre, then seeked.  The seek offset is the inter-tool XY offset.
-
-    When ``load_tool`` is true, the load macro runs before alignment moves.
-    ``EDDY_SEEK_TOOL`` defaults ``load_tool`` false; pass ``LOAD=1`` to run it.
     """
     if tool_number < 0 or tool_number >= tools.tool_count:
         logger.info(
@@ -183,7 +137,7 @@ def align_tool_number(
             f"tool {tool_number} out of range 0..{tools.tool_count - 1}",
         )
 
-    artifact_label = f"tools_t{tool_number}" if batch else f"tool{tool_number}"
+    artifact_label = f"tool{tool_number}"
     seek_kw = {
         "repeats": repeats,
         "console": console,
@@ -193,12 +147,8 @@ def align_tool_number(
 
     if tool_number == 0:
         logger.info("eddy_seek: aligning tool 0 (reference)")
-        if load_tool:
-            macro = tools.format_load_macro(tool_number)
-            logger.info(f"eddy_seek: loading tool {tool_number} via {macro}")
-            tools.run_load_macro(tool_number)
-        clear_gcode_offset_xy(host.printer)  # load macro may have added an offset
-        start = move_to_seek_start_pos(host, tools)
+        clear_gcode_offset_xy(host.printer)
+        start = move_to_seek_start_pos(host)
         seek_result = _seek_tool_repeated(host, gcmd, strategy=strategy, **seek_kw)
         if seek_result is None:
             return None, None, "tool 0 alignment failed"
@@ -211,9 +161,6 @@ def align_tool_number(
             f"seek_offset=({mean_offset.x:.4f}, {mean_offset.y:.4f})"
         )
         console.info(f"Tool 0 reference - {center.to_console_str()}")
-        _warn_sensor_position_if_needed(
-            tools.sensor_position(), mean_offset, console=console
-        )
         if repeats == 1 and last_result is not None:
             announce_seek_plot(
                 console,
@@ -235,11 +182,7 @@ def align_tool_number(
             "(Klipper restart clears the reference; run EDDY_SEEK_TOOL TOOL=0 first)",
         )
 
-    if load_tool:
-        macro = tools.format_load_macro(tool_number)
-        logger.info(f"eddy_seek: loading tool {tool_number} via {macro}")
-        tools.run_load_macro(tool_number)
-    clear_gcode_offset_xy(host.printer)  # load macro may have added an offset
+    clear_gcode_offset_xy(host.printer)
     toolhead = host.printer.lookup_object("toolhead")
     speed = host.seek_config.jog_speed
     current = Position.from_toolhead(toolhead)
@@ -267,55 +210,3 @@ def align_tool_number(
             save_plots=host.seek_config.save_plots,
         )
     return tool, tool0_center, None
-
-
-def align_all_tools(
-    host: SeekHost,
-    tools: ToolAlignConfig,
-    gcmd,
-    tool_count: int | None = None,
-    *,
-    repeats: int = 1,
-) -> ToolAlignResult:
-    console = KConsole(gcmd, host.seek_config)
-    host.console = console
-    count = tool_count or tools.tool_count
-
-    logger.info(
-        f"eddy_seek: align_all_tools starting {count} tool(s) repeats={repeats}"
-    )
-    tool0_center: Position | None = None
-    artifact = ArtifactRunContext(run_label="tools", write_at=datetime.now())
-    try:
-        for tool_number in range(count):
-            if tool_number == 0:
-                console.entry(f"Aligning tool 1 of {count}…")
-            else:
-                console.info(f"Aligning tool {tool_number + 1} of {count}…")
-            tool, tool0_center, error = align_tool_number(
-                host,
-                tools,
-                gcmd,
-                tool_number,
-                tool0_center,
-                console=console,
-                load_tool=True,
-                artifact=artifact,
-                batch=True,
-                repeats=repeats,
-            )
-            if error is not None:
-                logger.info(
-                    f"eddy_seek: align_all_tools failed on tool {tool_number}: {error}"
-                )
-                console.error(f"Tool {tool_number} alignment failed: {error}")
-                return ToolAlignResult("failed", tool0_center, error)
-            if tool is not None:
-                tools.update_tool(tool)
-
-        logger.info(f"eddy_seek: align_all_tools done {count} tool(s)")
-        console.exit(f"{count} tools aligned - {tools.persist_hint()}")
-        return ToolAlignResult("ok", tool0_center, None)
-
-    finally:
-        clear_gcode_offset_xy(host.printer)

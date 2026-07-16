@@ -17,7 +17,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from ..common import Offset, Position
+from ..common import Offset
 
 if TYPE_CHECKING:
     from klippy.configfile import ConfigWrapper, PrinterConfig
@@ -58,13 +58,6 @@ class ToolRecord:
         return dataclasses.asdict(self)
 
 
-@dataclass
-class ParsedSensors:
-    x: float
-    y: float
-    z: float | None
-
-
 class ToolAlignConfig(ABC):
     """Kit-agnostic tool alignment config. Subclasses own kit keys and persistence."""
 
@@ -74,16 +67,12 @@ class ToolAlignConfig(ABC):
         printer: Printer,
         tool_count: int,
         tools: Sequence[ToolProtocol],
-        sensor_x: float,
-        sensor_y: float,
         sensor_z: float | None,
         toolchanger_type: str,
     ) -> None:
         self._printer = printer
         self.tool_count = tool_count
         self.tools: list[ToolProtocol] = list(tools)
-        self.sensor_x = sensor_x
-        self.sensor_y = sensor_y
         self.sensor_z = sensor_z
         self.toolchanger_type = toolchanger_type
 
@@ -111,10 +100,6 @@ class ToolAlignConfig(ABC):
     def suggestion_reason(cls, main_config: ConfigWrapper) -> str | None:
         """Human-readable reason for a suggestion, when applicable."""
         return None
-
-    @abstractmethod
-    def format_load_macro(self, tool_number: int) -> str:
-        """G-code command to load a tool before alignment."""
 
     @abstractmethod
     def save_tool(self, tool: ToolProtocol) -> None:
@@ -148,22 +133,12 @@ class ToolAlignConfig(ABC):
         """Console hint after a successful batch align."""
         return "run SAVE_CONFIG to persist"
 
-    def sensor_position(self) -> Position:
-        """Configured tool-0 start XY (sensor coil location)."""
-        return Position(self.sensor_x, self.sensor_y)
-
     def get_tool(self, tool_number: int) -> ToolProtocol:
         if tool_number < 0 or tool_number >= self.tool_count:
             raise IndexError(
                 f"tool {tool_number} out of range 0..{self.tool_count - 1}"
             )
         return self.tools[tool_number]
-
-    def run_load_macro(self, tool_number: int) -> None:
-        macro = self.format_load_macro(tool_number)
-        logger.info(f"eddy_seek: running load macro {macro!r}")
-        gcode = self._printer.lookup_object("gcode")
-        gcode.run_script_from_command(macro)
 
     def update_tool(self, tool: ToolProtocol) -> None:
         self.tools[tool.tool_number] = tool
@@ -184,13 +159,8 @@ class ToolAlignConfig(ABC):
         return tool
 
     @staticmethod
-    def parse_sensor_position_config(config: ConfigWrapper) -> ParsedSensors:
-        sensor_x = config.getfloat("sensor_x")
-        sensor_y = config.getfloat("sensor_y")
+    def parse_sensor_z_config(config: ConfigWrapper) -> float | None:
         sensor_z_raw = config.get("sensor_z", None)
-        sensor_z = config.getfloat("sensor_z") if sensor_z_raw is not None else None
-        return ParsedSensors(
-            float(sensor_x),
-            float(sensor_y),
-            float(sensor_z) if sensor_z is not None else None,
-        )
+        if sensor_z_raw is None:
+            return None
+        return float(config.getfloat("sensor_z"))
