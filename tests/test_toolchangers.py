@@ -8,13 +8,14 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
 
-import logging
+from pprint import pformat
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
-from fakes import FakeGcode, FakeKlipperConfig, FakePrinter, as_config
-from pytest import LogCaptureFixture, raises
+from fakes import FakeGcmd, FakeGcode, FakeKlipperConfig, FakePrinter, as_config
+from pytest import raises
 
 from eddy_seek.common import Offset
+from eddy_seek.host import EddySeek
 from eddy_seek.tools.diy import (
     DiyTool,
     DiyToolAlignConfig,
@@ -35,6 +36,14 @@ _TOOL_POSITIONS = "gcode_macro TOOL_POSITIONS"
 _INDX = "indx"
 
 
+class _PrefixSection:
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def get_name(self) -> str:
+        return self._name
+
+
 class _MainConfigSection:
     def __init__(self, options: dict[str, Any]) -> None:
         self._options = options
@@ -48,6 +57,19 @@ class _MainConfigSection:
         if key not in self._options:
             return default
         return int(self._options[key])
+
+    def getfloat(self, key: str, default: float = 0.0, **kwargs: Any) -> float:
+        if key not in self._options:
+            return default
+        return float(self._options[key])
+
+    def getboolean(self, key: str, default: bool = False, **kwargs: Any) -> bool:
+        if key not in self._options:
+            return default
+        val = self._options[key]
+        if isinstance(val, bool):
+            return val
+        return str(val).lower() in ("1", "true", "yes", "on")
 
     def get_prefix_options(self, prefix: str) -> dict[str, str]:
         return {k: str(v) for k, v in self._options.items() if k.startswith(prefix)}
@@ -63,9 +85,30 @@ class _MainConfig:
     def getsection(self, section: str) -> _MainConfigSection:
         return _MainConfigSection(self._sections[section])
 
+    def get_prefix_sections(self, prefix: str) -> list[_PrefixSection]:
+        return [
+            _PrefixSection(name) for name in self._sections if name.startswith(prefix)
+        ]
+
 
 def _main(sections: dict[str, dict[str, Any]] | None = None) -> ConfigWrapper:
     return cast(Any, _MainConfig(sections))
+
+
+def _diy_tool_section(**overrides: Any) -> dict[str, Any]:
+    section = {
+        "offset_x": 0.0,
+        "offset_y": 0.0,
+        "manual_adjust_x": 0.0,
+        "manual_adjust_y": 0.0,
+        "is_calibrated": False,
+    }
+    section.update(overrides)
+    return section
+
+
+def _diy_main(*tool_numbers: int) -> ConfigWrapper:
+    return _main({f"es_T{n}": _diy_tool_section() for n in tool_numbers})
 
 
 class _Configfile:
@@ -123,9 +166,39 @@ def _tool_config(
     )
 
 
+def test_diy_starts_empty_without_sections():
+    cfg = _tool_config()
+    assert isinstance(cfg, DiyToolAlignConfig)
+    assert cfg.tools == []
+    assert cfg.tool_count == 0
+
+
+def test_diy_discovers_sections_with_gap():
+    main = _main(
+        {
+            "es_T0": _diy_tool_section(is_calibrated=True),
+            "es_T2": _diy_tool_section(offset_x=1.0),
+        }
+    )
+    cfg = _tool_config(main=main)
+    assert cfg.tool_count == 3
+    assert cfg.tools[0].is_calibrated is True
+    assert cfg.tools[1].is_calibrated is False
+    assert cfg.tools[2].offset.x == 1.0
+
+
+def test_diy_get_tool_grows_list():
+    cfg = _tool_config()
+    assert isinstance(cfg, DiyToolAlignConfig)
+    tool = cfg.get_tool(3)
+    assert tool.tool_number == 3
+    assert cfg.tool_count == 4
+    assert len(cfg.tools) == 4
+
+
 def test_diy_apply_offset_set_gcode_only():
     gcode = FakeGcode()
-    cfg = _tool_config(gcode=gcode, tool_count=2)
+    cfg = _tool_config(gcode=gcode, main=_diy_main(0, 1))
     tool = DiyTool(
         tool_number=1,
         offset=Offset(1.5, -0.5),
@@ -139,9 +212,9 @@ def test_diy_apply_offset_set_gcode_only():
 
 def test_diy_save_tool_stages_es_tn():
     gcode = FakeGcode()
-    main = _main()
+    main = _diy_main(0, 1)
     configfile = _Configfile(main)
-    cfg = _tool_config(gcode=gcode, main=main, configfile=configfile, tool_count=2)
+    cfg = _tool_config(gcode=gcode, main=main, configfile=configfile)
     tool = DiyTool(
         tool_number=1,
         offset=Offset(1.0, 2.0),
@@ -153,12 +226,6 @@ def test_diy_save_tool_stages_es_tn():
     assert gcode.scripts == []
     assert "es_T1" in configfile.removed
     assert any(s[0] == "es_T1" for s in configfile.sets)
-
-
-def test_diy_does_not_warn_on_tool_count(caplog: LogCaptureFixture):
-    with caplog.at_level(logging.WARNING):
-        _tool_config(tool_count=4)
-    assert caplog.records == []
 
 
 def test_indx_tool_count_from_tool_positions():
@@ -227,14 +294,12 @@ def test_indx_persist_hint():
     main = _main({_TOOL_POSITIONS: {"variable_tool_count": 2}})
     cfg = _tool_config(main=main, toolchanger_type="indx")
     assert "save_variables" in cfg.persist_hint()
-    diy = _tool_config(tool_count=1)
+    diy = _tool_config()
     assert "SAVE_CONFIG" in diy.persist_hint()
 
 
-def test_indx_rejects_diy_only_keys():
+def test_indx_rejects_diy_only_tool_prefix():
     main = _main({_TOOL_POSITIONS: {"variable_tool_count": 3}})
-    with raises(ValueError, match="does not use tool_count"):
-        _tool_config(main=main, toolchanger_type="indx", tool_count=4)
     with raises(ValueError, match="does not use tool_prefix"):
         _tool_config(main=main, toolchanger_type="indx", tool_prefix="es_T")
 
@@ -250,7 +315,9 @@ def test_detect_toolchanger_types_ignores_tool_positions_without_indx():
     assert detect_toolchanger_types(main) == []
 
 
-def test_tool_align_suggests_indx_when_diy_active(caplog: LogCaptureFixture):
+def test_tool_align_suggests_indx_when_diy_active(caplog):
+    import logging
+
     main = _main(
         {
             _INDX: {"mcu": "indxmcu"},
@@ -279,13 +346,12 @@ def test_indx_without_tool_positions_errors():
 
 def test_tool_align_config_diy_save_and_apply():
     gcode = FakeGcode()
-    main = _main()
+    main = _diy_main(0, 1)
     configfile = _Configfile(main)
     cfg = _tool_config(
         gcode=gcode,
         main=main,
         configfile=configfile,
-        tool_count=2,
     )
     assert isinstance(cfg, DiyToolAlignConfig)
     tool = DiyTool(
@@ -325,7 +391,7 @@ def test_tool_align_config_indx_wires_through():
 
 
 def test_status_keys_diy_vs_indx():
-    diy = _tool_config(tool_count=2)
+    diy = _tool_config(main=_diy_main(0, 1))
     assert diy.tool_status_key(1) == "es_T1"
     assert "es_T1" in diy.status_tools()
     assert diy.kit_trace()["tool_prefix"] == "es_T"
@@ -341,3 +407,25 @@ def test_status_keys_diy_vs_indx():
         is_calibrated=True,
     )
     assert "manual_offset" not in indx_tool.to_dict()
+
+
+def test_eddy_seek_status_dumps_get_status():
+    captured: list[str] = []
+
+    class _Console:
+        def info(self, msg: str) -> None:
+            captured.append(msg)
+
+    class _Host:
+        def get_status(self, eventtime: float) -> dict[str, Any]:
+            return {
+                "toolchanger_type": "diy",
+                "last_freq": 42.0,
+                "tools": {},
+            }
+
+        def refresh_console(self, gcmd: FakeGcmd) -> _Console:
+            return _Console()
+
+    EddySeek.cmd_EDDY_SEEK_STATUS(_Host(), FakeGcmd())
+    assert captured == [pformat(_Host().get_status(0))]

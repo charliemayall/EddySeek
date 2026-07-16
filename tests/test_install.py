@@ -121,7 +121,6 @@ def test_offer_example_config_copies_minimal_on_default(
     text = install.EDDY_SEEK_CFG.read_text()
     keys = _active_config_keys(text)
     assert "toolchanger_type" not in keys
-    assert "tool_count" not in keys
     out = capsys.readouterr().out
     assert "Copied example_minimal.cfg" in out
     assert "[include eddy_seek.cfg]" in out
@@ -137,7 +136,7 @@ def test_offer_example_config_copies_diy_template(
     config_paths.mkdir(parents=True)
     install.offer_example_config()
     text = install.EDDY_SEEK_CFG.read_text()
-    assert "tool_count:" in text
+    assert "tool_prefix:" in text
 
 
 def test_offer_example_config_copies_indx_template(
@@ -151,7 +150,7 @@ def test_offer_example_config_copies_indx_template(
     install.offer_example_config()
     text = install.EDDY_SEEK_CFG.read_text()
     assert "toolchanger_type: indx" in text
-    assert "tool_count:" not in text
+    assert "tool_prefix:" not in text
 
 
 def test_offer_example_config_skips_on_invalid_template_choice(

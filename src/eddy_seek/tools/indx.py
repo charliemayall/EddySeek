@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 _TOOL_POSITIONS_SECTION = "gcode_macro TOOL_POSITIONS"
 _INDX_SECTION = "indx"
-_DIY_ONLY_KEYS = frozenset({"tool_count", "tool_prefix"})
+_DIY_ONLY_KEYS = frozenset({"tool_prefix"})
 
 
 @dataclass

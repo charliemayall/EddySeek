@@ -39,11 +39,6 @@ _TOOL_SECTION_ROWS: tuple[tuple[str, str, str], ...] = (
     ("`i2c_mcu`", "_(required)_", "MCU name, e.g. `mcu`"),
     ("`i2c_bus`", "_(required)_", "I2C bus, e.g. `i2c1`"),
     (
-        "`tool_count`",
-        "`1`",
-        "Number of tools (DIY only; config error if set with `toolchanger_type: indx`)",
-    ),
-    (
         "`toolchanger_type`",
         "`diy`",
         f"`{'` or `'.join(sorted(toolchanger_types()))}` - INDX uses `CHANGE_TOOL` and `TOOL_POSITIONS`",

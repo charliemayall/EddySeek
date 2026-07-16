@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import fields
 from datetime import datetime
+from pprint import pformat
 from typing import TYPE_CHECKING, Any
 
 from .accuracy import run_accuracy_test
@@ -238,6 +239,10 @@ class EddySeek(SeekHost):
             "tools": tools,
         }
 
+    def cmd_EDDY_SEEK_STATUS(self, gcmd: GCodeCommand) -> None:
+        console = self.refresh_console(gcmd)
+        console.info(pformat(self.get_status(0)))
+
     def cmd_EDDY_SEEK_QUERY(self, gcmd: GCodeCommand) -> None:
         console = self.refresh_console(gcmd)
         with self.acquire_sensor_stream():
@@ -252,7 +257,7 @@ class EddySeek(SeekHost):
             )
             self._sample_rate_hz = round(measured, 1) if measured is not None else None
             self._capturing = False
-            status = self.get_status(0)
+            status = self.get_status(eventtime=None)
             rate = status["sample_rate_hz"]
             rate_text = f"{rate:.0f} Hz" if rate is not None else "n/a"
             if gained:

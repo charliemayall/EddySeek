@@ -86,7 +86,7 @@ Bondtech INDX: see [Bondtech INDX](#bondtech-indx-toolchanger_type-indx)
 
 1. Install EddySeek (see [Install](#install)).
 2. Add `[eddy_seek]` to `printer.cfg`, or `[include eddy_seek.cfg]` in `printer.cfg`
-3. Configure I2C settings, optional `sensor_z`, and `tool_count`.
+3. Configure I2C settings and optional `sensor_z`.
 4. Ensure `T0`, `T1`, … (or your custom load macros) exist.
 5. `FIRMWARE_RESTART`
 6. `EDDY_SEEK_QUERY` - confirm you are getting samples.
@@ -103,7 +103,7 @@ Bondtech INDX: see [Bondtech INDX](#bondtech-indx-toolchanger_type-indx)
 1. Install Bondtech INDX macros per their docs (see [Bondtech INDX](https://github.com/BondtechAB/INDX))
 2. In `printer.cfg`, include your `eddy_seek.cfg` file **after** your INDX macro files.
 3. Configure your `[eddy_seek]` section with I2C settings, optional `sensor_z`, and `toolchanger_type: indx`.
-4. Do **not** set `tool_count` or `tool_prefix`.
+4. Do **not** set `tool_prefix`.
 5. `FIRMWARE_RESTART`
 6. `EDDY_SEEK_QUERY` - confirm samples increment.
 7. Home, park at probe height above the sensor (EddySeek does not move Z).
@@ -111,7 +111,7 @@ Bondtech INDX: see [Bondtech INDX](#bondtech-indx-toolchanger_type-indx)
 9. For each tool 1…N: `CHANGE_TOOL`, park at the sensor, run `EDDY_SEEK_TOOL TOOL=n`. Offsets save to `save_variables` (`t{n}_offset_x` / `t{n}_offset_y`).
 9. Use INDX `CAL_Z` for Z offsets. Do **not** add `EDDY_SEEK_APPLY_OFFSET` to INDX macros - `CHANGE_TOOL` applies XY (and Z from `CAL_Z`) at print time.
 
-EddySeek errors at config load if DIY-only keys (`tool_count`, `tool_prefix`) are present with `toolchanger_type: indx`.
+EddySeek errors at config load if DIY-only key `tool_prefix` is present with `toolchanger_type: indx`.
 
 On startup, EddySeek may log an **info** line suggesting `toolchanger_type: indx` when it finds INDX macros. It will not change your config automatically - set `toolchanger_type: indx` in `[eddy_seek]` yourself.
 
@@ -119,7 +119,7 @@ On startup, EddySeek may log an **info** line suggesting `toolchanger_type: indx
 
 |                | DIY                                     | INDX                         |
 | -------------- | --------------------------------------- | ---------------------------- |
-| Tool count     | `tool_count` in `[eddy_seek]`           | `gcode_macro TOOL_POSITIONS` |
+| Tool discovery | existing `[es_Tn]` + `EDDY_SEEK_TOOL`   | `gcode_macro TOOL_POSITIONS` |
 | Load macro     | `T0`, `T1`, …                           | `CHANGE_TOOL`                |
 | Saved offsets  | `[es_Tn]` in `printer.cfg`              | `save_variables`             |
 | Apply at print | `EDDY_SEEK_APPLY_OFFSET` in your macros | built into INDX pickup       |
@@ -139,7 +139,6 @@ See [example.cfg](../example.cfg) (DIY), [example_indx.cfg](../example_indx.cfg)
 | `i2c_address` | `42` | LDC1612 I2C address (`0x2a`) |
 | `i2c_mcu` | _(required)_ | MCU name, e.g. `mcu` |
 | `i2c_bus` | _(required)_ | I2C bus, e.g. `i2c1` |
-| `tool_count` | `1` | Number of tools (DIY only; config error if set with `toolchanger_type: indx`) |
 | `toolchanger_type` | `diy` | `diy` or `indx` - INDX uses `CHANGE_TOOL` and `TOOL_POSITIONS` |
 | `tool_prefix` | `es_T` | Prefix for saved offset sections (`es_T1`, …) |
 | `sensor_z` | _(optional)_ | Machine Z for seek commands; errors if outside `[sensor_z, sensor_z + 0.25]` mm |
@@ -244,6 +243,7 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 <!-- BEGIN:gcode-commands -->
 | Command | Description |
 | ------- | ----------- |
+| `EDDY_SEEK_STATUS` | Print sensor and tool status (same payload as Moonraker `get_status`). |
 | `EDDY_SEEK_QUERY` | Print frequency statistics |
 | `EDDY_SEEK_RESET` | Manually clear capture buffer (not usually needed) |
 | `EDDY_SEEK_SET [<key>=<value> …]` | Override config until `FIRMWARE_RESTART`. Bare command prints current values (e.g. `STRATEGY=<enum>`, `TOLERANCE=<float>`). |
@@ -300,7 +300,7 @@ With `save_plots: True`, HTML plots land under `{result_folder}/YYYY-MM-DD_HH-MM
 | Sweep centroid: too few samples                                               | Lower `sweep_fine_speed`; check LDC1612 stream; Run `EDDY_SEEK_QUERY` and check your sample rate is ~360-400Hz |
 | `tool 0 must be aligned before other tools`                                   | Klipper restart cleared the reference; run `EDDY_SEEK_TOOL TOOL=0`                                            |
 | Offsets not in `printer.cfg` (DIY)                                            | Run `SAVE_CONFIG` after alignment                                                                              |
-| INDX: config error on `tool_count` / `tool_prefix`                            | Remove those keys; INDX owns tool count                                                                        |
+| INDX: config error on `tool_prefix`                                           | Remove `tool_prefix`; INDX owns tool count                                                                     |
 | Startup suggests `toolchanger_type: indx`                                     | Set `toolchanger_type: indx` in `[eddy_seek]` if you use Bondtech INDX macros                                  |
 | `EDDY_SEEK_APPLY_OFFSET` on INDX                                              | Not supported - `CHANGE_TOOL` applies XY from save_variables                                                   |
 

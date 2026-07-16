@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -26,6 +27,30 @@ logger = logging.getLogger(__name__)
 
 def _section_name(prefix: str, tool_number: int) -> str:
     return f"{prefix}{tool_number}"
+
+
+def _tool_numbers_from_sections(
+    main_config: ConfigWrapper, tool_prefix: str
+) -> list[int]:
+    pattern = re.compile(rf"^{re.escape(tool_prefix)}(\d+)$")
+    numbers: list[int] = []
+    for section_cfg in main_config.get_prefix_sections(tool_prefix):
+        match = pattern.match(section_cfg.get_name())
+        if match:
+            numbers.append(int(match.group(1)))
+    return numbers
+
+
+def _tools_from_discovered_sections(
+    main_config: ConfigWrapper, tool_prefix: str
+) -> list[DiyTool]:
+    numbers = _tool_numbers_from_sections(main_config, tool_prefix)
+    if not numbers:
+        return []
+    return [
+        DiyToolAlignConfig._load_tool_or_default(main_config, tool_prefix, n)
+        for n in range(max(numbers) + 1)
+    ]
 
 
 @dataclass
@@ -94,7 +119,7 @@ class DiyTool(ToolRecord):
 
 
 class DiyToolAlignConfig(ToolAlignConfig):
-    """DIY toolchanger with ``[es_Tn]`` persistence."""
+    """DIY toolchanger with config section persistence."""
 
     def __init__(
         self,
@@ -118,14 +143,11 @@ class DiyToolAlignConfig(ToolAlignConfig):
     def _from_config(cls, config: ConfigWrapper) -> DiyToolAlignConfig:
         tool_prefix = config.get("tool_prefix", "es_T")
         sensor_z, printer, main_config = read_config_context(config)
-        tool_count = config.getint("tool_count", 1, minval=1)
         types = toolchanger_types()
         run_detection("diy", main_config, types, DETECTION_ORDER)
 
-        tools = [
-            cls._load_tool_or_default(main_config, tool_prefix, n)
-            for n in range(tool_count)
-        ]
+        tools = _tools_from_discovered_sections(main_config, tool_prefix)
+        tool_count = len(tools)
         log_kit_startup(
             toolchanger_type="diy",
             tool_count=tool_count,
@@ -139,6 +161,14 @@ class DiyToolAlignConfig(ToolAlignConfig):
             sensor_z=sensor_z,
             tool_prefix=tool_prefix,
         )
+
+    def get_tool(self, tool_number: int) -> ToolProtocol:
+        if tool_number < 0:
+            raise IndexError(f"tool {tool_number} out of range")
+        while len(self.tools) <= tool_number:
+            self.tools.append(DiyTool.create_default(len(self.tools)))
+        self.tool_count = len(self.tools)
+        return self.tools[tool_number]
 
     @staticmethod
     def _load_tool_or_default(

@@ -159,6 +159,9 @@ class _ConfigfileMain:
     def has_section(self, section: str) -> bool:
         return False
 
+    def get_prefix_sections(self, prefix: str) -> list:
+        return []
+
 
 class _Configfile:
     def read_main_config(self) -> _ConfigfileMain:

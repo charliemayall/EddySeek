@@ -127,14 +127,14 @@ def align_tool_number(
     Tool 0 establishes the reference centre.  Later tools are moved to that
     centre, then seeked.  The seek offset is the inter-tool XY offset.
     """
-    if tool_number < 0 or tool_number >= tools.tool_count:
+    if tool_number < 0:
         logger.info(
-            f"eddy_seek: align_tool_number rejected tool {tool_number} (range 0..{tools.tool_count - 1})",
+            f"eddy_seek: align_tool_number rejected tool {tool_number} (negative)",
         )
         return (
             None,
             tool0_center,
-            f"tool {tool_number} out of range 0..{tools.tool_count - 1}",
+            f"tool {tool_number} out of range",
         )
 
     artifact_label = f"tool{tool_number}"
@@ -155,7 +155,10 @@ def align_tool_number(
 
         mean_offset, last_result = seek_result
         center = start + mean_offset
-        tool = tools.get_tool(0).mark_calibrated()
+        try:
+            tool = tools.get_tool(0).mark_calibrated()
+        except IndexError as exc:
+            return None, None, str(exc)
         logger.info(
             f"eddy_seek: tool 0 centered at ({center.x:.4f}, {center.y:.4f}) "
             f"seek_offset=({mean_offset.x:.4f}, {mean_offset.y:.4f})"
@@ -196,7 +199,10 @@ def align_tool_number(
         return None, tool0_center, f"tool {tool_number} alignment failed"
 
     mean_offset, last_result = seek_result
-    tool = tools.get_tool(tool_number).mark_calibrated(mean_offset)
+    try:
+        tool = tools.get_tool(tool_number).mark_calibrated(mean_offset)
+    except IndexError as exc:
+        return None, tool0_center, str(exc)
     logger.info(
         f"eddy_seek: tool {tool_number} offset from tool 0 "
         f"({mean_offset.x:.4f}, {mean_offset.y:.4f})"

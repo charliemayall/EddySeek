@@ -23,6 +23,12 @@ class GcodeCommand:
 
 GCODE_COMMANDS: tuple[GcodeCommand, ...] = (
     GcodeCommand(
+        "EDDY_SEEK_STATUS",
+        "Print current EddySeek status to console",
+        "`EDDY_SEEK_STATUS`",
+        "Print sensor and tool status (same payload as Moonraker `get_status`).",
+    ),
+    GcodeCommand(
         "EDDY_SEEK_QUERY",
         "Print current LDC1612 frequency to console",
         "`EDDY_SEEK_QUERY`",
