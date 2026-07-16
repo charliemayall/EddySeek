@@ -220,6 +220,7 @@ def test_search_raises_when_max_passes_exhausted_without_convergence():
     assert err.strategy == "scripted"
     assert err.max_passes == 2
     assert err.tolerance == 0.01
+    assert err.best == Offset(0.5, 0.0)
     assert err.exit_kind is SeekExitKind.MAX_PASSES
 
 

@@ -47,9 +47,17 @@ class SeekExitError(RuntimeError):
 class MaxPassesError(SeekExitError):
     """Search exhausted ``max_passes`` without converging."""
 
-    def __init__(self, strategy: str, *, max_passes: int, tolerance: float) -> None:
+    def __init__(
+        self,
+        strategy: str,
+        *,
+        max_passes: int,
+        tolerance: float,
+        best: Offset,
+    ) -> None:
         self.max_passes = max_passes
         self.tolerance = tolerance
+        self.best = best
         super().__init__(
             strategy,
             f"{strategy} hit max_passes={max_passes} "
@@ -169,6 +177,7 @@ class SeekStrategy(ABC):
                 self.name,
                 max_passes=cfg.max_passes,
                 tolerance=cfg.tolerance,
+                best=best,
             )
 
         return best, passes_run

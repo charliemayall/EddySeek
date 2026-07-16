@@ -172,6 +172,7 @@ class SeekSession:
         *,
         boundaries: bool = True,
         announce_plot: bool | None = None,
+        recover_max_passes: bool = False,
     ) -> SeekSessionResult:
         cfg = self.config
         console = KConsole(gcmd, self._host.seek_config)
@@ -190,6 +191,7 @@ class SeekSession:
                 console,
                 boundaries=boundaries,
                 show_plot_saved=show_plot_saved,
+                recover_max_passes=recover_max_passes,
             )
         result = SeekSessionResult(
             session_id=self.session_id,
@@ -221,8 +223,14 @@ class SeekSession:
         *,
         boundaries: bool,
         show_plot_saved: bool,
+        recover_max_passes: bool,
     ) -> _SearchRun:
-        from .strategy.base import DivergenceError, SeekExitError, SeekExitKind
+        from .strategy.base import (
+            DivergenceError,
+            MaxPassesError,
+            SeekExitError,
+            SeekExitKind,
+        )
 
         best = Offset.zero()
         passes_run = 0
@@ -260,15 +268,33 @@ class SeekSession:
             offset = best
             exit_kind = SeekExitKind.CONVERGED
         except SeekExitError as err:
-            error_message = self._report_search_failure(console, err)
-            status = "failed"
-            offset = None
-            exit_kind = err.exit_kind
-            if isinstance(err, DivergenceError):
+            if isinstance(err, MaxPassesError) and recover_max_passes:
                 self._recover_motion_jog(
-                    err.previous,
-                    warning="eddy_seek: failed to return to previous offset after divergence",
+                    err.best,
+                    warning="eddy_seek: failed to jog to best offset after max_passes",
                 )
+                logger.info(
+                    f"eddy_seek: session {self.session_id} max_passes "
+                    f"best=({err.best.x:.4f}, {err.best.y:.4f}) - continuing walk-in"
+                )
+                console.info(
+                    f"Max passes ({err.max_passes}) without convergence - "
+                    f"using best offset {err.best.to_console_str()}"
+                )
+                status = "ok"
+                offset = err.best
+                passes_run = err.max_passes
+                exit_kind = SeekExitKind.MAX_PASSES
+            else:
+                error_message = self._report_search_failure(console, err)
+                status = "failed"
+                offset = None
+                exit_kind = err.exit_kind
+                if isinstance(err, DivergenceError):
+                    self._recover_motion_jog(
+                        err.previous,
+                        warning="eddy_seek: failed to return to previous offset after divergence",
+                    )
         except Exception as exc:
             error_message = self._report_search_failure(console, exc)
             status = "failed"

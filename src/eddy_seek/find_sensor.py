@@ -64,7 +64,7 @@ def run_find_sensor(
             host,
             artifact=artifact,
             artifact_label=f"start_f{iteration}",
-        ).run(gcmd, strategy, boundaries=False)
+        ).run(gcmd, strategy, boundaries=False, recover_max_passes=True)
 
         if result.status != "ok" or result.offset is None:
             console.error(
