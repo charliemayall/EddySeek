@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from .accuracy import run_accuracy_test
 from .common import Position
 from .config import SeekConfig, load_seek_config
+from .find_sensor import run_find_sensor
 from .gcode_commands import GCODE_COMMANDS
 from .kconsole import KConsole
 from .movement.guard import block_for_sensor_z, clear_gcode_offset_xy
@@ -295,16 +296,30 @@ class EddySeek(SeekHost):
 
     @block_for_sensor_z
     def cmd_EDDY_SEEK_START(self, gcmd: GCodeCommand) -> None:
-        logger.info("eddy_seek: EDDY_SEEK_START")
+        find = gcmd.get_int("FIND", 0, minval=0, maxval=1)
+        strategy_name = self.seek_config.strategy_from_gcmd(gcmd)
+        logger.info(f"eddy_seek: EDDY_SEEK_START find={find} strategy={strategy_name}")
         console = self.refresh_console(gcmd)
-        console.entry("Seeking nozzle centre…")
+        if find:
+            console.entry("Finding sensor centre…")
+        else:
+            console.entry("Seeking nozzle centre…")
         artifact = ArtifactRunContext(run_label="start", write_at=datetime.now())
-        strategy = strategy_for(self.seek_config.strategy_from_gcmd(gcmd))
-        SeekSession(
-            self,
-            artifact=artifact,
-            artifact_label="start",
-        ).run(gcmd, strategy)
+        strategy = strategy_for(strategy_name)
+        if find:
+            run_find_sensor(
+                self,
+                gcmd,
+                console=console,
+                strategy=strategy,
+                artifact=artifact,
+            )
+        else:
+            SeekSession(
+                self,
+                artifact=artifact,
+                artifact_label="start",
+            ).run(gcmd, strategy)
 
     @block_for_sensor_z
     def cmd_EDDY_SEEK_TOOL(self, gcmd: GCodeCommand) -> None:

@@ -91,7 +91,7 @@ Bondtech INDX: see [Bondtech INDX](#bondtech-indx-toolchanger_type-indx)
 5. `FIRMWARE_RESTART`
 6. `EDDY_SEEK_QUERY` - confirm you are getting samples.
 7. Load Tool 0 and park at probe height above the sensor coil.
-8. `EDDY_SEEK_START` - the toolhead aligns from its current XY position. Reposition and repeat until offset is small.
+8. `EDDY_SEEK_START FIND=1` - walk in to the sensor centre from a coarse park (repeats until offset is small). Use plain `EDDY_SEEK_START` for a single seek or repeatability checks.
 9. Keep Tool 0 loaded, and run `EDDY_SEEK_TOOL TOOL=0`
 10. Calibrate each tool by loading it, parking at the sensor, and running `EDDY_SEEK_TOOL TOOL=n`.
 11. `SAVE_CONFIG` - persist offsets in `es_Tn` sections in `printer.cfg`.
@@ -107,7 +107,7 @@ Bondtech INDX: see [Bondtech INDX](#bondtech-indx-toolchanger_type-indx)
 5. `FIRMWARE_RESTART`
 6. `EDDY_SEEK_QUERY` - confirm samples increment.
 7. Home, park at probe height above the sensor (EddySeek does not move Z).
-8. Load tool 0, park at the sensor, run `EDDY_SEEK_TOOL TOOL=0`.
+8. Load tool 0, park at the sensor. If the park may be far from centre, run `EDDY_SEEK_START FIND=1` first, then `EDDY_SEEK_TOOL TOOL=0`.
 9. For each tool 1…N: `CHANGE_TOOL`, park at the sensor, run `EDDY_SEEK_TOOL TOOL=n`. Offsets save to `save_variables` (`t{n}_offset_x` / `t{n}_offset_y`).
 9. Use INDX `CAL_Z` for Z offsets. Do **not** add `EDDY_SEEK_APPLY_OFFSET` to INDX macros - `CHANGE_TOOL` applies XY (and Z from `CAL_Z`) at print time.
 
@@ -223,6 +223,8 @@ If `total` stays at `0`: check I2C wiring, `i2c_mcu` / `i2c_bus`, and `klippy.lo
 
 Finds the sensor centre from current XY position - for debugging or repeatability checks.
 
+`FIND=1` repeats seeks from each finish position until offset is below `min(tolerance×8, 0.5)` mm (default tolerance 0.05 → 0.4 mm). Use before `EDDY_SEEK_TOOL TOOL=0` when the nozzle may start far from the coil.
+
 ### Toolchanger alignment (`EDDY_SEEK_TOOL`)
 
 **Tool 0** establishes the reference centre from its current XY. **Other tools** are moved to that centre, then seeked; the offset is Tool n → Tool 0.
@@ -245,7 +247,7 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 | `EDDY_SEEK_QUERY` | Print frequency statistics |
 | `EDDY_SEEK_RESET` | Manually clear capture buffer (not usually needed) |
 | `EDDY_SEEK_SET [<key>=<value> …]` | Override config until `FIRMWARE_RESTART`. Bare command prints current values (e.g. `STRATEGY=<enum>`, `TOLERANCE=<float>`). |
-| `EDDY_SEEK_START [STRATEGY=<enum>]` | XY search from current position |
+| `EDDY_SEEK_START [FIND=<0\|1> STRATEGY=<enum>]` | XY search from current position. `FIND=1` repeats seeks from each finish position until offset is below `min(tolerance×8, 0.5)` mm (walk-in before tool alignment). |
 | `EDDY_SEEK_ACCURACY [REPEATS=<int> MOCK=<0\|1>]` | Run full seeks (default 3, min 2, max 50) and report σ / max scatter. `MOCK=1` applies a small random start offset each repeat. |
 | `EDDY_SEEK_TOOL TOOL=<int> [REPEATS=<int> STRATEGY=<enum>]` | Align one tool. Load the tool before running. `REPEATS` seeks are averaged per tool (default 3).<br><br>⚠️The toolhead must be in a position where it is safe to move X to tool 0's center, and then Y to tool 0's center.⚠️ |
 | `EDDY_SEEK_APPLY_OFFSET [TOOL=<int>]` | DIY only: apply saved XY via `SET_GCODE_OFFSET`. Errors on INDX (`CHANGE_TOOL` owns apply). |

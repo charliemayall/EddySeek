@@ -44,8 +44,10 @@ GCODE_COMMANDS: tuple[GcodeCommand, ...] = (
     GcodeCommand(
         "EDDY_SEEK_START",
         "Run XY seek search to find the eddy sensor centre",
-        "`EDDY_SEEK_START [STRATEGY=<enum>]`",
-        "XY search from current position",
+        "`EDDY_SEEK_START [FIND=<0\\|1> STRATEGY=<enum>]`",
+        "XY search from current position. "
+        "`FIND=1` repeats seeks from each finish position until offset "
+        "is below `min(tolerance×8, 0.5)` mm (walk-in before tool alignment).",
     ),
     GcodeCommand(
         "EDDY_SEEK_ACCURACY",
