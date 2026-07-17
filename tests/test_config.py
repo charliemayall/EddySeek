@@ -43,6 +43,9 @@ def test_validate_var():
     assert _runtime_value_ok("search_for", "bogus") is False
     assert _runtime_value_ok("strategy", "bogus") is False
     assert _runtime_value_ok("max_passes", -1) is False
+    assert _runtime_value_ok("tolerance", 0) is False
+    assert _runtime_value_ok("jog_speed", 0) is False
+    assert _runtime_value_ok("max_jog_x", -0.1) is False
 
 
 def test_strategy_from_gcmd():

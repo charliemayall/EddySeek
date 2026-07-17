@@ -142,7 +142,10 @@ class IndxToolAlignConfig(ToolAlignConfig):
         run_detection("indx", main_config, types, DETECTION_ORDER)
 
         saved = _save_variable_dict(printer)
-        tools = [cls._load_tool_or_default(saved, n) for n in range(tool_count)]
+        try:
+            tools = [cls._load_tool_or_default(saved, n) for n in range(tool_count)]
+        except ValueError as exc:
+            raise config.error(str(exc)) from exc
         log_kit_startup(
             toolchanger_type="indx",
             tool_count=tool_count,
@@ -161,13 +164,23 @@ class IndxToolAlignConfig(ToolAlignConfig):
     ) -> IndxTool:
         x_key = f"t{tool_number}_offset_x"
         y_key = f"t{tool_number}_offset_y"
-        if x_key not in saved_variables and y_key not in saved_variables:
+        has_x = x_key in saved_variables
+        has_y = y_key in saved_variables
+        if not has_x and not has_y:
             return IndxTool.create_default(tool_number)
+        if has_x != has_y:
+            present = x_key if has_x else y_key
+            missing = y_key if has_x else x_key
+            raise ValueError(
+                f"eddy_seek: incomplete INDX offsets for tool {tool_number} - "
+                f"found {present} but not {missing}; "
+                f"fix save_variables so both keys are present, or remove both"
+            )
         return IndxTool(
             tool_number=tool_number,
             offset=Offset(
-                x=float(saved_variables.get(x_key, 0.0)),
-                y=float(saved_variables.get(y_key, 0.0)),
+                x=float(saved_variables[x_key]),
+                y=float(saved_variables[y_key]),
             ),
             is_calibrated=True,
         )

@@ -367,15 +367,15 @@ class EddySeek(SeekHost):
     def cmd_EDDY_SEEK_APPLY_OFFSET(self, gcmd: GCodeCommand) -> None:
         tool_number = gcmd.get_int("TOOL", 0, minval=0)
         logger.info(f"eddy_seek: EDDY_SEEK_APPLY_OFFSET tool={tool_number}")
-        console = self.refresh_console(gcmd)
         if not self._tools.supports_apply_offset():
-            console.warn("EDDY_SEEK_APPLY_OFFSET is not used for this toolchanger kit")
-            return
+            raise gcmd.error(
+                "EDDY_SEEK_APPLY_OFFSET is not used for this toolchanger kit"
+            )
+        console = self.refresh_console(gcmd)
         try:
             tool = self._tools.apply_tool_offset(tool_number)
         except ValueError as exc:
-            console.warn(str(exc))
-            return
+            raise gcmd.error(str(exc)) from exc
         eff = tool.effective_offset
         console.info(f"Tool {tool_number} offset applied - {eff.to_console_str()}")
 

@@ -269,6 +269,7 @@ class SeekSession:
             exit_kind = SeekExitKind.CONVERGED
         except SeekExitError as err:
             if isinstance(err, MaxPassesError) and recover_max_passes:
+                # used when running with FIND=1, we dont want to reset to start position after max_passes
                 self._recover_motion_jog(
                     err.best,
                     warning="eddy_seek: failed to jog to best offset after max_passes",

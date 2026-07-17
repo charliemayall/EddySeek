@@ -17,7 +17,7 @@ EddySeek reads an LDC1612 coil, runs XY search routines, and measures per-tool X
 
 - Bondtech INDX (select during install prompt, or via `toolchanger_type` in `[eddy_seek]` config section)
 
-Any other toolchanger will still work, it just takes a bit more integration on your side.
+- Any other toolchanger will still work, it just takes a bit more integration on your side.
 
 ## Getting Started
 

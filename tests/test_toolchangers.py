@@ -11,7 +11,14 @@ from __future__ import annotations
 from pprint import pformat
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
-from fakes import FakeGcmd, FakeGcode, FakeKlipperConfig, FakePrinter, as_config
+from fakes import (
+    CommandError,
+    FakeGcmd,
+    FakeGcode,
+    FakeKlipperConfig,
+    FakePrinter,
+    as_config,
+)
 from pytest import raises
 
 from eddy_seek.common import Offset
@@ -22,6 +29,7 @@ from eddy_seek.tools.diy import (
 )
 from eddy_seek.tools.indx import (
     IndxTool,
+    IndxToolAlignConfig,
     ToolAlignConfig,
 )
 from eddy_seek.tools.types import (
@@ -262,6 +270,19 @@ def test_indx_supports_apply_offset_false():
     assert cfg.supports_apply_offset() is False
 
 
+def test_apply_offset_errors_when_unsupported():
+    class _Host:
+        def __init__(self) -> None:
+            self._tools = type(
+                "_Tools",
+                (),
+                {"supports_apply_offset": staticmethod(lambda: False)},
+            )()
+
+    with raises(CommandError, match="not used for this toolchanger kit"):
+        EddySeek.cmd_EDDY_SEEK_APPLY_OFFSET(_Host(), FakeGcmd())
+
+
 def test_indx_hydrates_save_variables():
     main = _main({_TOOL_POSITIONS: {"variable_tool_count": 2}})
 
@@ -288,6 +309,13 @@ def test_indx_hydrates_save_variables():
     assert cfg.tools[0].is_calibrated is False
     assert cfg.tools[1].is_calibrated is True
     assert cfg.tools[1].offset == Offset(0.25, -0.5)
+
+
+def test_indx_rejects_partial_save_variables():
+    with raises(ValueError, match=r"incomplete INDX offsets.*t1_offset_y"):
+        IndxToolAlignConfig._load_tool_or_default({"t1_offset_x": 0.25}, 1)
+    with raises(ValueError, match=r"incomplete INDX offsets.*t1_offset_x"):
+        IndxToolAlignConfig._load_tool_or_default({"t1_offset_y": -0.5}, 1)
 
 
 def test_indx_persist_hint():
