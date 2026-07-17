@@ -70,6 +70,7 @@ class EddySeek(SeekHost):
         self._total_samples: int = 0
         self._last_freq: float = 0.0
         self._tool0_center: Position | None = None
+
         self._sensor = self._load_ldc1612(config)
         self._stream_refs = 0
         self._batch_client_added = False
@@ -161,7 +162,7 @@ class EddySeek(SeekHost):
     def _load_ldc1612(
         config: ConfigWrapper,
     ) -> LDC1612:
-        sensor_type = config.get("sensor_type", "").strip().lower()
+        sensor_type = config.get("sensor_type").strip().lower()
         if sensor_type != "ldc1612":
             raise config.error(
                 f"eddy_seek: sensor_type must be 'ldc1612' (got {sensor_type!r})"
