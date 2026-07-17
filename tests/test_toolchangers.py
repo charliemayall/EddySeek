@@ -44,6 +44,10 @@ _TOOL_POSITIONS = "gcode_macro TOOL_POSITIONS"
 _INDX = "indx"
 
 
+class _EmptySaveVars:
+    allVariables: ClassVar[dict[str, float]] = {}
+
+
 class _PrefixSection:
     def __init__(self, name: str) -> None:
         self._name = name
@@ -155,14 +159,20 @@ def _tool_config(
     main: ConfigWrapper | None = None,
     gcode: FakeGcode | None = None,
     configfile: _Configfile | None = None,
+    with_save_variables: bool | None = None,
     **options: Any,
 ) -> ToolAlignConfig:
     main_config = main or _main()
     cf = configfile or _Configfile(main_config)
     g = gcode or FakeGcode()
+    if with_save_variables is None:
+        with_save_variables = options.get("toolchanger_type") == "indx"
 
     def get_printer():
-        return FakePrinter(gcode=g, configfile=cf)
+        objects: dict[str, Any] = {"gcode": g, "configfile": cf}
+        if with_save_variables:
+            objects["save_variables"] = _EmptySaveVars()
+        return FakePrinter(**objects)
 
     return tool_align_from_config(
         as_config(
@@ -316,6 +326,12 @@ def test_indx_rejects_partial_save_variables():
         IndxToolAlignConfig._load_tool_or_default({"t1_offset_x": 0.25}, 1)
     with raises(ValueError, match=r"incomplete INDX offsets.*t1_offset_x"):
         IndxToolAlignConfig._load_tool_or_default({"t1_offset_y": -0.5}, 1)
+
+
+def test_indx_requires_save_variables_module():
+    main = _main({_TOOL_POSITIONS: {"variable_tool_count": 2}})
+    with raises(ValueError, match=r"requires \[save_variables\]"):
+        _tool_config(main=main, toolchanger_type="indx", with_save_variables=False)
 
 
 def test_indx_persist_hint():

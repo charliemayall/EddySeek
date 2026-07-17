@@ -14,8 +14,8 @@ EddySeek relies on:
 
 - **Kit detection** - printer config contains ``[indx]``
   (Bondtech INDX Klipper object; see upstream README).
-- **Tool count** - ``[gcode_macro TOOL_POSITIONS]`` option ``tool_count`` or
-  ``variable_tool_count`` (see ``_indx_tool_count``).
+- **Tool count** - ``[gcode_macro TOOL_POSITIONS]`` option ``variable_tool_count``
+  (see ``_indx_tool_count``).
 - **XY persistence** - Klipper ``SAVE_VARIABLE`` keys ``t{n}_offset_x`` and
   ``t{n}_offset_y``. Bondtech ``_PICKUP_TOOL`` reads these when applying
   ``SET_GCODE_OFFSET`` at print time.
@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 _TOOL_POSITIONS_SECTION = "gcode_macro TOOL_POSITIONS"
 _INDX_SECTION = "indx"
+_INDX_TOOL_COUNT_KEYS = ("variable_tool_count", "tool_count")
 _DIY_ONLY_KEYS = frozenset({"tool_prefix"})
 
 
@@ -84,7 +85,7 @@ def _indx_tool_count(main_config: ConfigWrapper) -> int:
             f"[{_TOOL_POSITIONS_SECTION}] in printer config"
         )
     section = main_config.getsection(_TOOL_POSITIONS_SECTION)
-    for key in ("variable_tool_count", "tool_count"):
+    for key in _INDX_TOOL_COUNT_KEYS:
         if section.get(key, None) is not None:
             return section.getint(key, minval=1)
     raise ValueError(
@@ -94,11 +95,13 @@ def _indx_tool_count(main_config: ConfigWrapper) -> int:
 
 
 def _save_variable_dict(printer: Printer) -> dict[str, Any]:
-    """Return ``save_variables.allVariables``, or ``{}`` if the module is absent."""
+    """Return ``save_variables.allVariables`` (INDX requires the module)."""
     try:
         sv = printer.lookup_object("save_variables")
-    except Exception:
-        return {}
+    except Exception as exc:
+        raise ValueError(
+            "eddy_seek: toolchanger_type=indx requires [save_variables] in printer config"
+        ) from exc
     vars_ = getattr(sv, "allVariables", None)
     return dict(vars_) if vars_ else {}
 
@@ -167,6 +170,8 @@ class IndxToolAlignConfig(ToolAlignConfig):
         has_x = x_key in saved_variables
         has_y = y_key in saved_variables
         if not has_x and not has_y:
+            # missing keys = uncalibrated, not a bad macro slot - slots come
+            # from the same TOOL_POSITIONS tool_count; Bondtech shows "--" until CAL.
             return IndxTool.create_default(tool_number)
         if has_x != has_y:
             present = x_key if has_x else y_key
@@ -174,7 +179,7 @@ class IndxToolAlignConfig(ToolAlignConfig):
             raise ValueError(
                 f"eddy_seek: incomplete INDX offsets for tool {tool_number} - "
                 f"found {present} but not {missing}; "
-                f"fix save_variables so both keys are present, or remove both"
+                f"fix save_variables so both {x_key} and {y_key} are present"
             )
         return IndxTool(
             tool_number=tool_number,
