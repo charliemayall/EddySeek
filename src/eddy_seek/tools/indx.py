@@ -74,10 +74,6 @@ class IndxTool(ToolRecord):
         )
 
 
-def _has_indx_kit(main_config: ConfigWrapper) -> bool:
-    return main_config.has_section(_INDX_SECTION)
-
-
 def _indx_tool_count(main_config: ConfigWrapper) -> int:
     if not main_config.has_section(_TOOL_POSITIONS_SECTION):
         raise ValueError(
@@ -192,11 +188,11 @@ class IndxToolAlignConfig(ToolAlignConfig):
 
     @classmethod
     def suggest_for_config(cls, main_config: ConfigWrapper) -> bool:
-        return _has_indx_kit(main_config)
+        return main_config.has_section(_INDX_SECTION)
 
     @classmethod
     def suggestion_reason(cls, main_config: ConfigWrapper) -> str | None:
-        if _has_indx_kit(main_config):
+        if main_config.has_section(_INDX_SECTION):
             return f"[{_INDX_SECTION}] section in config"
         return None
 

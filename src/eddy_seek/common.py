@@ -225,10 +225,6 @@ def session_artifact_run_dir(
     return f"{ts}_{run_label}"
 
 
-def session_artifact_basename(*, suffix: str = "", ext: str = "html") -> str:
-    return f"{suffix or 'session'}.{ext}"
-
-
 def session_artifact_filename(
     when: datetime | None = None,
     *,
@@ -238,4 +234,4 @@ def session_artifact_filename(
 ) -> str:
     """``{run_dir}/{label}.{ext}`` under ``result_folder``."""
     run_dir = session_artifact_run_dir(when, run_label=run_label)
-    return f"{run_dir}/{session_artifact_basename(suffix=suffix, ext=ext)}"
+    return f"{run_dir}/{suffix or 'session'}.{ext}"

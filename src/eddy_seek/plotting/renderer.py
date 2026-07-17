@@ -28,26 +28,10 @@ from ._plotly import (
     go,
     header_table,
     marker_outline,
+    pass_color,
     single_xy_layout,
 )
 from .primitives import Bounds, XYCloud
-
-PASS_COLORS = (
-    "#636EFA",
-    "#EF553B",
-    "#00CC96",
-    "#AB63FA",
-    "#FFA15A",
-    "#19D3F3",
-    "#FF6692",
-    "#B6E880",
-    "#FF97FF",
-    "#FECB52",
-)
-
-
-def pass_color(pass_num: int) -> str:
-    return PASS_COLORS[(pass_num - 1) % len(PASS_COLORS)]
 
 
 class ScatterMode(StrEnum):

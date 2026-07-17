@@ -11,7 +11,6 @@ Walk-in seek loop for ``EDDY_SEEK_START FIND=1``.
 from __future__ import annotations
 
 import logging
-import math
 
 from .common import Offset
 from .kconsole import KConsole
@@ -28,10 +27,6 @@ _DEFAULT_MAX_ITERS = 10
 def find_sensor_threshold(tolerance: float) -> float:
     """Return stop threshold (mm): min(tolerance * 8, 0.5)."""
     return min(tolerance * _FIND_THRESHOLD_TOLERANCE_FACTOR, _FIND_THRESHOLD_CAP_MM)
-
-
-def _offset_magnitude(offset: Offset) -> float:
-    return math.hypot(offset.x, offset.y)
 
 
 def run_find_sensor(
@@ -74,7 +69,7 @@ def run_find_sensor(
             return None
 
         last_result = result
-        magnitude = _offset_magnitude(result.offset)
+        magnitude = result.offset.distance_to(Offset.zero())
         logger.info(
             f"eddy_seek: find sensor seek {iteration} "
             f"offset=({result.offset.x:.4f}, {result.offset.y:.4f}) "
@@ -93,7 +88,7 @@ def run_find_sensor(
             return result
 
     assert last_result is not None and last_result.offset is not None
-    magnitude = _offset_magnitude(last_result.offset)
+    magnitude = last_result.offset.distance_to(Offset.zero())
     console.error(
         f"Find sensor did not get close enough after {max_iters} seeks "
         f"(offset {magnitude:.3g} mm, need < {threshold:.3g} mm). "
