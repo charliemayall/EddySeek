@@ -36,7 +36,6 @@ def config_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(install, "EDDY_SEEK_CFG", config_dir / "eddy_seek.cfg")
     monkeypatch.setattr(install, "EXAMPLE_CFG", ROOT / "example.cfg")
     monkeypatch.setattr(install, "EXAMPLE_INDX_CFG", ROOT / "example_indx.cfg")
-    monkeypatch.setattr(install, "EXAMPLE_MINIMAL_CFG", ROOT / "example_minimal.cfg")
     return config_dir
 
 
@@ -96,18 +95,7 @@ def test_offer_example_config_skips_existing_file(
     assert "config already exists" in capsys.readouterr().out
 
 
-def _active_config_keys(text: str) -> set[str]:
-    keys: set[str] = set()
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if ":" in stripped:
-            keys.add(stripped.split(":", 1)[0].strip())
-    return keys
-
-
-def test_offer_example_config_copies_minimal_on_default(
+def test_offer_example_config_copies_generic_on_default(
     monkeypatch: pytest.MonkeyPatch,
     config_paths: Path,
     capsys: pytest.CaptureFixture[str],
@@ -119,19 +107,18 @@ def test_offer_example_config_copies_minimal_on_default(
     install.offer_example_config()
     assert install.EDDY_SEEK_CFG.is_file()
     text = install.EDDY_SEEK_CFG.read_text()
-    keys = _active_config_keys(text)
-    assert "toolchanger_type" not in keys
+    assert "tool_prefix:" in text
     out = capsys.readouterr().out
-    assert "Copied example_minimal.cfg" in out
+    assert "Copied example.cfg" in out
     assert "[include eddy_seek.cfg]" in out
 
 
-def test_offer_example_config_copies_diy_template(
+def test_offer_example_config_copies_generic_template(
     monkeypatch: pytest.MonkeyPatch,
     config_paths: Path,
 ) -> None:
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    inputs = iter(["y", "diy"])
+    inputs = iter(["y", "generic"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
     config_paths.mkdir(parents=True)
     install.offer_example_config()
@@ -144,7 +131,7 @@ def test_offer_example_config_copies_indx_template(
     config_paths: Path,
 ) -> None:
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    inputs = iter(["y", "2"])
+    inputs = iter(["y", "1"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
     config_paths.mkdir(parents=True)
     install.offer_example_config()

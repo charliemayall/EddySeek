@@ -2,26 +2,26 @@
 
 Kit-specific glue between EddySeek and how a printer loads tools and stores XY offsets.
 
-| Module        | Role                                   |
-| ------------- | -------------------------------------- |
-| `protocol.py` | `ToolProtocol` + `ToolAlignConfig` ABC |
-| `diy.py`      | `DiyTool` + `DiyToolAlignConfig`       |
-| `indx.py`     | `IndxTool` + `IndxToolAlignConfig`     |
-| `types.py`    | Registry + `tool_align_from_config`    |
+| Module        | Role                                           |
+| ------------- | ---------------------------------------------- |
+| `protocol.py` | `ToolProtocol` + `ToolAlignConfig` ABC         |
+| `generic.py`  | `GenericTool` + `GenericToolAlignConfig`       |
+| `indx.py`     | `IndxTool` + `IndxToolAlignConfig`             |
+| `types.py`    | Registry + `tool_align_from_config`            |
 
-Select the kit with `toolchanger_type` in `[eddy_seek]` (default `diy`).
+Select the kit with `toolchanger_type` in `[eddy_seek]` (default `generic`).
 
 ## Built-in types
 
-**`diy`** - generic toolchanger. Offsets live in `[es_Tn]` autosave sections with optional `manual_adjust_x/y`. Apply via `SET_GCODE_OFFSET`; wire `EDDY_SEEK_APPLY_OFFSET` into your own macros. You load tools yourself before `EDDY_SEEK_TOOL`.
+**`generic`** - generic toolchanger. Offsets live in `[es_Tn]` autosave sections with optional `manual_adjust_x/y`. Apply via `SET_GCODE_OFFSET`; wire `EDDY_SEEK_APPLY_OFFSET` into your own macros. You load tools yourself before `EDDY_SEEK_TOOL`.
 
 **`indx`** - [Bondtech INDX](https://github.com/BondtechAB/INDX) macros. Load via `CHANGE_TOOL` before alignment. Persists XY to `SAVE_VARIABLE` (`t{n}_offset_x/y`). Tool count from `gcode_macro TOOL_POSITIONS`. Do **not** use `EDDY_SEEK_APPLY_OFFSET` - `CHANGE_TOOL` applies XY from save variables. See `indx.py` module docstring for upstream macro contracts.
 
 ## Auto-detection
 
-On startup, registered kits may fingerprint the printer config (`suggest_for_config`). If a match differs from your active `toolchanger_type`, EddySeek queues a warning via `KConsole.queue` and flushes it on the first G-code command - it never changes config for you.
+Only **indx** fingerprints the printer config (`[indx]` section via `suggest_for_config`). If that matches and your active `toolchanger_type` is not `indx`, EddySeek queues a warning via `KConsole.queue` (flushed on the first G-code command). It never changes config for you.
 
-Default `toolchanger_type` is `diy`; `diy` is not auto-detected.
+Default `toolchanger_type` is `generic`; `generic` is not auto-detected.
 
 ## Adding a kit
 

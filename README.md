@@ -13,11 +13,12 @@ EddySeek reads an LDC1612 coil, runs XY search routines, and measures per-tool X
 > proven across many machines. Validate alignment results on your own hardware
 > before relying on them, and keep an eye on the toolhead during the first runs.
 
-## Near-drop-in support
+## Toolchanger kits
 
-- Bondtech INDX (select during install prompt, or via `toolchanger_type` in `[eddy_seek]` config section)
+- **Generic** (default) - `T0`/`T1` macros, `[es_Tn]` offsets, wire `EDDY_SEEK_APPLY_OFFSET` yourself
+- **Bondtech INDX** - near drop-in; set `toolchanger_type: indx` (or pick it at install)
 
-- Any other toolchanger will still work, it just takes a bit more integration on your side.
+Install prompts for a starter template (`generic` or `indx`).
 
 ## Getting Started
 

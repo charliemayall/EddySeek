@@ -23,9 +23,9 @@ from pytest import raises
 
 from eddy_seek.common import Offset
 from eddy_seek.host import EddySeek
-from eddy_seek.tools.diy import (
-    DiyTool,
-    DiyToolAlignConfig,
+from eddy_seek.tools.generic import (
+    GenericTool,
+    GenericToolAlignConfig,
 )
 from eddy_seek.tools.indx import (
     IndxTool,
@@ -107,7 +107,7 @@ def _main(sections: dict[str, dict[str, Any]] | None = None) -> ConfigWrapper:
     return cast(Any, _MainConfig(sections))
 
 
-def _diy_tool_section(**overrides: Any) -> dict[str, Any]:
+def _generic_tool_section(**overrides: Any) -> dict[str, Any]:
     section = {
         "offset_x": 0.0,
         "offset_y": 0.0,
@@ -119,8 +119,8 @@ def _diy_tool_section(**overrides: Any) -> dict[str, Any]:
     return section
 
 
-def _diy_main(*tool_numbers: int) -> ConfigWrapper:
-    return _main({f"es_T{n}": _diy_tool_section() for n in tool_numbers})
+def _generic_main(*tool_numbers: int) -> ConfigWrapper:
+    return _main({f"es_T{n}": _generic_tool_section() for n in tool_numbers})
 
 
 class _Configfile:
@@ -184,18 +184,18 @@ def _tool_config(
     )
 
 
-def test_diy_starts_empty_without_sections():
+def test_generic_starts_empty_without_sections():
     cfg = _tool_config()
-    assert isinstance(cfg, DiyToolAlignConfig)
+    assert isinstance(cfg, GenericToolAlignConfig)
     assert cfg.tools == []
     assert cfg.tool_count == 0
 
 
-def test_diy_discovers_sections_with_gap():
+def test_generic_discovers_sections_with_gap():
     main = _main(
         {
-            "es_T0": _diy_tool_section(is_calibrated=True),
-            "es_T2": _diy_tool_section(offset_x=1.0),
+            "es_T0": _generic_tool_section(is_calibrated=True),
+            "es_T2": _generic_tool_section(offset_x=1.0),
         }
     )
     cfg = _tool_config(main=main)
@@ -205,19 +205,19 @@ def test_diy_discovers_sections_with_gap():
     assert cfg.tools[2].offset.x == 1.0
 
 
-def test_diy_get_tool_grows_list():
+def test_generic_get_tool_grows_list():
     cfg = _tool_config()
-    assert isinstance(cfg, DiyToolAlignConfig)
+    assert isinstance(cfg, GenericToolAlignConfig)
     tool = cfg.get_tool(3)
     assert tool.tool_number == 3
     assert cfg.tool_count == 4
     assert len(cfg.tools) == 4
 
 
-def test_diy_apply_offset_set_gcode_only():
+def test_generic_apply_offset_set_gcode_only():
     gcode = FakeGcode()
-    cfg = _tool_config(gcode=gcode, main=_diy_main(0, 1))
-    tool = DiyTool(
+    cfg = _tool_config(gcode=gcode, main=_generic_main(0, 1))
+    tool = GenericTool(
         tool_number=1,
         offset=Offset(1.5, -0.5),
         manual_offset=Offset.zero(),
@@ -228,12 +228,12 @@ def test_diy_apply_offset_set_gcode_only():
     assert gcode.scripts == ["SET_GCODE_OFFSET X=1.5 Y=-0.5"]
 
 
-def test_diy_save_tool_stages_es_tn():
+def test_generic_save_tool_stages_es_tn():
     gcode = FakeGcode()
-    main = _diy_main(0, 1)
+    main = _generic_main(0, 1)
     configfile = _Configfile(main)
     cfg = _tool_config(gcode=gcode, main=main, configfile=configfile)
-    tool = DiyTool(
+    tool = GenericTool(
         tool_number=1,
         offset=Offset(1.0, 2.0),
         manual_offset=Offset.zero(),
@@ -338,11 +338,11 @@ def test_indx_persist_hint():
     main = _main({_TOOL_POSITIONS: {"variable_tool_count": 2}})
     cfg = _tool_config(main=main, toolchanger_type="indx")
     assert "save_variables" in cfg.persist_hint()
-    diy = _tool_config()
-    assert "SAVE_CONFIG" in diy.persist_hint()
+    generic = _tool_config()
+    assert "SAVE_CONFIG" in generic.persist_hint()
 
 
-def test_indx_rejects_diy_only_tool_prefix():
+def test_indx_rejects_generic_only_tool_prefix():
     main = _main({_TOOL_POSITIONS: {"variable_tool_count": 3}})
     with raises(ValueError, match="does not use tool_prefix"):
         _tool_config(main=main, toolchanger_type="indx", tool_prefix="es_T")
@@ -359,7 +359,7 @@ def test_detect_toolchanger_types_ignores_tool_positions_without_indx():
     assert detect_toolchanger_types(main) == []
 
 
-def test_tool_align_suggests_indx_when_diy_active(caplog):
+def test_tool_align_suggests_indx_when_generic_active(caplog):
     import logging
 
     from eddy_seek.kconsole import KConsole
@@ -372,8 +372,8 @@ def test_tool_align_suggests_indx_when_diy_active(caplog):
         }
     )
     with caplog.at_level(logging.WARNING):
-        cfg = _tool_config(main=main, toolchanger_type="diy")
-    assert cfg.toolchanger_type == "diy"
+        cfg = _tool_config(main=main, toolchanger_type="generic")
+    assert cfg.toolchanger_type == "generic"
     pending = KConsole.pending()
     assert pending
     assert any(
@@ -401,17 +401,17 @@ def test_indx_without_tool_positions_errors():
         _tool_config(toolchanger_type="indx")
 
 
-def test_tool_align_config_diy_save_and_apply():
+def test_tool_align_config_generic_save_and_apply():
     gcode = FakeGcode()
-    main = _diy_main(0, 1)
+    main = _generic_main(0, 1)
     configfile = _Configfile(main)
     cfg = _tool_config(
         gcode=gcode,
         main=main,
         configfile=configfile,
     )
-    assert isinstance(cfg, DiyToolAlignConfig)
-    tool = DiyTool(
+    assert isinstance(cfg, GenericToolAlignConfig)
+    tool = GenericTool(
         tool_number=1,
         offset=Offset(0.5, 0.25),
         manual_offset=Offset.zero(),
@@ -447,11 +447,11 @@ def test_tool_align_config_indx_wires_through():
     assert cfg.supports_apply_offset() is False
 
 
-def test_status_keys_diy_vs_indx():
-    diy = _tool_config(main=_diy_main(0, 1))
-    assert diy.tool_status_key(1) == "es_T1"
-    assert "es_T1" in diy.status_tools()
-    assert diy.kit_trace()["tool_prefix"] == "es_T"
+def test_status_keys_generic_vs_indx():
+    generic = _tool_config(main=_generic_main(0, 1))
+    assert generic.tool_status_key(1) == "es_T1"
+    assert "es_T1" in generic.status_tools()
+    assert generic.kit_trace()["tool_prefix"] == "es_T"
 
     main = _main({_TOOL_POSITIONS: {"variable_tool_count": 2}})
     indx = _tool_config(main=main, toolchanger_type="indx")
@@ -476,7 +476,7 @@ def test_eddy_seek_status_dumps_get_status():
     class _Host:
         def get_status(self, eventtime: float) -> dict[str, Any]:
             return {
-                "toolchanger_type": "diy",
+                "toolchanger_type": "generic",
                 "last_freq": 42.0,
                 "tools": {},
             }

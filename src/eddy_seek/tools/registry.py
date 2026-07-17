@@ -23,11 +23,11 @@ _TYPES: dict[str, type[ToolAlignConfig]] | None = None
 def toolchanger_types() -> dict[str, type[ToolAlignConfig]]:
     global _TYPES
     if _TYPES is None:
-        from .diy import DiyToolAlignConfig
+        from .generic import GenericToolAlignConfig
         from .indx import IndxToolAlignConfig
 
         _TYPES = {
-            "diy": DiyToolAlignConfig,
+            "generic": GenericToolAlignConfig,
             "indx": IndxToolAlignConfig,
         }
     return _TYPES

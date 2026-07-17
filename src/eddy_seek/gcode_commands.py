@@ -75,7 +75,7 @@ GCODE_COMMANDS: tuple[GcodeCommand, ...] = (
         "EDDY_SEEK_APPLY_OFFSET",
         "Apply saved XY offset for a tool via SET_GCODE_OFFSET",
         "`EDDY_SEEK_APPLY_OFFSET [TOOL=<int>]`",
-        "DIY only: apply saved XY via `SET_GCODE_OFFSET`. "
+        "Generic only: apply saved XY via `SET_GCODE_OFFSET`. "
         "Errors on INDX (`CHANGE_TOOL` owns apply).",
     ),
 )

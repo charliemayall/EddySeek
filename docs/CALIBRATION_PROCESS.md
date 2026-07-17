@@ -4,6 +4,10 @@ EddySeek finds each nozzle's XY position relative to an LDC1612 eddy-current
 sensor: jog, sample coil frequency, repeat until the peak marks the coil centre.
 Below: toolchanger workflow, multi-tool sequence, and the internal XY search loop.
 
+This page describes the **Generic** kit (`toolchanger_type: generic`, default):
+`[es_Tn]` sections, `SAVE_CONFIG`, and `EDDY_SEEK_APPLY_OFFSET`. Bondtech INDX
+uses `save_variables` and `CHANGE_TOOL` instead - see the [User Guide](USER_GUIDE.md).
+
 For install, configuration, and G-code reference, see the [User Guide](USER_GUIDE.md).
 
 ---
@@ -18,10 +22,10 @@ valley) that marks the sensor centre.
 | Mode                 | Command                 | Result                                               |
 | -------------------- | ----------------------- | ---------------------------------------------------- |
 | Single-position seek | `EDDY_SEEK_START`       | Offset from current XY to sensor centre              |
-| One tool             | `EDDY_SEEK_TOOL TOOL=n` | Per-tool offset staged in config autosave            |
+| One tool             | `EDDY_SEEK_TOOL TOOL=n` | Per-tool offset staged in `[es_Tn]` (Generic kit)    |
 
-After any tool alignment command succeeds, run `SAVE_CONFIG` to write offsets to
-`printer.cfg`.
+After Generic tool alignment succeeds, run `SAVE_CONFIG` to write offsets to
+`printer.cfg`. (INDX writes `save_variables` immediately - no `SAVE_CONFIG`.)
 
 ---
 
@@ -36,9 +40,9 @@ flowchart TD
     G --> H[Load tool n, park at sensor, then EDDY_SEEK_TOOL TOOL=n]
     H --> MORE{More tools?}
     MORE -->|yes| H
-    MORE -->|no| J[Offsets staged in T0, T1, … sections]
+    MORE -->|no| J[Offsets staged in es_T0, es_T1, …]
     J --> K[SAVE_CONFIG]
-    K --> L[Wire offsets into toolchanger / motion system]
+    K --> L[Wire EDDY_SEEK_APPLY_OFFSET into toolchange macros]
 ```
 
 **Tool 0** is special: it establishes the absolute sensor-centre XY from its
@@ -184,7 +188,7 @@ the window used for that probe point.
 
 ---
 
-## What gets saved
+## What gets saved (Generic kit)
 
 After alignment, staged config sections look like:
 
@@ -205,16 +209,17 @@ is_calibrated: True
 | es_T0  | Always `0, 0` - defines the reference centre                |
 | es_T1… | XY shift needed so this nozzle matches tool 0 on the sensor |
 
-`SAVE_CONFIG` persists these values. Your toolchanger macros or motion system
-apply them when switching tools.
+`SAVE_CONFIG` persists these values. Wire `EDDY_SEEK_APPLY_OFFSET` into your
+toolchange macros (or slicer) so offsets apply when switching tools.
 
 ---
 
 ## Related commands
 
-| Command              | Role in calibration                                       |
-| -------------------- | --------------------------------------------------------- |
-| `EDDY_SEEK_QUERY`    | Confirm live sensor data before calibrating               |
-| `EDDY_SEEK_RESET`    | Clear capture buffer                                      |
-| `EDDY_SEEK_SET`      | Tune tolerance, strategy, dwell, etc. without editing cfg |
-| `EDDY_SEEK_ACCURACY` | Repeat `EDDY_SEEK_START` and report repeatability stats   |
+| Command                   | Role in calibration                                       |
+| ------------------------- | --------------------------------------------------------- |
+| `EDDY_SEEK_QUERY`         | Confirm live sensor data before calibrating               |
+| `EDDY_SEEK_RESET`         | Clear capture buffer                                      |
+| `EDDY_SEEK_SET`           | Tune tolerance, strategy, dwell, etc. without editing cfg |
+| `EDDY_SEEK_ACCURACY`      | Repeat `EDDY_SEEK_START` and report repeatability stats   |
+| `EDDY_SEEK_APPLY_OFFSET`  | Generic kit: apply saved XY at toolchange                 |

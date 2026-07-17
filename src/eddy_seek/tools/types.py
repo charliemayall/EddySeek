@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 def tool_align_from_config(config: ConfigWrapper) -> ToolAlignConfig:
     """Build the kit ``ToolAlignConfig`` for ``toolchanger_type``."""
     types = toolchanger_types()
-    toolchanger_type = config.get("toolchanger_type", "diy").strip().lower()
+    toolchanger_type = config.get("toolchanger_type", "generic").strip().lower()
     try:
         impl = types[toolchanger_type]
     except KeyError as exc:

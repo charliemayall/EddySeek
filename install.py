@@ -24,15 +24,9 @@ PRINTER_CONFIG_DIR = Path.home() / "printer_data" / "config"
 EDDY_SEEK_CFG = PRINTER_CONFIG_DIR / "eddy_seek.cfg"
 EXAMPLE_CFG = EDDY_SEEK_DIR / "example.cfg"
 EXAMPLE_INDX_CFG = EDDY_SEEK_DIR / "example_indx.cfg"
-EXAMPLE_MINIMAL_CFG = EDDY_SEEK_DIR / "example_minimal.cfg"
 # (toolchanger_type key, menu label, example file) - keep keys in sync with tools/types.py
-TOOLCHANGER_CONFIG_CHOICES: tuple[tuple[str | None, str, Path], ...] = (
-    (
-        None,
-        "minimal - sensor + seek only (defaults to diy)",
-        EXAMPLE_MINIMAL_CFG,
-    ),
-    ("diy", "diy - Tn macros, es_Tn sections", EXAMPLE_CFG),
+TOOLCHANGER_CONFIG_CHOICES: tuple[tuple[str, str, Path], ...] = (
+    ("generic", "generic - Tn macros, es_Tn sections", EXAMPLE_CFG),
     ("indx", "indx - Bondtech CHANGE_TOOL", EXAMPLE_INDX_CFG),
 )
 KLIPPY_ENV = Path.home() / "klippy-env"
@@ -58,17 +52,15 @@ def cprint(text, color: COLORS):
 
 
 def prompt_toolchanger_config_source() -> Path | None:
-    """Prompt for a toolchanger template; default is minimal (diy)."""
+    """Prompt for a toolchanger template; default is generic."""
     print("\nSelect toolchanger template:")
     for idx, (_key, label, _path) in enumerate(TOOLCHANGER_CONFIG_CHOICES):
         prefix = "[Enter] " if idx == 0 else f"  {idx}) "
         print(f"{prefix}{label}")
     choice = input("Choice: ").strip().lower()
-    if choice in ("", "0"):
-        return EXAMPLE_MINIMAL_CFG
-    if choice in ("1", "diy"):
+    if choice in ("", "0", "generic"):
         return EXAMPLE_CFG
-    if choice in ("2", "indx"):
+    if choice in ("1", "indx"):
         return EXAMPLE_INDX_CFG
     print(f"{_c('-- ', COLORS.GRAY)}unknown choice {choice!r}, skipping config copy")
     return None

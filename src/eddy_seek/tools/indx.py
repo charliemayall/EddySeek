@@ -21,8 +21,8 @@ EddySeek relies on:
   ``SET_GCODE_OFFSET`` at print time.
 
 In INDX mode, EddySeek does **not** use:
-- ``[es_Tn]`` sections (DIY only).
-- ``manual_adjust_x/y`` (DIY only).
+- ``[es_Tn]`` sections (Generic only).
+- ``manual_adjust_x/y`` (Generic only).
 - ``EDDY_SEEK_APPLY_OFFSET`` - ``CHANGE_TOOL`` already applies XY from save vars.
 - Z offsets - use Bondtech ``CAL_Z`` / ``t{n}_offset_z`` (``indx-cal.cfg``), not EddySeek.
 """
@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 _TOOL_POSITIONS_SECTION = "gcode_macro TOOL_POSITIONS"
 _INDX_SECTION = "indx"
 _INDX_TOOL_COUNT_KEYS = ("variable_tool_count", "tool_count")
-_DIY_ONLY_KEYS = frozenset({"tool_prefix"})
+_GENERIC_ONLY_KEYS = frozenset({"tool_prefix"})
 
 
 @dataclass
@@ -128,7 +128,7 @@ class IndxToolAlignConfig(ToolAlignConfig):
     @classmethod
     def _from_config(cls, config: ConfigWrapper) -> IndxToolAlignConfig:
         option_names = set(config.get_prefix_options(""))
-        for key in _DIY_ONLY_KEYS:
+        for key in _GENERIC_ONLY_KEYS:
             if key in option_names:
                 raise config.error(
                     f"eddy_seek: toolchanger_type=indx does not use {key} "

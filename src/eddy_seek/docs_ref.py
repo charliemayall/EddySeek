@@ -44,10 +44,14 @@ _TOOL_SECTION_ROWS: tuple[tuple[str, str, str], ...] = (
     ("`i2c_bus`", "_(required)_", "I2C bus, e.g. `i2c1`"),
     (
         "`toolchanger_type`",
-        "`diy`",
+        "`generic`",
         f"`{'` or `'.join(sorted(toolchanger_types()))}` - INDX uses `CHANGE_TOOL` and `TOOL_POSITIONS`",
     ),
-    ("`tool_prefix`", "`es_T`", "Prefix for saved offset sections (`es_T1`, …)"),
+    (
+        "`tool_prefix`",
+        "`es_T`",
+        "Generic only: prefix for `[es_Tn]` autosave sections; rejected when `toolchanger_type: indx`",
+    ),
     (
         "`sensor_z`",
         "_(optional)_",

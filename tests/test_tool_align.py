@@ -30,22 +30,22 @@ from eddy_seek.tool_align import (
     align_tool_number,
     move_to_seek_start_pos,
 )
-from eddy_seek.tools.diy import DiyTool
+from eddy_seek.tools.generic import GenericTool
 from eddy_seek.tools.types import tool_align_from_config
 
 
 class _FakeTools:
     def __init__(
-        self, tools: list[DiyTool], printer: FakePrinter | None = None
+        self, tools: list[GenericTool], printer: FakePrinter | None = None
     ) -> None:
         self.tool_count = len(tools)
         self.tools = tools
         self._printer = printer
 
-    def get_tool(self, tool_number: int) -> DiyTool:
+    def get_tool(self, tool_number: int) -> GenericTool:
         return self.tools[tool_number]
 
-    def apply_tool_offset(self, tool_number: int) -> DiyTool:
+    def apply_tool_offset(self, tool_number: int) -> GenericTool:
         if self._printer is None:
             raise AttributeError("printer")
         try:
@@ -73,13 +73,13 @@ def test_apply_tool_offset_sets_gcode_offset():
     printer = FakePrinter()
     tools = _FakeTools(
         [
-            DiyTool(
+            GenericTool(
                 tool_number=0,
                 offset=Offset(0.0, 0.0),
                 manual_offset=Offset(0.0, 0.0),
                 is_calibrated=True,
             ),
-            DiyTool(
+            GenericTool(
                 tool_number=1,
                 offset=Offset(1.5, -0.5),
                 manual_offset=Offset(0.0, 0.0),
@@ -97,7 +97,7 @@ def test_apply_tool_offset_includes_manual_adjust():
     printer = FakePrinter()
     tools = _FakeTools(
         [
-            DiyTool(
+            GenericTool(
                 tool_number=0,
                 offset=Offset(1.0, 2.0),
                 manual_offset=Offset(0.1, -0.2),
@@ -114,7 +114,7 @@ def test_apply_tool_offset_rejects_uncalibrated():
     printer = FakePrinter()
     tools = _FakeTools(
         [
-            DiyTool(
+            GenericTool(
                 tool_number=0,
                 offset=Offset(0.0, 0.0),
                 manual_offset=Offset(0.0, 0.0),
@@ -134,8 +134,8 @@ def _console(gcmd: FakeGcmd | None = None) -> KConsole:
 class _AlignTools:
     tool_count = 4
 
-    def get_tool(self, tool_number: int) -> DiyTool:
-        return DiyTool.create_default(tool_number)
+    def get_tool(self, tool_number: int) -> GenericTool:
+        return GenericTool.create_default(tool_number)
 
 
 class _FakeSeekHost:

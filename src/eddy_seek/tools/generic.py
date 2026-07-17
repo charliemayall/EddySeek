@@ -43,18 +43,18 @@ def _tool_numbers_from_sections(
 
 def _tools_from_discovered_sections(
     main_config: ConfigWrapper, tool_prefix: str
-) -> list[DiyTool]:
+) -> list[GenericTool]:
     numbers = _tool_numbers_from_sections(main_config, tool_prefix)
     if not numbers:
         return []
     return [
-        DiyToolAlignConfig._load_tool_or_default(main_config, tool_prefix, n)
+        GenericToolAlignConfig._load_tool_or_default(main_config, tool_prefix, n)
         for n in range(max(numbers) + 1)
     ]
 
 
 @dataclass
-class DiyTool(ToolRecord):
+class GenericTool(ToolRecord):
     manual_offset: Offset
 
     @property
@@ -62,7 +62,7 @@ class DiyTool(ToolRecord):
         return self.offset + self.manual_offset
 
     @classmethod
-    def create_default(cls, tool_number: int) -> DiyTool:
+    def create_default(cls, tool_number: int) -> GenericTool:
         return cls(
             tool_number=tool_number,
             offset=Offset.zero(),
@@ -71,7 +71,7 @@ class DiyTool(ToolRecord):
         )
 
     @staticmethod
-    def load(config: ConfigWrapper, prefix: str, tool_number: int) -> DiyTool:
+    def load(config: ConfigWrapper, prefix: str, tool_number: int) -> GenericTool:
         """
         Load from a config section.
 
@@ -84,7 +84,7 @@ class DiyTool(ToolRecord):
         if not config.has_section(section_name):
             raise config.error(f"tool {tool_number} section not found")
         section = config.getsection(section_name)
-        return DiyTool(
+        return GenericTool(
             tool_number=tool_number,
             offset=Offset(
                 x=section.getfloat("offset_x", 0.0),
@@ -109,7 +109,7 @@ class DiyTool(ToolRecord):
             config.set(section, key, f"{val:.6f}")
         config.set(section, "is_calibrated", str(self.is_calibrated))
 
-    def mark_calibrated(self, offset: Offset | None = None) -> DiyTool:
+    def mark_calibrated(self, offset: Offset | None = None) -> GenericTool:
         """Return a copy marked calibrated with the given seek offset."""
         return dataclasses.replace(
             self,
@@ -118,15 +118,15 @@ class DiyTool(ToolRecord):
         )
 
 
-class DiyToolAlignConfig(ToolAlignConfig):
-    """DIY toolchanger with config section persistence."""
+class GenericToolAlignConfig(ToolAlignConfig):
+    """Generic toolchanger with config section persistence."""
 
     def __init__(
         self,
         *,
         printer,
         tool_count: int,
-        tools: list[DiyTool],
+        tools: list[GenericTool],
         sensor_z: float | None,
         tool_prefix: str,
     ) -> None:
@@ -135,21 +135,21 @@ class DiyToolAlignConfig(ToolAlignConfig):
             tool_count=tool_count,
             tools=tools,
             sensor_z=sensor_z,
-            toolchanger_type="diy",
+            toolchanger_type="generic",
         )
         self.tool_prefix = tool_prefix
 
     @classmethod
-    def _from_config(cls, config: ConfigWrapper) -> DiyToolAlignConfig:
+    def _from_config(cls, config: ConfigWrapper) -> GenericToolAlignConfig:
         tool_prefix = config.get("tool_prefix", "es_T")
         sensor_z, printer, main_config = read_config_context(config)
         types = toolchanger_types()
-        run_detection("diy", main_config, types, DETECTION_ORDER)
+        run_detection("generic", main_config, types, DETECTION_ORDER)
 
         tools = _tools_from_discovered_sections(main_config, tool_prefix)
         tool_count = len(tools)
         log_kit_startup(
-            toolchanger_type="diy",
+            toolchanger_type="generic",
             tool_count=tool_count,
             sensor_z=sensor_z,
             extra=f"prefix={tool_prefix!r}",
@@ -166,18 +166,18 @@ class DiyToolAlignConfig(ToolAlignConfig):
         if tool_number < 0:
             raise IndexError(f"tool {tool_number} out of range")
         while len(self.tools) <= tool_number:
-            self.tools.append(DiyTool.create_default(len(self.tools)))
+            self.tools.append(GenericTool.create_default(len(self.tools)))
         self.tool_count = len(self.tools)
         return self.tools[tool_number]
 
     @staticmethod
     def _load_tool_or_default(
         main_config: ConfigWrapper, tool_prefix: str, tool_number: int
-    ) -> DiyTool:
+    ) -> GenericTool:
         section = f"{tool_prefix}{tool_number}"
         if not main_config.has_section(section):
-            return DiyTool.create_default(tool_number)
-        return DiyTool.load(main_config, tool_prefix, tool_number)
+            return GenericTool.create_default(tool_number)
+        return GenericTool.load(main_config, tool_prefix, tool_number)
 
     def section_name(self, tool_number: int) -> str:
         return f"{self.tool_prefix}{tool_number}"
@@ -191,8 +191,8 @@ class DiyToolAlignConfig(ToolAlignConfig):
         }
 
     def save_tool(self, tool: ToolProtocol) -> None:
-        if not isinstance(tool, DiyTool):
-            raise TypeError(f"expected DiyTool, got {type(tool).__name__}")
+        if not isinstance(tool, GenericTool):
+            raise TypeError(f"expected GenericTool, got {type(tool).__name__}")
         logger.info(
             f"eddy_seek: staging tool {tool.tool_number} "
             f"offset=({tool.offset.x:.6f}, {tool.offset.y:.6f}) "
@@ -202,10 +202,10 @@ class DiyToolAlignConfig(ToolAlignConfig):
         configfile.remove_section(self.section_name(tool.tool_number))
         tool.save(configfile, self.tool_prefix)
 
-    def apply_tool_offset(self, tool_number: int) -> DiyTool:
+    def apply_tool_offset(self, tool_number: int) -> GenericTool:
         tool = self._require_calibrated(tool_number)
-        if not isinstance(tool, DiyTool):
-            raise TypeError(f"expected DiyTool, got {type(tool).__name__}")
+        if not isinstance(tool, GenericTool):
+            raise TypeError(f"expected GenericTool, got {type(tool).__name__}")
         eff = tool.effective_offset
         logger.info(
             f"eddy_seek: applying tool {tool_number} effective offset "
