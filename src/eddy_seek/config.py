@@ -304,8 +304,8 @@ def _validate_field_value(
 ) -> None:
     meta = _seek_field(field_name).metadata
     name = label or field_name
-    if meta.get("positive") and value <= 0.0:
-        raise ValueError(f"{name} must be > 0")
+    if meta.get("positive") and value < 0.0:
+        raise ValueError(f"{name} must be >= 0")
     if "min" in meta and value < meta["min"]:
         raise ValueError(f"{name} must be >= {meta['min']}")
     if "enum" in meta and value not in meta["enum"]:
