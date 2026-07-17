@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn
 
 from .common import StrEnum
 
@@ -31,10 +31,36 @@ class ConsoleSymbols(StrEnum):
     BR = "</br>"
 
 
+QueueType = Literal["warn", "info", "error"]
+_QUEUE_LOGGERS: dict[QueueType, str] = {
+    "warn": "warning",
+    "error": "error",
+}
+
+
 class KConsole:
     """Wrap ``GCodeCommand.respond_raw`` for user-facing output."""
 
     prefix: str = "ES"
+    _queue: ClassVar[list[tuple[QueueType, str]]] = []
+
+    @classmethod
+    def queue(cls, msg: str, *, type: QueueType = "warn") -> None:
+        """Defer output until the next ``KConsole`` is constructed."""
+        cls._queue.append((type, msg))
+        log_fn = _QUEUE_LOGGERS.get(type)
+        if log_fn is not None:
+            getattr(logger, log_fn)(f"eddy_seek: {msg}")
+
+    @classmethod
+    def clear_queue(cls) -> None:
+        """Discard queued messages (tests)."""
+        cls._queue.clear()
+
+    @classmethod
+    def pending(cls) -> list[tuple[QueueType, str]]:
+        """Queued messages not yet flushed (tests)."""
+        return list(cls._queue)
 
     def __init__(
         self,
@@ -54,6 +80,12 @@ class KConsole:
             except Exception:
                 pass
             self.verbose = from_param or cfg.debug
+        self._flush_queue()
+
+    def _flush_queue(self) -> None:
+        for msg_type, msg in type(self)._queue:
+            getattr(self, msg_type)(msg)
+        type(self)._queue.clear()
 
     def _emit(self, klipper_prefix: str, msg: str) -> None:
         self._gcmd.respond_raw(f"{klipper_prefix}{msg}")

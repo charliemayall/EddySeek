@@ -13,7 +13,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .bootstrap import detect_toolchanger_types as _detect_toolchanger_types
-from .bootstrap import log_toolchanger_suggestion as _log_toolchanger_suggestion
 from .protocol import ToolAlignConfig
 from .registry import DETECTION_ORDER, toolchanger_types
 
@@ -38,17 +37,3 @@ def tool_align_from_config(config: ConfigWrapper) -> ToolAlignConfig:
 def detect_toolchanger_types(main_config: ConfigWrapper) -> list[str]:
     """Registered types whose ``suggest_for_config`` matches, in detection order."""
     return _detect_toolchanger_types(main_config, toolchanger_types(), DETECTION_ORDER)
-
-
-def log_toolchanger_suggestion(
-    active_name: str,
-    main_config: ConfigWrapper,
-    detected: list[str],
-) -> None:
-    _log_toolchanger_suggestion(active_name, main_config, detected, toolchanger_types())
-
-
-def __getattr__(name: str):
-    if name == "TOOLCHANGER_TYPES":
-        return toolchanger_types()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -35,7 +35,11 @@ _SWEEP_FIELD_NAMES = frozenset(
 
 _TOOL_SECTION_ROWS: tuple[tuple[str, str, str], ...] = (
     ("`sensor_type`", "_(required)_", "`ldc1612`"),
-    ("`i2c_address`", "`42`", "LDC1612 I2C address (`0x2a`)"),
+    (
+        "`i2c_address`",
+        "_(optional)_",
+        "LDC1612 I2C address; Klipper defaults to `42` (`0x2a`) when omitted",
+    ),
     ("`i2c_mcu`", "_(required)_", "MCU name, e.g. `mcu`"),
     ("`i2c_bus`", "_(required)_", "I2C bus, e.g. `i2c1`"),
     (

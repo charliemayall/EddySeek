@@ -15,7 +15,15 @@ from pathlib import Path
 import pytest
 from fakes import PLOT_SESSION_ID, PLOT_WRITE_AT
 
+from eddy_seek.kconsole import KConsole
 from eddy_seek.plotting.artifacts import write_figure
+
+
+@pytest.fixture(autouse=True)
+def _clear_kconsole_queue():
+    KConsole.clear_queue()
+    yield
+    KConsole.clear_queue()
 
 
 @pytest.fixture

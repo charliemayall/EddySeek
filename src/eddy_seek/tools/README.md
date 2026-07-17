@@ -19,7 +19,9 @@ Select the kit with `toolchanger_type` in `[eddy_seek]` (default `diy`).
 
 ## Auto-detection
 
-On startup, registered kits may fingerprint the printer config (`suggest_for_config`). If a match differs from your active `toolchanger_type`, EddySeek logs an info suggestion - it never changes config for you. `diy` is the default fallback and is not auto-detected.
+On startup, registered kits may fingerprint the printer config (`suggest_for_config`). If a match differs from your active `toolchanger_type`, EddySeek queues a warning via `KConsole.queue` and flushes it on the first G-code command - it never changes config for you.
+
+Default `toolchanger_type` is `diy`; `diy` is not auto-detected.
 
 ## Adding a kit
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from ..kconsole import KConsole
 from .protocol import ToolAlignConfig
 
 if TYPE_CHECKING:
@@ -43,7 +44,7 @@ def detect_toolchanger_types(
     ]
 
 
-def log_toolchanger_suggestion(
+def toolchanger_suggestion_messages(
     active_name: str,
     main_config: ConfigWrapper,
     detected: list[str],
@@ -55,8 +56,10 @@ def log_toolchanger_suggestion(
         cls = registry[name]
         reason = cls.suggestion_reason(main_config)
         detail = f" (found {reason})" if reason else ""
-        logger.info(
-            f"eddy_seek: printer config suggests toolchanger_type: {name}{detail}"
+        KConsole.queue(
+            f"printer config suggests toolchanger_type: {name}{detail} "
+            f"- set toolchanger_type: {name} in [eddy_seek]",
+            type="warn",
         )
 
 
@@ -82,4 +85,4 @@ def run_detection(
     detection_order: tuple[str, ...],
 ) -> None:
     detected = detect_toolchanger_types(main_config, registry, detection_order)
-    log_toolchanger_suggestion(active_name, main_config, detected, registry)
+    toolchanger_suggestion_messages(active_name, main_config, detected, registry)

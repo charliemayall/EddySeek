@@ -70,7 +70,6 @@ class EddySeek(SeekHost):
         self._total_samples: int = 0
         self._last_freq: float = 0.0
         self._tool0_center: Position | None = None
-
         self._sensor = self._load_ldc1612(config)
         self._stream_refs = 0
         self._batch_client_added = False

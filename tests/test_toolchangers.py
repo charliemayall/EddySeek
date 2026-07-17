@@ -318,20 +318,33 @@ def test_detect_toolchanger_types_ignores_tool_positions_without_indx():
 def test_tool_align_suggests_indx_when_diy_active(caplog):
     import logging
 
+    from eddy_seek.kconsole import KConsole
+
+    KConsole.clear_queue()
     main = _main(
         {
             _INDX: {"mcu": "indxmcu"},
             _TOOL_POSITIONS: {"variable_tool_count": 2},
         }
     )
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.WARNING):
         cfg = _tool_config(main=main, toolchanger_type="diy")
     assert cfg.toolchanger_type == "diy"
+    pending = KConsole.pending()
+    assert pending
+    assert any(
+        msg_type == "warn"
+        and "suggests toolchanger_type: indx" in msg
+        and "[indx] section in config" in msg
+        and "set toolchanger_type: indx in [eddy_seek]" in msg
+        for msg_type, msg in pending
+    )
     assert any(
         "suggests toolchanger_type: indx" in r.message
         and "[indx] section in config" in r.message
         for r in caplog.records
     )
+    KConsole.clear_queue()
 
 
 def test_unknown_toolchanger_type_rejected():

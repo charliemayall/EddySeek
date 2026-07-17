@@ -94,3 +94,18 @@ def test_console_stored_on_host():
 
     second = host.refresh_console(FakeGcmd())
     assert host.console is second
+
+
+def test_queue_flushed_on_next_console():
+    KConsole.clear_queue()
+    KConsole.queue("set toolchanger_type: indx in [eddy_seek]", type="warn")
+    assert KConsole.pending()
+
+    gcmd = FakeGcmd()
+    KConsole(gcmd, SeekConfig())
+    assert KConsole.pending() == []
+    assert any("WARNING: set toolchanger_type: indx" in line for line in gcmd.raw)
+
+    gcmd.raw.clear()
+    KConsole(gcmd, SeekConfig())
+    assert gcmd.raw == []

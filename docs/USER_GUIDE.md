@@ -64,13 +64,13 @@ Configure the LDC1612 inside `[eddy_seek]` (separate from your bed-mesh probe):
 ```ini
 [eddy_seek]
 sensor_type: ldc1612
-i2c_address: 42
+# i2c_address: 42  # omit unless non-default ADDR
 i2c_mcu: mcu
 i2c_bus: i2c1
 sensor_z: 5.0     # optional - seek commands error if machine Z is outside [sensor_z, sensor_z + 0.25] mm
 ```
 
-Optional LDC1612 tuning keys (`frequency`, `max_sensor_hz`, `reg_drive_current`, …) can live here too.
+Optional LDC1612 tuning keys (`frequency`, `max_sensor_hz`, `reg_drive_current`, …) can live here too. Omit `i2c_address` unless your board uses a non-default ADDR (Klipper defaults to `42` / `0x2a`).
 
 ## ⚠️⚠️⚠️ IMPORTANT ⚠️⚠️⚠️
 
@@ -109,11 +109,9 @@ Bondtech INDX: see [Bondtech INDX](#bondtech-indx-toolchanger_type-indx)
 7. Home, park at probe height above the sensor (EddySeek does not move Z).
 8. Load tool 0, park at the sensor. If the park may be far from centre, run `EDDY_SEEK_START FIND=1` first, then `EDDY_SEEK_TOOL TOOL=0`.
 9. For each tool 1…N: `CHANGE_TOOL`, park at the sensor, run `EDDY_SEEK_TOOL TOOL=n`. Offsets save to `save_variables` (`t{n}_offset_x` / `t{n}_offset_y`).
-9. Use INDX `CAL_Z` for Z offsets. Do **not** add `EDDY_SEEK_APPLY_OFFSET` to INDX macros - `CHANGE_TOOL` applies XY (and Z from `CAL_Z`) at print time.
+10. Use INDX `CAL_Z` for Z offsets. Do **not** add `EDDY_SEEK_APPLY_OFFSET` to INDX macros - `CHANGE_TOOL` applies XY (and Z from `CAL_Z`) at print time.
 
-EddySeek errors at config load if DIY-only key `tool_prefix` is present with `toolchanger_type: indx`.
-
-On startup, EddySeek may log an **info** line suggesting `toolchanger_type: indx` when it finds INDX macros. It will not change your config automatically - set `toolchanger_type: indx` in `[eddy_seek]` yourself.
+On startup, EddySeek may **warn** suggesting `toolchanger_type: ...` if it detect a toolchanger type that you can add to your config.
 
 **DIY vs INDX at a glance**
 
@@ -128,7 +126,7 @@ On startup, EddySeek may log an **info** line suggesting `toolchanger_type: indx
 
 ## Configuration reference
 
-See [example.cfg](../example.cfg) (DIY), [example_indx.cfg](../example_indx.cfg) (Bondtech INDX), or [example_minimal.cfg](../example_minimal.cfg) (autodetect starter).
+See [example.cfg](../example.cfg) (DIY), [example_indx.cfg](../example_indx.cfg) (Bondtech INDX), or [example_minimal.cfg](../example_minimal.cfg) (minimal starter).
 
 ### `[eddy_seek]` - main options
 
@@ -136,7 +134,7 @@ See [example.cfg](../example.cfg) (DIY), [example_indx.cfg](../example_indx.cfg)
 | Option | Default | Description |
 | ------ | ------- | ----------- |
 | `sensor_type` | _(required)_ | `ldc1612` |
-| `i2c_address` | `42` | LDC1612 I2C address (`0x2a`) |
+| `i2c_address` | _(optional)_ | LDC1612 I2C address; Klipper defaults to `42` (`0x2a`) when omitted |
 | `i2c_mcu` | _(required)_ | MCU name, e.g. `mcu` |
 | `i2c_bus` | _(required)_ | I2C bus, e.g. `i2c1` |
 | `toolchanger_type` | `diy` | `diy` or `indx` - INDX uses `CHANGE_TOOL` and `TOOL_POSITIONS` |
@@ -291,18 +289,18 @@ With `save_plots: True`, HTML plots land under `{result_folder}/YYYY-MM-DD_HH-MM
 
 ## Troubleshooting
 
-| Symptom                                                                       | Things to check                                                                                                |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `total` stays 0 on `EDDY_SEEK_QUERY`                                          | I2C wiring, `i2c_mcu` / `i2c_bus`, `klippy.log`                                                                |
-| `no samples at offset` during seek                                            | Increase `dwell_time`; check coil height and sensor stream                                                     |
-| Search does not converge                                                      | `max_passes`, `max_jog_x/y`, `search_for`, try another `strategy`                                              |
-| `pass corrections diverging`                                                  | Nozzle too far from centre - reposition closer, widen `max_jog`, or check Z height                             |
-| Sweep centroid: too few samples                                               | Lower `sweep_fine_speed`; check LDC1612 stream; Run `EDDY_SEEK_QUERY` and check your sample rate is ~360-400Hz |
-| `tool 0 must be aligned before other tools`                                   | Klipper restart cleared the reference; run `EDDY_SEEK_TOOL TOOL=0`                                            |
-| Offsets not in `printer.cfg` (DIY)                                            | Run `SAVE_CONFIG` after alignment                                                                              |
-| INDX: config error on `tool_prefix`                                           | Remove `tool_prefix`; INDX owns tool count                                                                     |
-| Startup suggests `toolchanger_type: indx`                                     | Set `toolchanger_type: indx` in `[eddy_seek]` if you use Bondtech INDX macros                                  |
-| `EDDY_SEEK_APPLY_OFFSET` on INDX                                              | Not supported - `CHANGE_TOOL` applies XY from save_variables                                                   |
+| Symptom                                     | Things to check                                                                                                |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `total` stays 0 on `EDDY_SEEK_QUERY`        | I2C wiring, `i2c_mcu` / `i2c_bus`, `klippy.log`                                                                |
+| `no samples at offset` during seek          | Increase `dwell_time`; check coil height and sensor stream                                                     |
+| Search does not converge                    | `max_passes`, `max_jog_x/y`, `search_for`, try another `strategy`                                              |
+| `pass corrections diverging`                | Nozzle too far from centre - reposition closer, widen `max_jog`, or check Z height                             |
+| Sweep centroid: too few samples             | Lower `sweep_fine_speed`; check LDC1612 stream; Run `EDDY_SEEK_QUERY` and check your sample rate is ~360-400Hz |
+| `tool 0 must be aligned before other tools` | Klipper restart cleared the reference; run `EDDY_SEEK_TOOL TOOL=0`                                             |
+| Offsets not in `printer.cfg` (DIY)          | Run `SAVE_CONFIG` after alignment                                                                              |
+| INDX: config error on `tool_prefix`         | Remove `tool_prefix`; INDX owns tool count                                                                     |
+| Startup suggests `toolchanger_type: indx`   | Set `toolchanger_type: indx` in `[eddy_seek]` if you use Bondtech INDX macros                                  |
+| `EDDY_SEEK_APPLY_OFFSET` on INDX            | Not supported - `CHANGE_TOOL` applies XY from save_variables                                                   |
 
 ### Debug scan (`strategy: debug_scan`)
 

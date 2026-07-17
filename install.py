@@ -29,7 +29,7 @@ EXAMPLE_MINIMAL_CFG = EDDY_SEEK_DIR / "example_minimal.cfg"
 TOOLCHANGER_CONFIG_CHOICES: tuple[tuple[str | None, str, Path], ...] = (
     (
         None,
-        "minimal - sensor + seek only (autodetect at startup)",
+        "minimal - sensor + seek only (defaults to diy)",
         EXAMPLE_MINIMAL_CFG,
     ),
     ("diy", "diy - Tn macros, es_Tn sections", EXAMPLE_CFG),
@@ -58,7 +58,7 @@ def cprint(text, color: COLORS):
 
 
 def prompt_toolchanger_config_source() -> Path | None:
-    """Prompt for a toolchanger template; default is minimal / autodetect."""
+    """Prompt for a toolchanger template; default is minimal (diy)."""
     print("\nSelect toolchanger template:")
     for idx, (_key, label, _path) in enumerate(TOOLCHANGER_CONFIG_CHOICES):
         prefix = "[Enter] " if idx == 0 else f"  {idx}) "
