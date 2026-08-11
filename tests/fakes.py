@@ -158,6 +158,47 @@ class FakeGcode(_GCodeDispatchBase):
         return FakeGcmd(params)
 
 
+class FakeConfigSection:
+    """Sibling-section stand-in for ``ConfigWrapper.getsection``."""
+
+    def __init__(self, options: dict[str, Any]) -> None:
+        self._options = options
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if key not in self._options:
+            return default
+        return self._options[key]
+
+    def getint(self, key: str, default: int = 0, **kwargs: Any) -> int:
+        if key not in self._options:
+            return default
+        return int(self._options[key])
+
+    def getfloat(self, key: str, default: float = 0.0, **kwargs: Any) -> float:
+        if key not in self._options:
+            return default
+        return float(self._options[key])
+
+    def getboolean(self, key: str, default: bool = False, **kwargs: Any) -> bool:
+        if key not in self._options:
+            return default
+        val = self._options[key]
+        if isinstance(val, bool):
+            return val
+        return str(val).lower() in ("1", "true", "yes", "on")
+
+    def get_prefix_options(self, prefix: str) -> dict[str, str]:
+        return {k: str(v) for k, v in self._options.items() if k.startswith(prefix)}
+
+
+class FakePrefixSection:
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def get_name(self) -> str:
+        return self._name
+
+
 class FakeKlipperConfig:
     error = ValueError
 
@@ -165,10 +206,12 @@ class FakeKlipperConfig:
         self,
         *,
         get_printer: Any | None = None,
+        sections: dict[str, dict[str, Any]] | None = None,
         **options: Any,
     ) -> None:
         self._options = options
         self._get_printer = get_printer
+        self._sections = sections or {}
 
     def get_printer(self) -> Printer:
         if self._get_printer is None:
@@ -198,6 +241,19 @@ class FakeKlipperConfig:
 
     def get_prefix_options(self, prefix: str) -> dict[str, str]:
         return {k: str(v) for k, v in self._options.items() if k.startswith(prefix)}
+
+    def has_section(self, section: str) -> bool:
+        return section in self._sections
+
+    def getsection(self, section: str) -> FakeConfigSection:
+        return FakeConfigSection(self._sections[section])
+
+    def get_prefix_sections(self, prefix: str) -> list[FakePrefixSection]:
+        return [
+            FakePrefixSection(name)
+            for name in self._sections
+            if name.startswith(prefix)
+        ]
 
 
 def as_config(fake: FakeKlipperConfig) -> ConfigWrapper:

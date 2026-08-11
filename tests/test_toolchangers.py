@@ -163,6 +163,7 @@ def _tool_config(
     **options: Any,
 ) -> ToolAlignConfig:
     main_config = main or _main()
+    sections = getattr(main_config, "_sections", {})
     cf = configfile or _Configfile(main_config)
     g = gcode or FakeGcode()
     if with_save_variables is None:
@@ -178,6 +179,7 @@ def _tool_config(
         as_config(
             FakeKlipperConfig(
                 get_printer=get_printer,
+                sections=sections,
                 **options,
             )
         )
@@ -312,6 +314,7 @@ def test_indx_hydrates_save_variables():
         as_config(
             FakeKlipperConfig(
                 get_printer=get_printer,
+                sections={_TOOL_POSITIONS: {"variable_tool_count": 2}},
                 toolchanger_type="indx",
             )
         )
