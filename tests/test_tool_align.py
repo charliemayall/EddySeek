@@ -155,39 +155,37 @@ def test_move_to_seek_start_pos_uses_current_xy():
     assert toolhead.moves == []
 
 
-class _ConfigfileMain:
-    def has_section(self, section: str) -> bool:
-        return False
-
-    def get_prefix_sections(self, prefix: str) -> list:
-        return []
-
-
-class _Configfile:
-    def read_main_config(self) -> _ConfigfileMain:
-        return _ConfigfileMain()
-
-
-class _ConfigfilePrinter:
-    def lookup_object(self, name: str):
-        if name == "configfile":
-            return _Configfile()
-        raise KeyError(name)
-
-
 def test_sensor_z_is_optional():
-    def configfile_printer():
-        return _ConfigfilePrinter()
-
-    cfg = tool_align_from_config(
-        as_config(FakeKlipperConfig(get_printer=configfile_printer))
-    )
+    cfg = tool_align_from_config(as_config(FakeKlipperConfig(get_printer=FakePrinter)))
     assert cfg.sensor_z is None
 
     cfg = tool_align_from_config(
-        as_config(FakeKlipperConfig(sensor_z=5.0, get_printer=configfile_printer))
+        as_config(FakeKlipperConfig(sensor_z=5.0, get_printer=FakePrinter))
     )
     assert cfg.sensor_z == 5.0
+
+
+def test_read_config_context_reuses_section_wrapper():
+    """Kit init must not call read_main_config (wipes Klipper access tracking)."""
+    from eddy_seek.tools.bootstrap import read_config_context
+
+    class _BoomConfigfile:
+        def read_main_config(self):
+            raise AssertionError("read_main_config must not run during kit init")
+
+    class _Printer:
+        def lookup_object(self, name: str):
+            if name == "configfile":
+                return _BoomConfigfile()
+            raise KeyError(name)
+
+    printer_obj = _Printer()
+    fake = FakeKlipperConfig(get_printer=lambda: printer_obj)
+    config = as_config(fake)
+    sensor_z, printer, main_config = read_config_context(config)
+    assert sensor_z is None
+    assert main_config is config
+    assert printer is printer_obj
 
 
 def test_align_tool0_seeks_from_current_xy():
@@ -373,6 +371,7 @@ def test_align_tool_number_averages_repeats(
     assert error is None
     assert tool is not None
     if expect_center is not None:
+        assert got_center is not None
         assert got_center.x == pytest.approx(expect_center.x)
         assert got_center.y == pytest.approx(expect_center.y)
     if expect_tool_offset is not None:

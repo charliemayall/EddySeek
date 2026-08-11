@@ -26,10 +26,16 @@ logger = logging.getLogger(__name__)
 def read_config_context(
     config: ConfigWrapper,
 ) -> tuple[float | None, Printer, ConfigWrapper]:
+    """Parse shared kit fields from the live ``[eddy_seek]`` wrapper.
+
+    Use ``config`` itself for cross-section lookups (tool autosave, ``[indx]``,
+    …). Do **not** call ``configfile.read_main_config()`` here - that resets
+    Klipper access tracking mid-load and makes earlier options look unused
+    (e.g. ``virtual_sdcard.path``).
+    """
     sensor_z = ToolAlignConfig.parse_sensor_z_config(config)
     printer = config.get_printer()
-    main_config = printer.lookup_object("configfile").read_main_config()
-    return sensor_z, printer, main_config
+    return sensor_z, printer, config
 
 
 def detect_toolchanger_types(
