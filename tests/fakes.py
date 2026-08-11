@@ -187,6 +187,12 @@ class FakeKlipperConfig:
             return default
         return str(self._options[key]).lower() in ("true", "1", "yes", "on")
 
+    def has_section(self, section: str) -> bool:
+        return False
+
+    def get_prefix_sections(self, prefix: str) -> list:
+        return []
+
 
 def as_config(fake: FakeKlipperConfig) -> ConfigWrapper:
     return cast("ConfigWrapper", fake)

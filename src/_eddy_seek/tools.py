@@ -114,9 +114,11 @@ class ToolAlignConfig:
         self.sensor_z = (
             config.getfloat("sensor_z") if sensor_z_raw is not None else None
         )
-        main_config = self._configfile.read_main_config()
+        # Use the live [eddy_seek] ConfigWrapper for sibling sections.
+        # Do not call read_main_config() here - it resets Klipper access
+        # tracking mid-load (e.g. virtual_sdcard.path looks unused).
         self.tools = [
-            self._load_tool_or_default(main_config, tool_number)
+            self._load_tool_or_default(config, tool_number)
             for tool_number in range(self.tool_count)
         ]
         sensor_z_text = f"{self.sensor_z:.4f}" if self.sensor_z is not None else "unset"
