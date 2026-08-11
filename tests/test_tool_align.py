@@ -156,9 +156,7 @@ def test_move_to_seek_start_pos_uses_current_xy():
 
 
 def test_sensor_z_is_optional():
-    cfg = tool_align_from_config(
-        as_config(FakeKlipperConfig(get_printer=FakePrinter))
-    )
+    cfg = tool_align_from_config(as_config(FakeKlipperConfig(get_printer=FakePrinter)))
     assert cfg.sensor_z is None
 
     cfg = tool_align_from_config(
@@ -373,6 +371,7 @@ def test_align_tool_number_averages_repeats(
     assert error is None
     assert tool is not None
     if expect_center is not None:
+        assert got_center is not None
         assert got_center.x == pytest.approx(expect_center.x)
         assert got_center.y == pytest.approx(expect_center.y)
     if expect_tool_offset is not None:

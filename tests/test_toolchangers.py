@@ -292,7 +292,10 @@ def test_apply_offset_errors_when_unsupported():
             )()
 
     with raises(CommandError, match="not used for this toolchanger kit"):
-        EddySeek.cmd_EDDY_SEEK_APPLY_OFFSET(_Host(), FakeGcmd())
+        EddySeek.cmd_EDDY_SEEK_APPLY_OFFSET(
+            _Host(),  # ty: ignore[invalid-argument-type]
+            FakeGcmd(),
+        )
 
 
 def test_indx_hydrates_save_variables():
@@ -487,5 +490,8 @@ def test_eddy_seek_status_dumps_get_status():
         def refresh_console(self, gcmd: FakeGcmd) -> _Console:
             return _Console()
 
-    EddySeek.cmd_EDDY_SEEK_STATUS(_Host(), FakeGcmd())
+    EddySeek.cmd_EDDY_SEEK_STATUS(
+        _Host(),  # ty: ignore[invalid-argument-type]
+        FakeGcmd(),
+    )
     assert captured == [pformat(_Host().get_status(0))]

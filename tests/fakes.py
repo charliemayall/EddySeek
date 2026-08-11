@@ -33,7 +33,7 @@ class CommandError(Exception):
 
 
 if TYPE_CHECKING:
-    from klippy.extras.configfile import ConfigWrapper
+    from klippy.configfile import ConfigWrapper
     from klippy.gcode import CommandError as KlipperCommandError
     from klippy.gcode import GCodeCommand, GCodeDispatch
     from klippy.klippy import Printer
@@ -81,8 +81,8 @@ class FakeGcmd(_GCodeCommandBase):
     def respond_raw(self, msg: str) -> None:
         self.raw.append(msg)
 
-    def ack(self, msg: str | None = None) -> bool:
-        return True
+    def ack(self, msg: str | None = None) -> None:
+        return
 
     def get(
         self,
@@ -136,15 +136,11 @@ class FakeGcode(_GCodeDispatchBase):
     def register_command(
         self,
         cmd: str,
-        func: Callable[..., object] | None,
+        func: Callable[[GCodeCommand], None],
         when_not_ready: bool = False,
         desc: str | None = None,
-    ) -> Callable[..., object] | None:
-        if func is not None:
-            self._commands.add(cmd)
-        else:
-            self._commands.discard(cmd)
-        return func
+    ) -> None:
+        self._commands.add(cmd)
 
     def run_script_from_command(self, script: str) -> None:
         self.scripts.append(script)
