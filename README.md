@@ -13,28 +13,16 @@ EddySeek reads an LDC1612 coil, runs XY search routines, and measures per-tool X
 > proven across many machines. Validate alignment results on your own hardware
 > before relying on them, and keep an eye on the toolhead during the first runs.
 
-## Toolchanger kits
-
-- **Generic** (default) - `T0`/`T1` macros, `[es_Tn]` offsets, wire `EDDY_SEEK_APPLY_OFFSET` yourself
-- **Bondtech INDX** - near drop-in; set `toolchanger_type: indx` (or pick it at install)
-
-Install prompts for a starter template (`generic` or `indx`).
-
-## Getting Started
+## Quick start
 
 ```bash
 cd ~
 git clone https://github.com/charliemayall/EddySeek.git
 cd EddySeek
 ./install.sh
-
 ```
 
-You will be prompted with a few questions to help you get set up quickly.
-
-Then, see the [User Guide](docs/USER_GUIDE.md) for configuration and usage.
-
-Optional: Add to `moonraker.conf` for update-manager support
+Add to `moonraker.conf` for update-manager support:
 
 ```ini
 [update_manager eddy_seek]
@@ -48,6 +36,13 @@ is_system_service: False
 post_update_script: install.sh
 ```
 
+Add `[eddy_seek]` to `printer.cfg` (I2C settings plus `sensor_x` / `sensor_y` - see the [User Guide](docs/USER_GUIDE.md)). Speed settings (`jog_speed`, `sweep_coarse_speed`, `sweep_fine_speed`) are in **mm/s**. Then `FIRMWARE_RESTART`, and:
+
+```gcode
+EDDY_SEEK_QUERY
+EDDY_SEEK_START
+```
+
 ## Full Documentation
 
 **[User Guide](docs/USER_GUIDE.md)** - install, configuration, G-code reference,
@@ -57,7 +52,7 @@ toolchanger alignment workflow, strategies, Moonraker fields, and troubleshootin
 
 - Klipper / Kalico
 - LDC1612 eddy-current sensor (dedicated probe for nozzle alignment)
-- Tool-load G-code macros for each tool (e.g. `T0`, `T1`, …) - EddySeek does not load tools for you
+- Tool-load G-code macros for each tool (e.g. `T0`, `T1`, …)
 
 ## Development
 
