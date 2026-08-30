@@ -90,14 +90,21 @@ def _indx_tool_count(main_config: ConfigWrapper) -> int:
     )
 
 
-def _save_variable_dict(printer: Printer) -> dict[str, Any]:
-    """Return ``save_variables.allVariables`` (INDX requires the module)."""
-    try:
-        sv = printer.lookup_object("save_variables")
-    except Exception as exc:
+def _save_variable_dict(
+    printer: Printer, config: ConfigWrapper, main_config: ConfigWrapper
+) -> dict[str, Any]:
+    """Return ``save_variables.allVariables`` (INDX requires the module).
+
+    Klipper instantiates extras in config-section order, so ``lookup_object``
+    fails if ``[include eddy_seek.cfg]`` appears before ``[save_variables]``.
+    ``load_object`` instantiates the already-parsed section regardless of
+    include order.
+    """
+    if not main_config.has_section("save_variables"):
         raise ValueError(
             "eddy_seek: toolchanger_type=indx requires [save_variables] in printer config"
-        ) from exc
+        )
+    sv = printer.load_object(config, "save_variables")
     vars_ = getattr(sv, "allVariables", None)
     return dict(vars_) if vars_ else {}
 
@@ -140,7 +147,7 @@ class IndxToolAlignConfig(ToolAlignConfig):
         types = toolchanger_types()
         run_detection("indx", main_config, types, DETECTION_ORDER)
 
-        saved = _save_variable_dict(printer)
+        saved = _save_variable_dict(printer, config, main_config)
         try:
             tools = [cls._load_tool_or_default(saved, n) for n in range(tool_count)]
         except ValueError as exc:

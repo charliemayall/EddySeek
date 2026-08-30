@@ -97,7 +97,7 @@ Optional LDC1612 tuning keys (`frequency`, `max_sensor_hz`, `reg_drive_current`,
 ### Bondtech INDX (`toolchanger_type: indx`)
 
 1. Install Bondtech INDX macros per their docs (see [Bondtech INDX](https://github.com/BondtechAB/INDX))
-2. In `printer.cfg`, include your `eddy_seek.cfg` file **after** your INDX macro files.
+2. In `printer.cfg`, include your `eddy_seek.cfg` file **after** your INDX macro files. `[save_variables]` can appear anywhere in the config - EddySeek loads it on demand.
 3. Configure your `[eddy_seek]` section with I2C settings, optional `sensor_z`, and `toolchanger_type: indx`.
 4. Do **not** set `tool_prefix`.
 5. `FIRMWARE_RESTART`

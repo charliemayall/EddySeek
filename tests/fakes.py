@@ -311,6 +311,9 @@ class FakePrinter(_PrinterBase):
             return default
         raise KeyError(name)
 
+    def load_object(self, config: Any, section: str, default: Any = _MISSING) -> Any:
+        return self.lookup_object(section, default)
+
     def lookup_objects(self, module: str | None = None) -> list[tuple[str, object]]:
         return list(self._objects.items())
 

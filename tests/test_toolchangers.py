@@ -168,6 +168,10 @@ def _tool_config(
     g = gcode or FakeGcode()
     if with_save_variables is None:
         with_save_variables = options.get("toolchanger_type") == "indx"
+    if with_save_variables:
+        sections = getattr(main_config, "_sections", None)
+        if isinstance(sections, dict) and "save_variables" not in sections:
+            sections["save_variables"] = {"filename": "variables.cfg"}
 
     def get_printer():
         objects: dict[str, Any] = {"gcode": g, "configfile": cf}
@@ -299,7 +303,12 @@ def test_apply_offset_errors_when_unsupported():
 
 
 def test_indx_hydrates_save_variables():
-    main = _main({_TOOL_POSITIONS: {"variable_tool_count": 2}})
+    main = _main(
+        {
+            _TOOL_POSITIONS: {"variable_tool_count": 2},
+            "save_variables": {"filename": "variables.cfg"},
+        }
+    )
 
     class _SaveVars:
         allVariables: ClassVar[dict[str, float]] = {
@@ -338,6 +347,46 @@ def test_indx_requires_save_variables_module():
     main = _main({_TOOL_POSITIONS: {"variable_tool_count": 2}})
     with raises(ValueError, match=r"requires \[save_variables\]"):
         _tool_config(main=main, toolchanger_type="indx", with_save_variables=False)
+
+
+def test_indx_loads_save_variables_before_extra_is_registered():
+    """[include eddy_seek.cfg] before [save_variables]: section exists, extra not yet init."""
+    main = _main(
+        {
+            _TOOL_POSITIONS: {"variable_tool_count": 2},
+            "save_variables": {"filename": "variables.cfg"},
+        }
+    )
+
+    class _SaveVars:
+        allVariables: ClassVar[dict[str, float]] = {
+            "t1_offset_x": 0.25,
+            "t1_offset_y": -0.5,
+        }
+
+    class _LatePrinter(FakePrinter):
+        def load_object(self, config: Any, section: str, default: Any = None) -> Any:
+            if section == "save_variables":
+                return _SaveVars()
+            raise KeyError(section)
+
+    g = FakeGcode()
+    cf = _Configfile(main)
+
+    def get_printer():
+        return _LatePrinter(gcode=g, configfile=cf)
+
+    cfg = tool_align_from_config(
+        as_config(
+            FakeKlipperConfig(
+                get_printer=get_printer,
+                toolchanger_type="indx",
+            )
+        )
+    )
+    assert cfg.tools[0].is_calibrated is False
+    assert cfg.tools[1].is_calibrated is True
+    assert cfg.tools[1].offset == Offset(0.25, -0.5)
 
 
 def test_indx_persist_hint():
