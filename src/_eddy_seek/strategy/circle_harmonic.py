@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import math
+from dataclasses import replace
 
 from ..common import Offset, Phase
 from ..harmonic import (
@@ -25,10 +26,16 @@ from ..harmonic import (
 from ..kconsole import KConsole
 from ..movement.handler import MotionSample
 from ..movement.paths import circle_arc_legs, circle_in_jog_box, circle_lead_in_legs
-from ..movement.sweep import MotionCapture, SweepSettings, axis_sweep_centroid
+from ..movement.sweep import (
+    MotionCapture,
+    SweepSettings,
+    _require_min_sweep_samples,
+    axis_sweep_centroid,
+)
+from ..plotting.artifacts import finalize_strategy_plot
 from ..plotting.primitives import CircleHarmonicPassRecord, PassMove, XYCloud
 from ..session import SeekSession
-from .base import InsufficientSamplesError, MaxPassesError, SeekStrategy
+from .base import MaxPassesError, SeekStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +60,9 @@ class CircleHarmonicStrategy(SeekStrategy):
             f"circle={cfg.circle_speed / 60.0:.2f} mm/s "
             f"r={cfg.circle_radius_start:.3f}->{cfg.circle_radius_min:.3f}"
         )
+
+    def on_session_end(self, ctx: SeekSession) -> str | None:
+        return finalize_strategy_plot(ctx, self.name)
 
     def search(self, ctx: SeekSession, console: KConsole) -> tuple[Offset, int]:
         cfg = ctx.config
@@ -113,12 +123,12 @@ class CircleHarmonicStrategy(SeekStrategy):
             f"eddy_seek: circle_harmonic pass {pass_num} ({kind}) "
             f"moved=({moved.x:.4f}, {moved.y:.4f})"
         )
-        return f"Pass {pass_num} ({kind}): {new.to_console_str()}"
+        return f"Pass {pass_num} ({kind}): {new.to_delta_str()}"
 
     def _bootstrap(self, ctx: SeekSession, pass_num: int, best: Offset) -> Offset:
         cfg = ctx.config
         capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
-        settings = SweepSettings.from_config(cfg, coarse_cross_passes=1)
+        settings = replace(SweepSettings.from_config(cfg), cross_passes=1)
         sweep = axis_sweep_centroid(
             capture,
             settings,
@@ -162,9 +172,7 @@ class CircleHarmonicStrategy(SeekStrategy):
         radius: float,
     ) -> tuple[Offset, bool, Offset]:
         cfg = ctx.config
-        center, trace_r = circle_in_jog_box(
-            best, radius, cfg.max_jog_x, cfg.max_jog_y
-        )
+        center, trace_r = circle_in_jog_box(best, radius, cfg.max_jog_x, cfg.max_jog_y)
         if trace_r <= 0.0:
             logger.warning("eddy_seek: circle radius collapsed inside jog box")
             _record_pass(
@@ -180,26 +188,20 @@ class CircleHarmonicStrategy(SeekStrategy):
             )
             return best, False, Offset.zero()
 
-        legs = circle_arc_legs(center, trace_r, cfg.circle_arc_resolution)
+        orbit = circle_arc_legs(center, trace_r, cfg.circle_arc_resolution)
         capture = MotionCapture(ctx.motion, ctx.session_start, ctx.sync_offset)
         samples = capture.run(
-            legs,
+            [*circle_lead_in_legs(orbit, _LEAD_IN), *orbit],
             cfg.circle_speed,
-            lead_in_legs=circle_lead_in_legs(legs, _LEAD_IN),
             min_samples=cfg.min_sweep_samples,
             span_mm=2.0 * math.pi * trace_r,
         )
-        if len(samples) < cfg.min_sweep_samples:
-            raise InsufficientSamplesError(
-                self.name,
-                count=len(samples),
-                min_samples=cfg.min_sweep_samples,
-            )
+        _require_min_sweep_samples(
+            len(samples), cfg.min_sweep_samples, label="circle_harmonic"
+        )
 
         fit = fit_harmonics(samples, center)
-        quality = (
-            harmonic_fit_quality(fit, samples, center) if fit is not None else 0.0
-        )
+        quality = harmonic_fit_quality(fit, samples, center) if fit is not None else 0.0
         accepted = fit is not None and quality >= cfg.harmonic_min_quality
         step = Offset.zero()
         result = best

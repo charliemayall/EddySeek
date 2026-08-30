@@ -58,7 +58,7 @@ sensor_type: ldc1612
 i2c_address: 42
 i2c_mcu: mcu
 i2c_bus: i2c1
-sensor_x: 150.0   # machine XY of coil - rough is fine
+sensor_x: 150.0   # optional - machine XY of coil; omit to seek from current XY
 sensor_y: 150.0
 ```
 
@@ -66,7 +66,7 @@ Optional LDC1612 tuning keys (`frequency`, `max_sensor_hz`, `reg_drive_current`,
 
 ## Minimal calibration workflow
 
-1. Add `[eddy_seek]` with I2C settings and `sensor_x` / `sensor_y` (doesn't have to be absolutely accurate).
+1. Add `[eddy_seek]` with I2C settings. `sensor_x` / `sensor_y` are optional.
 2. `FIRMWARE_RESTART`
 3. `EDDY_SEEK_QUERY` - confirm samples increment.
 4. Load tool 0, park at probe height above the sensor (EddySeek does not move Z).
@@ -91,7 +91,7 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | `tool_count`              | `1`                                       | Number of tools                                                                        |
 | `tool_prefix`             | `es_T`                                    | Prefix for saved offset sections (`es_T1`, …)                                          |
 | `load_tool_macro_prefix`  | `T`                                       | Prefix for load macros (`T0`, `T1`, …)                                                 |
-| `sensor_x` / `sensor_y`   | _(required)_                              | Machine XY of sensor coil; tool 0 jogs here before seeking                             |
+| `sensor_x` / `sensor_y`   | _(optional)_                              | Machine XY of sensor coil; tool 0 jogs here before seeking. Omit to seek from current XY |
 | `max_jog_x` / `max_jog_y` | `2.5`                                     | Max search radius from start (mm)                                                      |
 | `tolerance`               | `0.05`                                    | Stop when both axes move less than this (mm)                                           |
 | `dwell_time`              | `0.5`                                     | Seconds at each probe point (grid strategies only)                                     |
@@ -202,8 +202,8 @@ Finds the sensor centre from current XY position - for debugging or repeatabilit
 
 **Tool 0** establishes the reference centre. **Other tools** seek at that centre; the offset is Tool n → Tool 0.
 
-- Set `sensor_x`/`sensor_y` near the coil; tool 0 jogs there automatically.
-- The seek refines within `max_jog` - You will get a warning and suggested change if your sensor position is borderline wrong.
+- Set `sensor_x`/`sensor_y` near the coil to auto-jog tool 0 there. Omit them to seek from the current XY.
+- The seek refines within `max_jog` - You will get a warning and suggested change if a configured sensor position is borderline wrong.
 - **Z is not changed** - park at probe height first.
 
 **One tool:** load each tool, then `EDDY_SEEK_TOOL TOOL=n`. Run `SAVE_CONFIG` after each.

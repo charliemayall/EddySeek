@@ -42,7 +42,7 @@ is_system_service: False
 post_update_script: install.sh
 ```
 
-Add `[eddy_seek]` to `printer.cfg` (I2C settings plus `sensor_x` / `sensor_y` - see the [User Guide](docs/USER_GUIDE.md)). Speed settings (`jog_speed`, `sweep_coarse_speed`, `sweep_fine_speed`) are in **mm/s**. Then `FIRMWARE_RESTART`, and:
+Add `[eddy_seek]` to `printer.cfg` (I2C settings; `sensor_x` / `sensor_y` are optional - see the [User Guide](docs/USER_GUIDE.md)). Speed settings (`jog_speed`, `sweep_coarse_speed`, `sweep_fine_speed`) are in **mm/s**. Then `FIRMWARE_RESTART`, and:
 
 ```gcode
 EDDY_SEEK_QUERY

@@ -29,6 +29,12 @@ def _prefix_and_num_to_section(prefix: str, tool_number: int) -> str:
     return f"{prefix}{tool_number}"
 
 
+def _optional_float(config: ConfigWrapper, key: str) -> float | None:
+    if config.get(key, None) is None:
+        return None
+    return config.getfloat(key)
+
+
 @dataclass
 class Tool:
     tool_number: int
@@ -113,21 +119,32 @@ class ToolAlignConfig:
         self.tool_count = config.getint("tool_count", 1, minval=1)
         self.tool_prefix = config.get("tool_prefix", "es_T")
         self.load_tool_macro = config.get("load_tool_macro_prefix", "T")
-        self.sensor_x = config.getfloat("sensor_x")
-        self.sensor_y = config.getfloat("sensor_y")
+        self.sensor_x = _optional_float(config, "sensor_x")
+        self.sensor_y = _optional_float(config, "sensor_y")
+        if (self.sensor_x is None) != (self.sensor_y is None):
+            missing = "sensor_y" if self.sensor_x is not None else "sensor_x"
+            raise config.error(
+                f"{missing} must be specified together with sensor_x and sensor_y"
+            )
         main_config = self._configfile().read_main_config()
         self.tools = [
             self._load_tool_or_default(main_config, tool_number)
             for tool_number in range(self.tool_count)
         ]
+        if self.sensor_x is None or self.sensor_y is None:
+            sensor_text = "unset"
+        else:
+            sensor_text = f"({self.sensor_x:.4f}, {self.sensor_y:.4f})"
         logger.info(
             f"eddy_seek: tools config tool_count={self.tool_count} "
-            f"sensor=({self.sensor_x:.4f}, {self.sensor_y:.4f}) "
+            f"sensor={sensor_text} "
             f"prefix={self.tool_prefix!r} load_macro={self.load_tool_macro!r}"
         )
 
-    def sensor_position(self) -> Position:
-        """Configured tool-0 start XY (sensor coil location)."""
+    def sensor_position(self) -> Position | None:
+        """Configured tool-0 start XY, or None if sensor_x/y are unset."""
+        if self.sensor_x is None or self.sensor_y is None:
+            return None
         return Position(self.sensor_x, self.sensor_y)
 
     def section_name(self, tool_number: int) -> str:

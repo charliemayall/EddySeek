@@ -44,6 +44,8 @@ def _warn_sensor_position_if_needed(
     *,
     console: KConsole,
 ) -> None:
+    if tools.sensor_x is None or tools.sensor_y is None:
+        return
     abs_offset = seek_offset.abs_components()
     if max(abs_offset.x, abs_offset.y) <= _TARGET_SENSOR_OFFSET_FROM_REF:
         return
@@ -65,10 +67,14 @@ def move_to_seek_start_pos(
     """
     Decide where tool 0's seek begins.
 
-    Tool 0 starts at the configured sensor coil XY so unattended
+    Tool 0 jogs to the configured sensor coil XY when set, so unattended
     ``EDDY_SEEK_TOOLS`` does not rely on the caller's current position.
+    With sensor_x/y omitted, seek starts at the current XY.
     """
     sensor = tools.sensor_position()
+    if sensor is None:
+        logger.info("eddy_seek: sensor_x/sensor_y unset; seeking from current XY")
+        return Position.from_toolhead(host.printer)
     logger.info(f"eddy_seek: moving tool 0 to sensor position {sensor.to_gcode()}")
     toolhead = host.printer.lookup_object("toolhead")
     move_to_xy(toolhead, sensor, host.seek_config.jog_speed, wait=True)

@@ -14,9 +14,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Self, overload
+from typing import TYPE_CHECKING, overload
 
 if TYPE_CHECKING:
+    from typing import Self
+
     from klippy.klippy import Printer
 
     from _eddy_seek.movement.handler import MotionSample

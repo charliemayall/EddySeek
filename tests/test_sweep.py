@@ -9,7 +9,7 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 from unittest.mock import MagicMock, patch
 
 from fakes import fake_motion_printer
-from pytest import raises
+from pytest import approx, raises
 
 from _eddy_seek.common import Axis, Offset, Phase, Position, samples_in_box, search_box
 from _eddy_seek.config import SeekConfig
@@ -329,8 +329,8 @@ def test_axis_sweep_centroid_builds_profiles_and_centroid():
     assert len(result.x_profile) == len(samples_x)
     assert len(result.y_profile) == len(samples_y)
     assert result.centroid is not None
-    assert result.centroid.x == 0.0
-    assert result.centroid.y == 0.0
+    assert result.centroid.x == approx(0.0, abs=1e-12)
+    assert result.centroid.y == approx(0.0, abs=1e-12)
 
 
 def test_axis_sweep_centroid_raises_when_too_few_samples():

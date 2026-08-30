@@ -105,12 +105,12 @@ def _console(gcmd: FakeGcmd | None = None) -> KConsole:
 class _SensorTools:
     tool_count = 1
 
-    def __init__(self, sensor_position: Position) -> None:
+    def __init__(self, sensor_position: Position | None) -> None:
         self._sensor_position = sensor_position
-        self.sensor_x = sensor_position.x
-        self.sensor_y = sensor_position.y
+        self.sensor_x = None if sensor_position is None else sensor_position.x
+        self.sensor_y = None if sensor_position is None else sensor_position.y
 
-    def sensor_position(self) -> Position:
+    def sensor_position(self) -> Position | None:
         return self._sensor_position
 
     def get_tool(self, tool_number: int) -> Tool:
@@ -137,6 +137,17 @@ def test_move_to_seek_start_pos_moves_to_sensor_position():
     assert toolhead.moves == [[10.0, 20.0]]
 
 
+def test_move_to_seek_start_pos_stays_when_sensor_unset():
+    toolhead = RecordingToolhead(start=(1.0, 2.0))
+    host = _FakeSeekHost(FakePrinter(toolhead=toolhead))  # type: ignore[arg-type]
+    start = move_to_seek_start_pos(
+        host,  # type: ignore[arg-type]
+        _SensorTools(None),  # type: ignore[arg-type]
+    )
+    assert start == Position(1.0, 2.0)
+    assert toolhead.moves == []
+
+
 class _ConfigfileMain:
     def has_section(self, section: str) -> bool:
         return False
@@ -154,12 +165,14 @@ class _ConfigfilePrinter:
         raise KeyError(name)
 
 
-def test_sensor_position_is_required():
+def test_sensor_position_is_optional():
     def configfile_printer():
         return _ConfigfilePrinter()
 
-    with raises(ValueError, match="sensor_x"):
-        ToolAlignConfig(FakeKlipperConfig(get_printer=configfile_printer))  # type: ignore[arg-type]
+    cfg = ToolAlignConfig(FakeKlipperConfig(get_printer=configfile_printer))  # type: ignore[arg-type]
+    assert cfg.sensor_x is None
+    assert cfg.sensor_y is None
+    assert cfg.sensor_position() is None
 
     with raises(ValueError, match="sensor_y"):
         ToolAlignConfig(
@@ -383,6 +396,28 @@ def test_align_tool0_no_sensor_warning_when_offset_within_threshold():
     with patch(
         "_eddy_seek.tool_align.align_tool",
         return_value=ok_seek_result(offset=small_offset),
+    ):
+        _, _, error = align_tool_number(
+            host,  # type: ignore[arg-type]
+            tools,  # type: ignore[arg-type]
+            gcmd,
+            0,
+            None,
+            console=_console(gcmd),
+        )
+
+    assert error is None
+    assert not any("sensor_x" in line for line in gcmd.raw)
+
+
+def test_align_tool0_no_sensor_warning_when_sensor_unset():
+    tools = _SensorTools(None)
+    host = _FakeSeekHost(FakePrinter(toolhead=RecordingToolhead()))  # type: ignore[arg-type]
+    gcmd = FakeGcmd()
+
+    with patch(
+        "_eddy_seek.tool_align.align_tool",
+        return_value=ok_seek_result(offset=Offset(1.5, 0.0)),
     ):
         _, _, error = align_tool_number(
             host,  # type: ignore[arg-type]

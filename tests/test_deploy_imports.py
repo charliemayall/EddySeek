@@ -109,4 +109,4 @@ def test_eddy_seek_relative_imports_after_install(klippy_extras):
     assert importlib.import_module("extras._eddy_seek.config") is not None
     assert importlib.import_module("extras._eddy_seek.tool_align") is not None
     assert importlib.import_module("extras._eddy_seek.strategy") is not None
-    assert importlib.import_module("extras._eddy_seek.movement.leg_planner") is not None
+    assert importlib.import_module("extras._eddy_seek.movement.sweep") is not None
