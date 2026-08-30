@@ -17,7 +17,6 @@ from fakes import PLOT_HTML_SUFFIX, PLOT_RUN_DIR, PLOT_WRITE_AT
 
 from _eddy_seek.common import Offset, Phase
 from _eddy_seek.config import SeekConfig
-from _eddy_seek.harmonic import HarmonicFit
 from _eddy_seek.movement.handler import MotionSample
 from _eddy_seek.optimizer import bin_frequencies
 from _eddy_seek.plotting import (
@@ -30,9 +29,7 @@ from _eddy_seek.plotting.accuracy import write_accuracy_plot
 from _eddy_seek.plotting.debug_scan import render_debug_scan_figure
 from _eddy_seek.plotting.primitives import (
     AccuracyRepeatRecord,
-    BinnedProfile,
     Bounds,
-    CircleBootstrapRecord,
     CircleHarmonicPassRecord,
     HeatmapRecord,
     PassMove,
@@ -247,6 +244,47 @@ def test_sweep_centroid_plot_writes_session_html(requires_plotly, plot_tmp):
     assert Path(path).is_file()
     assert path.endswith(PLOT_HTML_SUFFIX)
     assert recorder.pass_count() == 2
+
+
+def test_circle_harmonic_plot_writes_session_html(requires_plotly, plot_tmp):
+    samples = XYCloud.from_samples(
+        [
+            MotionSample(Offset(0.8, 0.0), 100.0, 0.0),
+            MotionSample(Offset(0.0, 0.8), 90.0, 0.0),
+            MotionSample(Offset(-0.8, 0.0), 100.0, 0.0),
+            MotionSample(Offset(0.0, -0.8), 90.0, 0.0),
+        ]
+    )
+    record = CircleHarmonicPassRecord(
+        pass_num=2,
+        kind="circle",
+        move=PassMove.compute(Offset.zero(), Offset(0.1, 0.0)),
+        samples=samples,
+        radius=0.8,
+        binned=((0.0, 100.0), (1.57, 90.0), (3.14, 100.0), (4.71, 90.0)),
+        amp1=5.0,
+        amp2=8.0,
+        quality=0.97,
+        accepted=True,
+        c0=95.0,
+        a=5.0,
+        b=0.0,
+        c2=8.0,
+        d2=0.0,
+    )
+    tmp_path, _, write_at = plot_tmp
+    path = write_figure(
+        tmp_path,
+        render_session_plot("circle_harmonic", [record], search_for="max"),
+        write_at=write_at,
+    )
+    assert path is not None
+    assert Path(path).is_file()
+    fig = render_session_plot("circle_harmonic", [record], search_for="max")
+    assert fig is not None
+    assert fig.layout.meta["eddy_chart"] == "wide"
+    header = fig.layout.meta["eddy_header"]
+    assert "Circle harmonic" in header["title"]
 
 
 def test_sweep_centroid_plot_has_square_layout(requires_plotly):
@@ -490,93 +528,6 @@ def test_render_returns_none_without_plotly(tmp_path):
             render_session_plot("centroid", recorder.records(), search_for="max")
             is None
         )
-
-
-def test_circle_harmonic_plot_writes_session_html(requires_plotly, plot_tmp):
-    import math
-
-    samples = [
-        MotionSample(Offset(x, y), 10000.0 - 100.0 * (x * x + y * y), 0.0)
-        for x in (-1.0, 0.0, 1.0)
-        for y in (-1.0, 0.0, 1.0)
-    ]
-    circle_samples = [
-        MotionSample(
-            Offset(0.3 + math.cos(theta), 0.1 + math.sin(theta)),
-            10000.0 + 50.0 * math.cos(theta),
-            0.0,
-        )
-        for theta in [2.0 * math.pi * i / 36.0 for i in range(36)]
-    ]
-    binned = [
-        (2.0 * math.pi * i / 36.0, 10000.0 + 50.0 * math.cos(2.0 * math.pi * i / 36.0))
-        for i in range(36)
-    ]
-    records = (
-        CircleBootstrapRecord(
-            pass_num=1,
-            move=PassMove.compute(Offset.zero(), Offset(0.3, 0.1)),
-            samples=XYCloud(
-                tuple(s.offset.x for s in samples),
-                tuple(s.offset.y for s in samples),
-                tuple(s.freq for s in samples),
-            ),
-            bounds=Bounds.from_box((-1.0, 1.0, -1.0, 1.0)),
-        ),
-        CircleHarmonicPassRecord(
-            pass_num=2,
-            trace_center=Offset(0.3, 0.1),
-            radius=1.0,
-            move=PassMove.compute(Offset(0.3, 0.1), Offset(0.3, 0.1)),
-            samples=XYCloud(
-                tuple(s.offset.x for s in circle_samples),
-                tuple(s.offset.y for s in circle_samples),
-                tuple(s.freq for s in circle_samples),
-            ),
-            binned=BinnedProfile(
-                tuple(theta for theta, _ in binned),
-                tuple(freq for _, freq in binned),
-            ),
-            fit=HarmonicFit(10000.0, 50.0, 0.0, 50.0, 1.0, 36),
-            rejected=True,
-            reject_reasons="snr (amp=50.00 < 2×noise=2.00)",
-        ),
-    )
-    tmp_path, _, write_at = plot_tmp
-    path = write_figure(
-        tmp_path,
-        render_session_plot("circle_harmonic", records, search_for="max"),
-        write_at=write_at,
-    )
-    assert path is not None
-    assert Path(path).is_file()
-    assert path.endswith(PLOT_HTML_SUFFIX)
-
-
-def test_circle_harmonic_plot_has_wide_layout(requires_plotly):
-    records = (
-        CircleBootstrapRecord(
-            pass_num=1,
-            move=PassMove.compute(Offset.zero(), Offset(0.2, 0.0)),
-            samples=XYCloud((0.0,), (0.0,), (10000.0,)),
-            bounds=Bounds.from_box((-1.0, 1.0, -1.0, 1.0)),
-        ),
-        CircleHarmonicPassRecord(
-            pass_num=2,
-            trace_center=Offset(0.2, 0.0),
-            radius=0.5,
-            move=PassMove.compute(Offset(0.2, 0.0), Offset(0.2, 0.0)),
-            samples=XYCloud((0.2,), (0.5,), (10050.0,)),
-            binned=BinnedProfile((0.0, math.pi), (10050.0, 9950.0)),
-            fit=HarmonicFit(10000.0, 50.0, 0.0, 50.0, 1.0, 2),
-            rejected=False,
-        ),
-    )
-    fig = render_session_plot("circle_harmonic", records, search_for="max")
-    assert fig is not None
-    assert fig.layout.meta["eddy_chart"] == "wide"
-    header = fig.layout.meta["eddy_header"]
-    assert "Circle harmonic" in header["title"]
 
 
 def test_centroid_on_session_end_returns_plot_path(requires_plotly, tmp_path):

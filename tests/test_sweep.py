@@ -22,13 +22,17 @@ from _eddy_seek.movement.handler import (
     manual_move_xy,
     move_to_xy,
 )
-from _eddy_seek.movement.leg_planner import (
+from _eddy_seek.movement.paths import (
+    circle_arc_legs,
+    circle_lead_in_legs,
+    iter_cross_offsets,
+    traversal_endpoints,
+)
+from _eddy_seek.movement.sweep import (
     MotionCapture,
     SweepSettings,
     axis_sweep_centroid,
-    iter_cross_offsets,
     sweep_axis,
-    traversal_endpoints,
 )
 
 
@@ -49,6 +53,16 @@ def _capture(
 
 def test_iter_cross_offsets_three_passes():
     assert iter_cross_offsets(3, 0.3) == [0.0, 0.3, -0.3]
+
+
+def test_circle_arc_legs_full_revolution():
+    legs = circle_arc_legs(Offset(1.0, -0.5), 0.8, 0.1)
+    assert len(legs) >= 3
+    assert legs[0][0].distance_to(Offset(1.8, -0.5)) < 1e-9
+    assert legs[-1][1].distance_to(legs[0][0]) < 1e-9
+    lead = circle_lead_in_legs(legs, 0.25)
+    assert 3 <= len(lead) <= len(legs)
+    assert lead[-1][1].distance_to(legs[0][0]) < 1e-9
 
 
 def test_traversal_endpoints_plus():

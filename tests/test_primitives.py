@@ -9,12 +9,10 @@ This file may be distributed under the terms of the GNU GPLv3 license.
 import json
 
 from _eddy_seek.common import Offset
-from _eddy_seek.harmonic import HarmonicFit
 from _eddy_seek.movement.handler import MotionSample
 from _eddy_seek.plotting.primitives import (
     PASS_COLORS,
     AccuracyRepeatRecord,
-    BinnedProfile,
     Bounds,
     CentroidPassRecord,
     CircleHarmonicPassRecord,
@@ -50,18 +48,18 @@ def test_primitives_serialization():
     assert XYCloud.from_probes(probes, freqs=False) == XYCloud((1.0, 3.0), (2.0, 4.0))
 
     circle = CircleHarmonicPassRecord(
-        2,
-        Offset(0.1, 0.2),
-        1.0,
-        PassMove.compute(Offset(0.1, 0.2), Offset(0.2, 0.3)),
-        XYCloud((0.0,), (0.0,), (100.0,)),
-        BinnedProfile((0.0,), (100.0,)),
-        HarmonicFit(100.0, 1.0, 0.0, 1.0, 0.1, 1),
-        rejected=False,
+        pass_num=2,
+        kind="circle",
+        move=PassMove.compute(Offset(0.1, 0.2), Offset(0.2, 0.3)),
+        samples=XYCloud((0.0,), (0.0,), (100.0,)),
+        radius=1.0,
+        binned=((0.0, 100.0),),
+        amp1=1.0,
+        accepted=True,
     )
     trace = circle.to_trace_dict()
-    assert trace["type"] == "circle_pass"
-    assert trace["harmonic"]["amp"] == 1.0
+    assert trace["type"] == "circle_harmonic"
+    assert trace["amp1"] == 1.0
     assert "samples" not in trace
 
     sweep = SweepCentroidPassRecord(

@@ -97,7 +97,7 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 | `dwell_time`              | `0.5`                                     | Seconds at each probe point (grid strategies only)                                     |
 | `jog_speed`               | `80`                                      | Feedrate for search jogs (mm/s)                                                        |
 | `search_for`              | `max`                                     | `max` or `min` - which frequency extreme marks the nozzle centre, `max` for most users |
-| `strategy`                | `sweep_centroid`                          | `sweep_centroid`, `centroid`, `circle_harmonic`, or `debug_scan` (diag only)           |
+| `strategy`                | `sweep_centroid`                          | `sweep_centroid`, `centroid`, `circle_harmonic` (experimental), or `debug_scan` (diag only) |
 | `max_passes`              | `6`                                       | Search passes before giving up                                                         |
 | `save_session_trace`      | `False`                                   | Write probe JSON to `result_folder` (debug)                                            |
 | `save_plots`              | `False`                                   | Write HTML plots to `result_folder` (needs plotly)                                     |
@@ -118,18 +118,18 @@ After a Klipper restart, run tool 0 again before aligning other tools - or use `
 
 ### `[eddy_seek]` - `strategy: circle_harmonic` options
 
-| Option                  | Default | Description                                                       |
-| ----------------------- | ------- | ----------------------------------------------------------------- |
-| `circle_radius_start`   | `2`     | First circle radius (mm)                                          |
-| `circle_radius_min`     | `0.5`   | Smallest circle radius (mm)                                       |
-| `circle_shrink`         | `0.4`   | Radius multiplier when stepping down a tier after a rejected pass |
-| `circle_arc_resolution` | `0.1`   | Arc segment length along the circle (mm)                          |
-| `circle_speed`          | `10`    | Circle trace feedrate (mm/s)                                      |
-| `noise_k`               | `1`     | SNR threshold (amplitude vs noise) for model fit                  |
-| `harmonic_step_gain`    | `0.15`  | Fraction of fitted offset applied each pass                       |
-| `harmonic_min_quality`  | `0.5`   | Minimum fit quality to accept a pass                              |
-| `circle_refresh_sweeps` | `False` | Re-run axis sweeps each pass instead of reusing the bootstrap ones |
-| `circle_skip_bootstrap` | `False` | Skip the initial axis-sweep bootstrap and start circling right away |
+Experimental. Circular orbit after a coarse sweep bootstrap. Fits `f(θ) ≈ c0 + a·cosθ + b·sinθ + c·cos2θ + d·sin2θ` so a rectangular coil's 2θ aspect ratio is modeled, not treated as noise. The 1st harmonic is the offset; the 2nd is coil shape. Not the default.
+
+| Option                   | Default | Description                                                |
+| ------------------------ | ------- | ---------------------------------------------------------- |
+| `circle_radius_start`    | `0.8`   | First orbit radius (mm)                                    |
+| `circle_radius_min`      | `0.4`   | Last orbit radius (mm); must be `<= circle_radius_start`    |
+| `circle_arc_resolution`  | `0.1`   | Max chord length along the orbit (mm)                    |
+| `circle_speed`           | `10`    | Orbit feedrate (mm/s)                                     |
+| `harmonic_step_gain`     | `0.15`  | Fallback step as a fraction of radius when slope is missing |
+| `harmonic_min_quality`   | `0.5`   | Minimum 1st+2nd R² to accept a pass                         |
+
+Radius interpolates start → min across remaining passes. A rejected pass keeps the centre and shrinks; it does not count as convergence.
 
 > **max_jog** should be ≥ 2× your worst-case expected misalignment (per axis).Searches are unlikely to converge fully if the nozzle starts too far from the true centre.
 
@@ -244,11 +244,7 @@ Continuous axis sweeps (like Klipper's bed mesh `rapid_scan` method). Coarse bid
 
 ### Circle harmonic (`strategy: circle_harmonic`)
 
-Initial axis sweep, then circles at a fixed radius while passes are accepted. After a rejected pass the radius steps down by `circle_shrink`. Search stops at `circle_radius_min` when the correction is within tolerance, or immediately on reject at min radius. Does not stop on harmonic convergence alone at larger radii.
-
-Fastest strategy, and very accurate, but it can be **sensitive to larger initial misalignment** - `sensor_x`/`sensor_y` and `max_jog` must put the nozzle close to the true centre, and the misalignment of the nozzle itself must be small.
-
-Worth trying, but may need some tuning to make it reliable.
+Experimental. Coarse XY sweep bootstrap, then circular orbits. Fit includes the 2nd harmonic so a rectangular spiral (BTT Eddy Coil, longer in X) does not look like a bad 1st-harmonic fit. Stop when the 1st-harmonic correction is within `tolerance` at `circle_radius_min`.
 
 ### Debug scan (`strategy: debug_scan`)
 

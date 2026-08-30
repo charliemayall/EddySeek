@@ -101,13 +101,10 @@ class SeekConfig:
         default=20, metadata={"gcode": "MIN_SWEEP_SAMPLES", "min": 3}
     )
     circle_radius_start: float = field(
-        default=2.0, metadata={"gcode": "CIRCLE_RADIUS_START", "positive": True}
+        default=0.8, metadata={"gcode": "CIRCLE_RADIUS_START", "positive": True}
     )
     circle_radius_min: float = field(
-        default=0.5, metadata={"gcode": "CIRCLE_RADIUS_MIN", "positive": True}
-    )
-    circle_shrink: float = field(
-        default=0.4, metadata={"gcode": "CIRCLE_SHRINK", "positive": True}
+        default=0.4, metadata={"gcode": "CIRCLE_RADIUS_MIN", "positive": True}
     )
     circle_arc_resolution: float = field(
         default=0.1, metadata={"gcode": "CIRCLE_ARC_RESOLUTION", "positive": True}
@@ -116,20 +113,11 @@ class SeekConfig:
         default=10 * 60.0,
         metadata={"gcode": "CIRCLE_SPEED", "positive": True, "speed": True},
     )
-    noise_k: float = field(default=1.0, metadata={"gcode": "NOISE_K", "positive": True})
     harmonic_step_gain: float = field(
         default=0.15, metadata={"gcode": "HARMONIC_STEP_GAIN", "positive": True}
     )
     harmonic_min_quality: float = field(
         default=0.5, metadata={"gcode": "HARMONIC_MIN_QUALITY", "positive": True}
-    )
-    circle_refresh_sweeps: bool = field(
-        default=False,
-        metadata={"gcode": "CIRCLE_REFRESH_SWEEPS", "bool": True},
-    )
-    circle_skip_bootstrap: bool = field(
-        default=False,
-        metadata={"gcode": "CIRCLE_SKIP_BOOTSTRAP", "bool": True},
     )
     debug: bool = field(default=False, metadata={"bool": True})
 
@@ -313,7 +301,6 @@ def _validate(cfg: SeekConfig) -> None:
             )
         if meta.get("odd") and value % 2 == 0:
             raise ValueError(f"{spec.name} must be odd (got {value!r})")
-
     if cfg.circle_radius_min > cfg.circle_radius_start:
         raise ValueError(
             "circle_radius_min must be <= circle_radius_start "

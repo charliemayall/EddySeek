@@ -126,6 +126,7 @@ def test_load_seek_config_circle_harmonic_params():
             circle_radius_min="0.5",
             circle_speed="10",
             harmonic_step_gain="0.2",
+            harmonic_min_quality="0.6",
         )
     )
     assert cfg.strategy == "circle_harmonic"
@@ -133,26 +134,7 @@ def test_load_seek_config_circle_harmonic_params():
     assert cfg.circle_radius_min == 0.5
     assert cfg.circle_speed == 600.0
     assert cfg.harmonic_step_gain == 0.2
-
-
-def test_load_seek_config_circle_refresh_sweeps():
-    assert load_seek_config(FakeKlipperConfig()).circle_refresh_sweeps is False
-    assert (
-        load_seek_config(
-            FakeKlipperConfig(circle_refresh_sweeps="true")
-        ).circle_refresh_sweeps
-        is True
-    )
-
-
-def test_load_seek_config_circle_skip_bootstrap():
-    assert load_seek_config(FakeKlipperConfig()).circle_skip_bootstrap is False
-    assert (
-        load_seek_config(
-            FakeKlipperConfig(circle_skip_bootstrap="true")
-        ).circle_skip_bootstrap
-        is True
-    )
+    assert cfg.harmonic_min_quality == 0.6
 
 
 def test_load_seek_config_rejects_circle_radius_min_above_start():
