@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/media/logo.png" width="240" alt="EddySeek">
+</p>
+
 # EddySeek
 
 [![version](https://img.shields.io/badge/dynamic/toml?url=https://raw.githubusercontent.com/charliemayall/EddySeek/main/pyproject.toml&query=%24.project.version&label=version)](https://github.com/charliemayall/EddySeek)
