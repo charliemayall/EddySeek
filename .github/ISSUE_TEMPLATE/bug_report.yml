@@ -78,6 +78,6 @@ body:
     attributes:
       label: EddySeek version
       description: Run `git describe --tags` in the install path.
-      placeholder: e.g. v0.1.0-beta-1-gafceede
+      placeholder: e.g. v1.0.0
     validations:
       required: false

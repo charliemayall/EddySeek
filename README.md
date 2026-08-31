@@ -11,12 +11,6 @@
 
 EddySeek reads an LDC1612 coil, runs XY search routines, and measures per-tool XY offsets relative to a reference nozzle.
 
-> 🙏 **Help wanted:** Do you own a toolchanger and / or cartographer / beacon? Please try EddySeek and help me expand the range of setups it has been tested on.
-
-> ⚠️ **Early release.** Not yet
-> proven across many machines. Validate alignment results on your own hardware
-> before relying on them, and keep an eye on the toolhead during the first runs.
-
 ## Quick start
 
 ```bash
