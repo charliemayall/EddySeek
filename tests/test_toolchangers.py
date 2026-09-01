@@ -303,12 +303,11 @@ def test_apply_offset_errors_when_unsupported():
 
 
 def test_indx_hydrates_save_variables():
-    main = _main(
-        {
-            _TOOL_POSITIONS: {"variable_tool_count": 2},
-            "save_variables": {"filename": "variables.cfg"},
-        }
-    )
+    sections = {
+        _TOOL_POSITIONS: {"variable_tool_count": 2},
+        "save_variables": {"filename": "variables.cfg"},
+    }
+    main = _main(sections)
 
     class _SaveVars:
         allVariables: ClassVar[dict[str, float]] = {
@@ -326,7 +325,7 @@ def test_indx_hydrates_save_variables():
         as_config(
             FakeKlipperConfig(
                 get_printer=get_printer,
-                sections={_TOOL_POSITIONS: {"variable_tool_count": 2}},
+                sections=sections,
                 toolchanger_type="indx",
             )
         )
@@ -351,12 +350,11 @@ def test_indx_requires_save_variables_module():
 
 def test_indx_loads_save_variables_before_extra_is_registered():
     """[include eddy_seek.cfg] before [save_variables]: section exists, extra not yet init."""
-    main = _main(
-        {
-            _TOOL_POSITIONS: {"variable_tool_count": 2},
-            "save_variables": {"filename": "variables.cfg"},
-        }
-    )
+    sections = {
+        _TOOL_POSITIONS: {"variable_tool_count": 2},
+        "save_variables": {"filename": "variables.cfg"},
+    }
+    main = _main(sections)
 
     class _SaveVars:
         allVariables: ClassVar[dict[str, float]] = {
@@ -380,6 +378,7 @@ def test_indx_loads_save_variables_before_extra_is_registered():
         as_config(
             FakeKlipperConfig(
                 get_printer=get_printer,
+                sections=sections,
                 toolchanger_type="indx",
             )
         )
